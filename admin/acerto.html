@@ -208,8 +208,31 @@
     const totalCount = document.getElementById('total-count');
     const observations = document.getElementById('observations');
 
+    // Auth admin: token JWT em localStorage (obtido em ./login.html)
+    function authHeaders(extra = {}) {
+      const t = localStorage.getItem('nix_admin_token');
+      return t ? { ...extra, Authorization: 'Bearer ' + t } : extra;
+    }
+    async function fetchAdmin(url, opts = {}) {
+      opts.headers = authHeaders(opts.headers || {});
+      const res = await fetch(url, opts);
+      if (res.status === 401) {
+        localStorage.removeItem('nix_admin_token');
+        window.location.href = './login.html?next=' + encodeURIComponent(window.location.pathname);
+        throw new Error('Sessão expirada. Faça login novamente.');
+      }
+      return res;
+    }
+
     // Initialize
-    document.addEventListener('DOMContentLoaded', () => {
+    document.addEventListener('DOMContentLoaded', async () => {
+      try {
+        const st = await fetch(`${API_BASE}/api/admin/status`).then(r => r.json());
+        if (st.authEnabled && !localStorage.getItem('nix_admin_token')) {
+          window.location.href = './login.html?next=' + encodeURIComponent(window.location.pathname);
+          return;
+        }
+      } catch {}
       fetchConditionalProducts();
       setupEventListeners();
     });
@@ -225,7 +248,7 @@
     // Fetch Conditional Products
     async function fetchConditionalProducts() {
       try {
-        const response = await fetch(`${API_BASE}/api/admin/products/conditional`);
+        const response = await fetchAdmin(`${API_BASE}/api/admin/products/conditional`);
         if (!response.ok) throw new Error('Failed to fetch conditional products');
         allProducts = await response.json();
         filteredProducts = allProducts;
@@ -356,7 +379,7 @@
         }));
 
         // Send to API - using POST as per requirements
-        const response = await fetch(`${API_BASE}/api/admin/acerto`, {
+        const response = await fetchAdmin(`${API_BASE}/api/admin/acerto`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',

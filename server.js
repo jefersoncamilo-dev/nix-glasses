@@ -3,6 +3,7 @@ const express = require('express');
 const multer = require('multer');
 const path = require('path');
 const cors = require('cors');
+const crypto = require('crypto');
 const { pool, initTables } = require('./db');
 
 const app = express();
@@ -31,6 +32,114 @@ const upload = multer({ storage });
 function sanitizeWhatsapp(num) {
   if (typeof num !== 'string') return '';
   return num.replace(/\D/g, '');
+}
+
+// ---------- Auth admin (login + token, sem dependências externas) ----------
+// Env: ADMIN_USER, ADMIN_PASS_HASH (formato salt:hashHex via scrypt), JWT_SECRET.
+// Senha NUNCA é commitada: gere com `node scripts/generate-admin-hash.js "sua-senha-forte"`.
+function getAuthConfig() {
+  return {
+    user: process.env.ADMIN_USER || '',
+    passHash: process.env.ADMIN_PASS_HASH || '',
+    secret: process.env.JWT_SECRET || process.env.ADMIN_TOKEN_SECRET || '',
+  };
+}
+
+let _fallbackSecret = null;
+function getTokenSecret() {
+  const { secret } = getAuthConfig();
+  if (secret) return secret;
+  if (!_fallbackSecret) {
+    _fallbackSecret = crypto.randomBytes(32).toString('hex');
+    console.warn('[auth] JWT_SECRET não definido: usando segredo aleatório (tokens invalidados a cada restart). Defina JWT_SECRET em produção.');
+  }
+  return _fallbackSecret;
+}
+
+function isAdminAuthEnabled() {
+  const { user, passHash } = getAuthConfig();
+  return !!(user && passHash);
+}
+
+function b64urlEncode(input) {
+  const buf = Buffer.isBuffer(input) ? input : Buffer.from(typeof input === 'string' ? input : JSON.stringify(input));
+  return buf.toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+
+function b64urlDecode(str) {
+  str = String(str || '').replace(/-/g, '+').replace(/_/g, '/');
+  while (str.length % 4) str += '=';
+  return Buffer.from(str, 'base64').toString('utf8');
+}
+
+// ADMIN_PASS_HASH = saltHex:hashHex (scrypt, 64 bytes)
+function verifyPassword(pass, stored) {
+  try {
+    const [saltHex, hashHex] = String(stored || '').split(':');
+    if (!saltHex || !hashHex) return false;
+    const derived = crypto.scryptSync(String(pass || ''), Buffer.from(saltHex, 'hex'), 64);
+    const expected = Buffer.from(hashHex, 'hex');
+    if (derived.length !== expected.length) return false;
+    return crypto.timingSafeEqual(derived, expected);
+  } catch {
+    return false;
+  }
+}
+
+function signToken(username, expiresInHours = 12) {
+  const now = Math.floor(Date.now() / 1000);
+  const payload = { u: username, iat: now, exp: now + expiresInHours * 3600 };
+  const body = b64urlEncode(payload);
+  const sig = crypto.createHmac('sha256', getTokenSecret()).update(body).digest('hex');
+  return `${body}.${sig}`;
+}
+
+function verifyToken(token) {
+  const [body, sig] = String(token || '').split('.');
+  if (!body || !sig) throw new Error('Token inválido');
+  const expected = crypto.createHmac('sha256', getTokenSecret()).update(body).digest('hex');
+  const a = Buffer.from(String(sig));
+  const b = Buffer.from(expected);
+  if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) throw new Error('Token inválido');
+  const payload = JSON.parse(b64urlDecode(body));
+  if (!payload.exp || payload.exp < Math.floor(Date.now() / 1000)) throw new Error('Sessão expirada');
+  return payload;
+}
+
+function requireAdmin(req, res, next) {
+  // Se ADMIN_USER/ADMIN_PASS_HASH não configurados, mantém aberto (dev) com aviso.
+  if (!isAdminAuthEnabled()) return next();
+  const h = req.headers.authorization || '';
+  const token = h.startsWith('Bearer ') ? h.slice(7) : null;
+  if (!token) return res.status(401).json({ error: 'Não autorizado' });
+  try {
+    req.admin = verifyToken(token);
+    return next();
+  } catch (e) {
+    return res.status(401).json({ error: 'Sessão expirada. Faça login novamente.' });
+  }
+}
+
+async function handleLogin(req, res) {
+  const { user, username, password, pass } = req.body || {};
+  const loginUser = user || username || '';
+  const loginPass = password || pass || '';
+
+  if (!isAdminAuthEnabled()) {
+    return res.status(500).json({ error: 'Login admin não configurado (defina ADMIN_USER e ADMIN_PASS_HASH)' });
+  }
+  const cfg = getAuthConfig();
+  const userOk =
+    String(loginUser).length === String(cfg.user).length &&
+    crypto.timingSafeEqual(Buffer.from(String(loginUser)), Buffer.from(String(cfg.user)));
+  const passOk = verifyPassword(loginPass, cfg.passHash);
+
+  if (!userOk || !passOk) {
+    // Resposta genérica para não vazar qual campo errou
+    return res.status(401).json({ error: 'Usuário ou senha inválidos' });
+  }
+  const token = signToken(cfg.user);
+  res.json({ token, expiresIn: '12h', user: cfg.user });
 }
 
 async function startServer() {
@@ -335,40 +444,45 @@ async function startServer() {
     }
   }
 
-  // ---------- Rotas PT (originais) ----------
+  // ---------- Login admin (público; demais /api/admin exigem Bearer) ----------
+  app.post('/api/admin/login', handleLogin);
+  app.get('/api/admin/status', (req, res) => {
+    res.json({ authEnabled: isAdminAuthEnabled() });
+  });
+
+  // ---------- Rotas públicas (vitrine) ----------
+  // GET produtos e GET whatsapp precisam ficar abertos para o site público.
   app.get('/api/produtos', handleListPublicos);
-  app.get('/api/admin/produtos', handleListAdmin);
-  app.post('/api/produtos', upload.single('imagem'), handleCreateProduto);
-  app.put('/api/produtos/:id', upload.single('imagem'), handleUpdateProduto);
-  app.post('/api/maleta/checkout', handleMaletaCheckout);
-  app.post('/api/admin/acerto', handleAcerto);
   app.get('/api/config/whatsapp', handleGetWhatsapp);
-  app.post('/api/config/whatsapp', handlePostWhatsapp);
-  app.get('/api/admin/metrics', handleMetrics);
+  app.get('/api/admin/whatsapp', handleGetWhatsapp);
+  app.post('/api/maleta/checkout', handleMaletaCheckout);
+  app.post('/api/case/checkout', handleMaletaCheckout);
+
+  // ---------- Rotas admin (exigem token quando ADMIN_USER/ADMIN_PASS_HASH configurados) ----------
+  app.get('/api/admin/produtos', requireAdmin, handleListAdmin);
+  app.post('/api/produtos', requireAdmin, upload.single('imagem'), handleCreateProduto);
+  app.put('/api/produtos/:id', requireAdmin, upload.single('imagem'), handleUpdateProduto);
+  app.post('/api/admin/acerto', requireAdmin, handleAcerto);
+  app.post('/api/config/whatsapp', requireAdmin, handlePostWhatsapp);
+  app.post('/api/admin/whatsapp', requireAdmin, handlePostWhatsapp);
+  app.get('/api/admin/metrics', requireAdmin, handleMetrics);
 
   // ---------- Aliases EN (compatibilidade front-end em inglês) ----------
   app.get('/api/products', handleListPublicos);
-  app.get('/api/admin/products', handleListAdmin);
-  app.post('/api/products', upload.single('imagem'), handleCreateProduto);
-  app.post('/api/admin/products', upload.single('imagem'), handleCreateProduto);
-  app.put('/api/products/:id', upload.single('imagem'), handleUpdateProduto);
-  app.put('/api/admin/products/:id', upload.single('imagem'), handleUpdateProduto);
+  app.get('/api/admin/products', requireAdmin, handleListAdmin);
+  app.post('/api/products', requireAdmin, upload.single('imagem'), handleCreateProduto);
+  app.post('/api/admin/products', requireAdmin, upload.single('imagem'), handleCreateProduto);
+  app.put('/api/products/:id', requireAdmin, upload.single('imagem'), handleUpdateProduto);
+  app.put('/api/admin/products/:id', requireAdmin, upload.single('imagem'), handleUpdateProduto);
 
   // admin/acerto.html usa /api/admin/products/conditional
-  app.get('/api/admin/products/conditional', handleListConditional);
-  app.get('/api/admin/produtos/condicional', handleListConditional);
-  app.get('/api/produtos/condicional', handleListConditional);
+  app.get('/api/admin/products/conditional', requireAdmin, handleListConditional);
+  app.get('/api/admin/produtos/condicional', requireAdmin, handleListConditional);
+  app.get('/api/produtos/condicional', requireAdmin, handleListConditional);
 
   // Métricas / popularidade
-  app.get('/api/admin/popularity', handleMetrics);
-  app.get('/api/admin/popularidade', handleMetrics);
-
-  // WhatsApp aliases
-  app.get('/api/admin/whatsapp', handleGetWhatsapp);
-  app.post('/api/admin/whatsapp', handlePostWhatsapp);
-
-  // Checkout alias EN
-  app.post('/api/case/checkout', handleMaletaCheckout);
+  app.get('/api/admin/popularity', requireAdmin, handleMetrics);
+  app.get('/api/admin/popularidade', requireAdmin, handleMetrics);
 
   app.listen(PORT, '0.0.0.0', () => {
     console.log(`Servidor rodando na porta ${PORT}`);

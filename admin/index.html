@@ -60,6 +60,7 @@
         <h2 id="pageTitle" class="text-xl font-semibold text-gray-900">Produtos</h2>
         <div class="flex items-center space-x-4">
           <span class="text-sm text-gray-500 hidden sm:block">Admin Nix Glasses</span>
+          <button id="btnSair" class="text-sm text-gray-500 hover:text-red-600 font-medium">Sair</button>
         </div>
       </div>
     </header>
@@ -322,6 +323,27 @@
       return String(num || '').replace(/\D/g, '');
     }
 
+    // Auth admin: token JWT em localStorage (obtido em ./login.html)
+    function authHeaders(extra = {}) {
+      const t = localStorage.getItem('nix_admin_token');
+      return t ? { ...extra, Authorization: 'Bearer ' + t } : extra;
+    }
+    async function fetchAdmin(url, opts = {}) {
+      opts.headers = authHeaders(opts.headers || {});
+      const res = await fetch(url, opts);
+      if (res.status === 401) {
+        localStorage.removeItem('nix_admin_token');
+        const next = encodeURIComponent(window.location.pathname + window.location.search);
+        window.location.href = './login.html?next=' + next;
+        throw new Error('Sessão expirada. Faça login novamente.');
+      }
+      return res;
+    }
+    document.getElementById('btnSair')?.addEventListener('click', () => {
+      localStorage.removeItem('nix_admin_token');
+      window.location.href = './login.html';
+    });
+
     // Formatters
     const formatarMoeda = (valor) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(valor || 0);
     const statusClass = (s) => s === 'DISPONIVEL' ? 'bg-green-100 text-green-700' : s === 'CONDICIONAL' ? 'bg-yellow-100 text-yellow-700' : 'bg-red-100 text-red-700';
@@ -360,7 +382,7 @@
     // Carregar produtos
     async function carregarProdutos() {
       try {
-        const res = await fetch('/api/admin/produtos');
+        const res = await fetchAdmin('/api/admin/produtos');
         if (!res.ok) throw new Error('Erro ao carregar');
         todosProdutos = await res.json();
         preencherFiltroFormato();
@@ -489,7 +511,7 @@
       try {
         const url = id ? `/api/produtos/${id}` : '/api/produtos';
         const method = id ? 'PUT' : 'POST';
-        const res = await fetch(url, { method, body: formData });
+        const res = await fetchAdmin(url, { method, body: formData });
         if (!res.ok) {
           const err = await res.json();
           throw new Error(err.error || 'Erro ao salvar');
@@ -512,7 +534,7 @@
       if (!confirm('Tem certeza que deseja excluir este produto?')) return;
       try {
         // Implementar DELETE se necessário, ou apenas marcar como ESGOTADO
-        const res = await fetch(`/api/produtos/${id}`, {
+        const res = await fetchAdmin(`/api/produtos/${id}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ status: 'ESGOTADO' })
@@ -565,7 +587,7 @@
       }
 
       try {
-        const res = await fetch('/api/admin/acerto', {
+        const res = await fetchAdmin('/api/admin/acerto', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ comprados, devolvidos })
@@ -582,7 +604,7 @@
     // Métricas
     async function carregarMetricas() {
       try {
-        const res = await fetch('/api/admin/metrics');
+        const res = await fetchAdmin('/api/admin/metrics');
         if (!res.ok) throw new Error('Erro ao carregar métricas');
         const m = await res.json();
 
@@ -628,7 +650,7 @@
       const whatsapp = sanitizeWhatsapp(whatsappInput.value.trim());
       if (!whatsapp) { mostrarToast('Digite um número', 'error'); return; }
       try {
-        const res = await fetch('/api/config/whatsapp', {
+        const res = await fetchAdmin('/api/config/whatsapp', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ whatsapp })
@@ -640,8 +662,15 @@
       }
     });
 
-    // Init
-    document.addEventListener('DOMContentLoaded', () => {
+    // Init: exige login quando o backend tem auth habilitada
+    document.addEventListener('DOMContentLoaded', async () => {
+      try {
+        const st = await fetch('/api/admin/status').then(r => r.json());
+        if (st.authEnabled && !localStorage.getItem('nix_admin_token')) {
+          window.location.href = './login.html?next=' + encodeURIComponent(window.location.pathname);
+          return;
+        }
+      } catch {}
       carregarProdutos();
     });
   </script>
