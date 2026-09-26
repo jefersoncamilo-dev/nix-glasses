@@ -1,0 +1,649 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Nix Glasses - Admin</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    * { font-family: 'Inter', sans-serif; }
+    .sidebar { transition: transform 0.3s ease; }
+    @media (max-width: 768px) { .sidebar { transform: translateX(-100%); } .sidebar.open { transform: translateX(0); } }
+    .toast { animation: slideIn 0.3s ease; }
+    @keyframes slideIn { from { opacity: 0; transform: translateY(-20px); } to { opacity: 1; transform: translateY(0); } }
+    .modal-overlay { backdrop-filter: blur(4px); }
+  </style>
+</head>
+<body class="bg-gray-50 min-h-screen flex">
+  <!-- Sidebar -->
+  <aside id="sidebar" class="sidebar fixed inset-y-0 left-0 z-50 w-64 bg-white border-r border-gray-200 hidden lg:block flex flex-col">
+    <div class="flex items-center justify-between h-16 px-6 border-b border-gray-200">
+      <h1 class="text-xl font-bold text-gray-900">Nix Admin</h1>
+      <button id="closeSidebar" class="lg:hidden p-2 text-gray-500 hover:text-gray-700"><svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg></button>
+    </div>
+    <nav class="flex-1 px-4 py-6 space-y-2 overflow-y-auto">
+      <a href="#" data-tab="produtos" class="tab-btn flex items-center px-4 py-3 text-gray-700 rounded-lg hover:bg-gray-100 font-medium bg-orange-50 text-orange-600">
+        <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/></svg>
+        Produtos
+      </a>
+      <a href="#" data-tab="acerto" class="tab-btn flex items-center px-4 py-3 text-gray-700 rounded-lg hover:bg-gray-100 font-medium">
+        <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+        Acerto de Maleta
+      </a>
+      <a href="#" data-tab="metricas" class="tab-btn flex items-center px-4 py-3 text-gray-700 rounded-lg hover:bg-gray-100 font-medium">
+        <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
+        Métricas
+      </a>
+      <a href="#" data-tab="config" class="tab-btn flex items-center px-4 py-3 text-gray-700 rounded-lg hover:bg-gray-100 font-medium">
+        <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+        Configurações
+      </a>
+    </nav>
+    <div class="p-4 border-t border-gray-200">
+      <a href="../index.html" target="_blank" class="flex items-center px-4 py-3 text-gray-500 hover:text-gray-700 rounded-lg transition-colors">
+        <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg>
+        Ver Site Público
+      </a>
+    </div>
+  </aside>
+
+  <!-- Mobile overlay -->
+  <div id="sidebarOverlay" class="fixed inset-0 bg-black/50 z-40 hidden lg:hidden"></div>
+
+  <!-- Main Content -->
+  <main class="flex-1 min-w-0 lg:ml-64">
+    <!-- Top Bar -->
+    <header class="bg-white border-b border-gray-200 sticky top-0 z-30">
+      <div class="flex items-center justify-between h-16 px-4 sm:px-6 lg:px-8">
+        <button id="openSidebar" class="lg:hidden p-2 text-gray-500 hover:text-gray-700"><svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/></svg></button>
+        <h2 id="pageTitle" class="text-xl font-semibold text-gray-900">Produtos</h2>
+        <div class="flex items-center space-x-4">
+          <span class="text-sm text-gray-500 hidden sm:block">Admin Nix Glasses</span>
+        </div>
+      </div>
+    </header>
+
+    <!-- Content -->
+    <div class="p-4 sm:p-6 lg:p-8">
+      <!-- Aba Produtos -->
+      <div id="tab-produtos" class="tab-content">
+        <div class="flex items-center justify-between mb-6">
+          <h3 class="text-lg font-semibold text-gray-900">Gerenciar Produtos</h3>
+          <button id="btnNovoProduto" class="bg-orange-500 hover:bg-orange-600 text-white px-4 py-2 rounded-lg font-medium transition-colors flex items-center">
+            <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
+            Novo Produto
+          </button>
+        </div>
+
+        <!-- Filtros -->
+        <div class="bg-white rounded-xl border border-gray-200 p-4 mb-6 flex flex-wrap gap-4">
+          <select id="filtroStatusAdmin" class="px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500">
+            <option value="">Todos os Status</option>
+            <option value="DISPONIVEL">Disponível</option>
+            <option value="CONDICIONAL">Condicional</option>
+            <option value="ESGOTADO">Esgotado</option>
+          </select>
+          <select id="filtroFormatoAdmin" class="px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500">
+            <option value="">Todos os Formatos</option>
+          </select>
+          <input type="text" id="buscaAdmin" placeholder="Buscar por nome ou SKU..." class="px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 flex-1 min-w-[200px]">
+        </div>
+
+        <!-- Tabela -->
+        <div class="bg-white rounded-xl border border-gray-200 overflow-hidden">
+          <div class="overflow-x-auto">
+            <table class="w-full">
+              <thead class="bg-gray-50 border-b border-gray-200">
+                <tr>
+                  <th class="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Imagem</th>
+                  <th class="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Nome / SKU</th>
+                  <th class="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Formato / Estilo / Cor</th>
+                  <th class="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Preços</th>
+                  <th class="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Status</th>
+                  <th class="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Maleta</th>
+                  <th class="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Ações</th>
+                </tr>
+              </thead>
+              <tbody id="tabelaProdutos" class="divide-y divide-gray-200">
+                <!-- Linhas inseridas via JS -->
+              </tbody>
+            </table>
+          </div>
+          <div id="emptyProdutos" class="hidden p-12 text-center">
+            <svg class="mx-auto h-12 w-12 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/></svg>
+            <p class="mt-4 text-gray-500">Nenhum produto cadastrado</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Aba Acerto -->
+      <div id="tab-acerto" class="tab-content hidden">
+        <div class="flex items-center justify-between mb-6">
+          <h3 class="text-lg font-semibold text-gray-900">Acerto de Maleta</h3>
+        </div>
+        <div class="grid lg:grid-cols-2 gap-6">
+          <!-- Comprados -->
+          <div class="bg-white rounded-xl border border-gray-200 p-6">
+            <h4 class="text-lg font-semibold text-gray-900 mb-4 flex items-center">
+              <svg class="w-5 h-5 mr-2 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
+              Itens Comprados (→ ESGOTADO)
+            </h4>
+            <div id="compradosList" class="space-y-2 max-h-96 overflow-y-auto">
+              <!-- Checkboxes inseridos via JS -->
+            </div>
+          </div>
+          <!-- Devolvidos -->
+          <div class="bg-white rounded-xl border border-gray-200 p-6">
+            <h4 class="text-lg font-semibold text-gray-900 mb-4 flex items-center">
+              <svg class="w-5 h-5 mr-2 text-orange-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+              Itens Devolvidos (→ DISPONIVEL)
+            </h4>
+            <div id="devolvidosList" class="space-y-2 max-h-96 overflow-y-auto">
+              <!-- Checkboxes inseridos via JS -->
+            </div>
+          </div>
+        </div>
+        <div class="mt-6 flex justify-end">
+          <button id="btnSalvarAcerto" class="bg-orange-500 hover:bg-orange-600 text-white px-6 py-3 rounded-lg font-medium transition-colors flex items-center">
+            <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
+            Salvar Acerto
+          </button>
+        </div>
+      </div>
+
+      <!-- Aba Métricas -->
+      <div id="tab-metricas" class="tab-content hidden">
+        <div class="flex items-center justify-between mb-6">
+          <h3 class="text-lg font-semibold text-gray-900">Métricas do Negócio</h3>
+          <button id="btnAtualizarMetricas" class="bg-gray-100 hover:bg-gray-200 text-gray-700 px-4 py-2 rounded-lg font-medium transition-colors flex items-center">
+            <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+            Atualizar
+          </button>
+        </div>
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+          <div class="bg-white rounded-xl border border-gray-200 p-6">
+            <p class="text-sm text-gray-500 mb-1">Total em Estoque</p>
+            <p id="metricaEstoque" class="text-3xl font-bold text-gray-900">-</p>
+          </div>
+          <div class="bg-white rounded-xl border border-gray-200 p-6">
+            <p class="text-sm text-gray-500 mb-1">Valor Investido</p>
+            <p id="metricaInvestido" class="text-3xl font-bold text-gray-900">-</p>
+          </div>
+          <div class="bg-white rounded-xl border border-gray-200 p-6">
+            <p class="text-sm text-gray-500 mb-1">Lucro Potencial</p>
+            <p id="metricaLucro" class="text-3xl font-bold text-green-600">-</p>
+          </div>
+          <div class="bg-white rounded-xl border border-gray-200 p-6">
+            <p class="text-sm text-gray-500 mb-1">Valor na Rua (Condicional)</p>
+            <p id="metricaRua" class="text-3xl font-bold text-orange-600">-</p>
+          </div>
+        </div>
+        <div class="bg-white rounded-xl border border-gray-200 p-6">
+          <h4 class="text-lg font-semibold text-gray-900 mb-4">Top 10 Mais Adicionados à Maleta</p>
+          <div class="overflow-x-auto">
+            <table class="w-full">
+              <thead class="bg-gray-50 border-b border-gray-200">
+                <tr>
+                  <th class="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">#</th>
+                  <th class="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Produto</th>
+                  <th class="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">SKU</th>
+                  <th class="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Vezes na Maleta</th>
+                </tr>
+              </thead>
+              <tbody id="tabelaTopMaleta" class="divide-y divide-gray-200">
+                <!-- Linhas inseridas via JS -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- Aba Configurações -->
+      <div id="tab-config" class="tab-content hidden">
+        <div class="flex items-center justify-between mb-6">
+          <h3 class="text-lg font-semibold text-gray-900">Configurações</h3>
+        </div>
+        <div class="bg-white rounded-xl border border-gray-200 p-6 max-w-md">
+          <div class="mb-6">
+            <label class="block text-sm font-medium text-gray-700 mb-2">Número do WhatsApp (para pedidos)</label>
+            <p class="text-sm text-gray-500 mb-3">Formato: 5511999999999 (código país + DDD + número, sem espaços ou caracteres especiais)</p>
+            <input type="text" id="whatsappInput" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500" placeholder="5511999999999">
+          </div>
+          <button id="btnSalvarWhatsapp" class="bg-orange-500 hover:bg-orange-600 text-white px-6 py-2 rounded-lg font-medium transition-colors">Salvar</button>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <!-- Modal Produto -->
+  <div id="modalProduto" class="fixed inset-0 modal-overlay bg-black/50 hidden z-50 flex items-center justify-center p-4">
+    <div class="bg-white rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-hidden flex flex-col">
+      <div class="flex items-center justify-between p-6 border-b border-gray-200">
+        <h3 id="modalTitulo" class="text-xl font-bold text-gray-900">Novo Produto</h3>
+        <button id="fecharModalProduto" class="p-2 text-gray-500 hover:text-gray-700 rounded-lg hover:bg-gray-100"><svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg></button>
+      </div>
+      <form id="formProduto" class="p-6 overflow-y-auto flex-1 space-y-4">
+        <input type="hidden" id="produtoId">
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Nome *</label>
+            <input type="text" id="nome" name="nome" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500" required>
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Código SKU *</label>
+            <input type="text" id="codigo_sku" name="codigo_sku" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500" required>
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Preço Custo *</label>
+            <input type="number" step="0.01" id="preco_custo" name="preco_custo" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500" required min="0">
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Preço Venda *</label>
+            <input type="number" step="0.01" id="preco_venda" name="preco_venda" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500" required min="0">
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Formato</label>
+            <input type="text" id="formato" name="formato" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500" placeholder="Ex: Redondo, Quadrado, Aviador">
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Estilo</label>
+            <input type="text" id="estilo" name="estilo" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500" placeholder="Ex: Clássico, Esportivo, Fashion">
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Cor da Armação</label>
+            <input type="text" id="cor_armacao" name="cor_armacao" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500" placeholder="Ex: Preto, Tartaruga, Dourado">
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Status *</label>
+            <select id="status" name="status" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500" required>
+              <option value="DISPONIVEL">Disponível</option>
+              <option value="CONDICIONAL">Condicional</option>
+              <option value="ESGOTADO">Esgotado</option>
+            </select>
+          </div>
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Imagem</label>
+          <input type="file" id="imagem" name="imagem" accept="image/*" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500">
+          <p id="imagemAtual" class="text-sm text-gray-500 mt-1 hidden"></p>
+        </div>
+        <div class="pt-4 border-t border-gray-200 flex justify-end space-x-3">
+          <button type="button" id="cancelarModal" class="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors">Cancelar</button>
+          <button type="submit" class="bg-orange-500 hover:bg-orange-600 text-white px-6 py-2 rounded-lg font-medium transition-colors">Salvar</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Toast -->
+  <div id="toastContainer" class="fixed top-6 right-6 z-50 space-y-2"></div>
+
+  <script>
+    // Estado
+    let todosProdutos = [];
+    let produtoEditando = null;
+
+    // Elementos
+    const tabs = document.querySelectorAll('.tab-btn');
+    const tabContents = document.querySelectorAll('.tab-content');
+    const tabelaProdutos = document.getElementById('tabelaProdutos');
+    const emptyProdutos = document.getElementById('emptyProdutos');
+    const filtroStatusAdmin = document.getElementById('filtroStatusAdmin');
+    const filtroFormatoAdmin = document.getElementById('filtroFormatoAdmin');
+    const buscaAdmin = document.getElementById('buscaAdmin');
+    const modalProduto = document.getElementById('modalProduto');
+    const formProduto = document.getElementById('formProduto');
+    const btnNovoProduto = document.getElementById('btnNovoProduto');
+    const fecharModalProduto = document.getElementById('fecharModalProduto');
+    const cancelarModal = document.getElementById('cancelarModal');
+    const modalTitulo = document.getElementById('modalTitulo');
+    const compradosList = document.getElementById('compradosList');
+    const devolvidosList = document.getElementById('devolvidosList');
+    const btnSalvarAcerto = document.getElementById('btnSalvarAcerto');
+    const whatsappInput = document.getElementById('whatsappInput');
+    const btnSalvarWhatsapp = document.getElementById('btnSalvarWhatsapp');
+    const btnAtualizarMetricas = document.getElementById('btnAtualizarMetricas');
+    const toastContainer = document.getElementById('toastContainer');
+    const sidebar = document.getElementById('sidebar');
+    const sidebarOverlay = document.getElementById('sidebarOverlay');
+    const openSidebar = document.getElementById('openSidebar');
+    const closeSidebar = document.getElementById('closeSidebar');
+
+    // Fallback de imagem (caso o upload falhe / arquivo ausente em /uploads)
+    function imgFallback(el) {
+      el.onerror = null;
+      el.src = "data:image/svg+xml;charset=UTF-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='600' height='600'%3E%3Crect width='100%25' height='100%25' fill='%23f3f4f6'/%3E%3Ctext x='50%25' y='50%25' font-family='sans-serif' font-size='28' fill='%239ca3af' text-anchor='middle' dy='.3em'%3ENix Glasses%3C/text%3E%3C/svg%3E";
+    }
+    window.imgFallback = imgFallback;
+
+    // Higieniza WhatsApp: remove tudo que não for dígito antes de gerar https://wa.me/
+    function sanitizeWhatsapp(num) {
+      return String(num || '').replace(/\D/g, '');
+    }
+
+    // Formatters
+    const formatarMoeda = (valor) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(valor || 0);
+    const statusClass = (s) => s === 'DISPONIVEL' ? 'bg-green-100 text-green-700' : s === 'CONDICIONAL' ? 'bg-yellow-100 text-yellow-700' : 'bg-red-100 text-red-700';
+
+    // Toast
+    function mostrarToast(msg, tipo = 'success') {
+      const toast = document.createElement('div');
+      toast.className = `toast px-4 py-3 rounded-lg shadow-lg text-white ${tipo === 'success' ? 'bg-green-500' : 'bg-red-500'}`;
+      toast.textContent = msg;
+      toastContainer.appendChild(toast);
+      setTimeout(() => toast.remove(), 3000);
+    }
+
+    // Tabs
+    tabs.forEach(tab => {
+      tab.addEventListener('click', (e) => {
+        e.preventDefault();
+        const target = tab.dataset.tab;
+        tabs.forEach(t => t.classList.remove('bg-orange-50', 'text-orange-600'));
+        tabContents.forEach(c => c.classList.add('hidden'));
+        tab.classList.add('bg-orange-50', 'text-orange-600');
+        document.getElementById(`tab-${target}`).classList.remove('hidden');
+        if (target === 'acerto') carregarAcerto();
+        if (target === 'metricas') carregarMetricas();
+        if (target === 'config') carregarWhatsApp();
+        sidebar.classList.remove('open');
+        sidebarOverlay.classList.add('hidden');
+      });
+    });
+
+    // Mobile sidebar
+    openSidebar.addEventListener('click', () => { sidebar.classList.add('open'); sidebarOverlay.classList.remove('hidden'); });
+    closeSidebar.addEventListener('click', () => { sidebar.classList.remove('open'); sidebarOverlay.classList.add('hidden'); });
+    sidebarOverlay.addEventListener('click', () => { sidebar.classList.remove('open'); sidebarOverlay.classList.add('hidden'); });
+
+    // Carregar produtos
+    async function carregarProdutos() {
+      try {
+        const res = await fetch('/api/admin/produtos');
+        if (!res.ok) throw new Error('Erro ao carregar');
+        todosProdutos = await res.json();
+        preencherFiltroFormato();
+        renderizarTabela();
+        renderizarListasAcerto();
+      } catch (err) {
+        console.error(err);
+        mostrarToast('Erro ao carregar produtos', 'error');
+      }
+    }
+
+    function preencherFiltroFormato() {
+      const formatos = [...new Set(todosProdutos.map(p => p.formato).filter(Boolean))];
+      filtroFormatoAdmin.innerHTML = '<option value="">Todos os Formatos</option>';
+      formatos.forEach(f => {
+        const opt = document.createElement('option');
+        opt.value = f;
+        opt.textContent = f;
+        filtroFormatoAdmin.appendChild(opt);
+      });
+    }
+
+    function renderizarTabela() {
+      const statusFiltro = filtroStatusAdmin.value;
+      const formatoFiltro = filtroFormatoAdmin.value;
+      const busca = buscaAdmin.value.toLowerCase();
+
+      const filtrados = todosProdutos.filter(p => {
+        if (statusFiltro && p.status !== statusFiltro) return false;
+        if (formatoFiltro && p.formato !== formatoFiltro) return false;
+        if (busca && !p.nome.toLowerCase().includes(busca) && !p.codigo_sku.toLowerCase().includes(busca)) return false;
+        return true;
+      });
+
+      if (filtrados.length === 0) {
+        tabelaProdutos.innerHTML = '';
+        emptyProdutos.classList.remove('hidden');
+        return;
+      }
+
+      emptyProdutos.classList.add('hidden');
+      tabelaProdutos.innerHTML = filtrados.map(p => `
+        <tr class="hover:bg-gray-50">
+          <td class="px-6 py-4">
+            ${p.imagem_url ? `<img src="${p.imagem_url}" alt="${p.nome}" class="w-16 h-16 object-cover rounded" onerror="imgFallback(this)">` : '<div class="w-16 h-16 bg-gray-100 rounded flex items-center justify-center"><svg class="w-6 h-6 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg></div>'}
+          </td>
+          <td class="px-6 py-4">
+            <p class="font-medium text-gray-900">${p.nome}</p>
+            <p class="text-sm text-gray-500">${p.codigo_sku}</p>
+          </td>
+          <td class="px-6 py-4 text-sm text-gray-500">
+            ${p.formato || '-'} ${p.estilo ? '• ' + p.estilo : ''} ${p.cor_armacao ? '• ' + p.cor_armacao : ''}
+          </td>
+          <td class="px-6 py-4">
+            <p class="text-gray-900 font-medium">${formatarMoeda(p.preco_venda)}</p>
+            <p class="text-sm text-gray-500">Custo: ${formatarMoeda(p.preco_custo)}</p>
+          </td>
+          <td class="px-6 py-4">
+            <span class="px-2 py-1 text-xs font-medium rounded-full ${statusClass(p.status)}">${p.status}</span>
+          </td>
+          <td class="px-6 py-4 text-gray-900 font-medium">${p.vezes_em_maleta || 0}</td>
+          <td class="px-6 py-4">
+            <div class="flex items-center space-x-2">
+              <button onclick="editarProduto(${p.id})" class="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors" title="Editar"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg></button>
+              <button onclick="excluirProduto(${p.id})" class="p-2 text-red-500 hover:text-red-700 hover:bg-red-50 rounded-lg transition-colors" title="Excluir"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg></button>
+            </div>
+          </td>
+        </tr>
+      `).join('');
+    }
+
+    // Filtros
+    [filtroStatusAdmin, filtroFormatoAdmin, buscaAdmin].forEach(el => el.addEventListener('input', renderizarTabela));
+
+    // Modal Produto
+    function abrirModal(produto = null) {
+      produtoEditando = produto;
+      formProduto.reset();
+      document.getElementById('produtoId').value = '';
+      document.getElementById('imagemAtual').classList.add('hidden');
+
+      if (produto) {
+        modalTitulo.textContent = 'Editar Produto';
+        document.getElementById('produtoId').value = produto.id;
+        document.getElementById('nome').value = produto.nome;
+        document.getElementById('codigo_sku').value = produto.codigo_sku;
+        document.getElementById('preco_custo').value = produto.preco_custo;
+        document.getElementById('preco_venda').value = produto.preco_venda;
+        document.getElementById('formato').value = produto.formato || '';
+        document.getElementById('estilo').value = produto.estilo || '';
+        document.getElementById('cor_armacao').value = produto.cor_armacao || '';
+        document.getElementById('status').value = produto.status;
+        if (produto.imagem_url) {
+          document.getElementById('imagemAtual').textContent = `Imagem atual: ${produto.imagem_url}`;
+          document.getElementById('imagemAtual').classList.remove('hidden');
+        }
+      } else {
+        modalTitulo.textContent = 'Novo Produto';
+      }
+      modalProduto.classList.remove('hidden');
+      document.body.style.overflow = 'hidden';
+    }
+
+    function fecharModal() {
+      modalProduto.classList.add('hidden');
+      document.body.style.overflow = '';
+      produtoEditando = null;
+    }
+
+    btnNovoProduto.addEventListener('click', () => abrirModal());
+    fecharModalProduto.addEventListener('click', fecharModal);
+    cancelarModal.addEventListener('click', fecharModal);
+    modalProduto.addEventListener('click', (e) => { if (e.target === modalProduto) fecharModal(); });
+
+    formProduto.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const id = document.getElementById('produtoId').value;
+      const formData = new FormData();
+      ['nome', 'codigo_sku', 'preco_custo', 'preco_venda', 'formato', 'estilo', 'cor_armacao', 'status'].forEach(field => {
+        const val = document.getElementById(field).value;
+        if (val) formData.append(field, val);
+      });
+      const img = document.getElementById('imagem').files[0];
+      if (img) formData.append('imagem', img);
+
+      try {
+        const url = id ? `/api/produtos/${id}` : '/api/produtos';
+        const method = id ? 'PUT' : 'POST';
+        const res = await fetch(url, { method, body: formData });
+        if (!res.ok) {
+          const err = await res.json();
+          throw new Error(err.error || 'Erro ao salvar');
+        }
+        mostrarToast(id ? 'Produto atualizado!' : 'Produto criado!');
+        fecharModal();
+        carregarProdutos();
+      } catch (err) {
+        console.error(err);
+        mostrarToast(err.message, 'error');
+      }
+    });
+
+    window.editarProduto = (id) => {
+      const p = todosProdutos.find(x => x.id === id);
+      if (p) abrirModal(p);
+    };
+
+    window.excluirProduto = async (id) => {
+      if (!confirm('Tem certeza que deseja excluir este produto?')) return;
+      try {
+        // Implementar DELETE se necessário, ou apenas marcar como ESGOTADO
+        const res = await fetch(`/api/produtos/${id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ status: 'ESGOTADO' })
+        });
+        if (!res.ok) throw new Error('Erro ao excluir');
+        mostrarToast('Produto marcado como esgotado');
+        carregarProdutos();
+      } catch (err) {
+        mostrarToast(err.message, 'error');
+      }
+    };
+
+    // Acerto
+    function renderizarListasAcerto() {
+      const condicionais = todosProdutos.filter(p => p.status === 'CONDICIONAL');
+      const esgotados = todosProdutos.filter(p => p.status === 'ESGOTADO');
+
+      compradosList.innerHTML = condicionais.map(p => `
+        <label class="flex items-center p-3 bg-gray-50 rounded-lg hover:bg-gray-100 cursor-pointer">
+          <input type="checkbox" name="comprados" value="${p.id}" class="w-4 h-4 text-orange-500 border-gray-300 rounded focus:ring-orange-500">
+          <div class="ml-3 flex-1">
+            <p class="font-medium text-gray-900">${p.nome}</p>
+            <p class="text-sm text-gray-500">${p.codigo_sku} • ${formatarMoeda(p.preco_venda)}</p>
+          </div>
+        </label>
+      `).join('') || '<p class="text-gray-500 text-center py-4">Nenhum item em condicional</p>';
+
+      devolvidosList.innerHTML = esgotados.map(p => `
+        <label class="flex items-center p-3 bg-gray-50 rounded-lg hover:bg-gray-100 cursor-pointer">
+          <input type="checkbox" name="devolvidos" value="${p.id}" class="w-4 h-4 text-orange-500 border-gray-300 rounded focus:ring-orange-500">
+          <div class="ml-3 flex-1">
+            <p class="font-medium text-gray-900">${p.nome}</p>
+            <p class="text-sm text-gray-500">${p.codigo_sku} • ${formatarMoeda(p.preco_venda)}</p>
+          </div>
+        </label>
+      `).join('') || '<p class="text-gray-500 text-center py-4">Nenhum item esgotado</p>';
+    }
+
+    async function carregarAcerto() {
+      await carregarProdutos();
+    }
+
+    btnSalvarAcerto.addEventListener('click', async () => {
+      const comprados = Array.from(document.querySelectorAll('input[name="comprados"]:checked')).map(cb => parseInt(cb.value));
+      const devolvidos = Array.from(document.querySelectorAll('input[name="devolvidos"]:checked')).map(cb => parseInt(cb.value));
+
+      if (comprados.length === 0 && devolvidos.length === 0) {
+        mostrarToast('Selecione pelo menos um item', 'error');
+        return;
+      }
+
+      try {
+        const res = await fetch('/api/admin/acerto', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ comprados, devolvidos })
+        });
+        if (!res.ok) throw new Error('Erro ao salvar acerto');
+        mostrarToast('Acerto salvo com sucesso!');
+        carregarProdutos();
+      } catch (err) {
+        console.error(err);
+        mostrarToast(err.message, 'error');
+      }
+    });
+
+    // Métricas
+    async function carregarMetricas() {
+      try {
+        const res = await fetch('/api/admin/metrics');
+        if (!res.ok) throw new Error('Erro ao carregar métricas');
+        const m = await res.json();
+
+        document.getElementById('metricaEstoque').textContent = m.totalEstoque;
+        document.getElementById('metricaInvestido').textContent = formatarMoeda(m.valorInvestido);
+        document.getElementById('metricaLucro').textContent = formatarMoeda(m.lucroPotencial);
+        document.getElementById('metricaRua').textContent = formatarMoeda(m.valorEmRua);
+
+        const tbody = document.getElementById('tabelaTopMaleta');
+        tbody.innerHTML = m.topAdicionadosMaleta.map((p, i) => `
+          <tr class="hover:bg-gray-50">
+            <td class="px-6 py-4 text-gray-900 font-medium">${i + 1}</td>
+            <td class="px-6 py-4">
+              <div class="flex items-center">
+                ${p.imagem_url ? `<img src="${p.imagem_url}" alt="${p.nome}" class="w-10 h-10 object-cover rounded mr-3" onerror="imgFallback(this)">` : '<div class="w-10 h-10 bg-gray-100 rounded mr-3"></div>'}
+                <span>${p.nome}</span>
+              </div>
+            </td>
+            <td class="px-6 py-4 text-gray-500">${p.codigo_sku}</td>
+            <td class="px-6 py-4 text-gray-900 font-medium">${p.vezes_em_maleta}</td>
+          </tr>
+        `).join('') || '<tr><td colspan="4" class="px-6 py-4 text-center text-gray-500">Nenhum dado</td></tr>';
+      } catch (err) {
+        console.error(err);
+        mostrarToast('Erro ao carregar métricas', 'error');
+      }
+    }
+
+    btnAtualizarMetricas.addEventListener('click', carregarMetricas);
+
+    // WhatsApp Config (higieniza: só dígitos antes de salvar / gerar wa.me)
+    async function carregarWhatsApp() {
+      try {
+        const res = await fetch('/api/config/whatsapp');
+        const data = await res.json();
+        whatsappInput.value = sanitizeWhatsapp(data.whatsapp || data.valor || data.number || '');
+      } catch (err) {
+        console.error(err);
+      }
+    }
+
+    btnSalvarWhatsapp.addEventListener('click', async () => {
+      const whatsapp = sanitizeWhatsapp(whatsappInput.value.trim());
+      if (!whatsapp) { mostrarToast('Digite um número', 'error'); return; }
+      try {
+        const res = await fetch('/api/config/whatsapp', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ whatsapp })
+        });
+        if (!res.ok) throw new Error('Erro ao salvar');
+        mostrarToast('WhatsApp salvo!');
+      } catch (err) {
+        mostrarToast(err.message, 'error');
+      }
+    });
+
+    // Init
+    document.addEventListener('DOMContentLoaded', () => {
+      carregarProdutos();
+    });
+  </script>
+</body>
+</html>

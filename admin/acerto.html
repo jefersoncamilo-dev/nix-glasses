@@ -1,0 +1,401 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Nix Glasses - Acerto de Maletas</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #0a0e17;
+      --bg-secondary: #111827;
+      --fg: #f0f4f8;
+      --muted: #6b7c93;
+      --accent: #00d4aa;
+      --warning: #f59e0b;
+      --card: #1a2235;
+      --border: #2a3a5a;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: 'Inter', sans-serif;
+      background: var(--bg);
+      color: var(--fg);
+      min-height: 100vh;
+    }
+
+    .glass-panel {
+      background: rgba(17, 24, 39, 0.7);
+      backdrop-filter: blur(12px);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+    }
+
+    .nav-btn {
+      transition: all 0.2s ease;
+    }
+
+    .card-hover {
+      transition: all 0.2s ease;
+    }
+
+    .card-hover:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 8px 30px rgba(0, 0, 0, 0.3);
+    }
+
+    .status-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+    }
+
+    .check-input {
+      width: 18px;
+      height: 18px;
+      cursor: pointer;
+      border: 2px solid currentColor;
+      display: inline-block;
+      position: relative;
+      flex-shrink: 0;
+    }
+
+    .check-input.checked::after {
+      content: '';
+      position: absolute;
+      left: 5px;
+      top: 2px;
+      width: 5px;
+      height: 8px;
+      border: solid var(--fg);
+      border-width: 0 2px 2px 0;
+      transform: rotate(45deg);
+    }
+
+    .fade-in {
+      animation: fadeIn 0.5s ease forwards;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(10px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    @media (max-width: 640px) {
+      .check-input {
+        width: 16px;
+        height: 16px;
+      }
+      .check-input.checked::after {
+        left: 4px;
+        top: 1px;
+        border-width: 0 2px 2px 0;
+      }
+    }
+  </style>
+</head>
+<body class="min-h-screen">
+
+  <!-- Navbar -->
+  <nav class="fixed top-0 left-0 right-0 z-50 bg-[rgba(10,14,23,0.8)] backdrop-blur-xl border-b border-[var(--border)]">
+    <div class="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
+      <div class="flex items-center gap-3">
+        <div class="w-10 h-10 rounded-lg bg-gradient-to-br from-[var(--accent)] to-emerald-600 flex items-center justify-center">
+          <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1111.13 3h1.263a5 5 0 014.88 7H18M14 5l7-3a5 5 0 000-7l-7-3m0 0l7 3m-7 3v12"/>
+          </svg>
+        </div>
+        <span class="text-xl font-bold tracking-tight">Nix Glasses</span>
+      </div>
+      <div class="flex items-center gap-4">
+        <span class="text-sm text-[var(--muted)]">Acerto de Maletas</span>
+      </div>
+    </div>
+  </nav>
+
+  <!-- Main Content -->
+  <main class="pt-20 padding">
+
+    <!-- Product Search -->
+    <div class="glass-panel rounded-2xl p-6 mb-8 fade-in" style="animation-delay: 0.1s;">
+      <h2 class="text-lg font-semibold mb-6">Seleção de Produtos Condicionais</h2>
+      
+      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+        <!-- Search Container -->
+        <div>
+          <label class="block text-sm font-medium mb-2">Buscar Produto</label>
+          <div class="relative">
+            <span class="absolute left-4 top-1/2 -translate-y-1/2 text-[var(--muted)]">Nome ou SKU</span>
+            <input type="text" id="product-search" placeholder="Digite para buscar..." 
+                   class="w-full pl-10 rounded-lg bg-[var(--bg-secondary)] border border-[var(--border)] py-3 px-4 text-sm focus:outline-none focus:border-[var(--accent)] transition-colors">
+          </div>
+        </div>
+
+        <div>
+          <label class="block text-sm font-medium mb-2">Status</label>
+          <select id="product-status" class="w-full rounded-lg bg-[var(--bg-secondary)] border border-[var(--border)] px-4 py-3 text-sm focus:outline-none focus:border-[var(--accent)] transition-colors">
+            <option value="">Todos</option>
+            <option value="CONDICIONAL">CONDICIONAL</option>
+            <option value="DISPONIVEL">DISPONIVEL</option>
+            <option value="ESGOTADO">ESGOTADO</option>
+          </select>
+        </div>
+
+        <div>
+          <label class="block text-sm font-medium mb-2"></label>
+          <button id="refresh-products" class="w-full rounded-lg bg-[var(--accent)] text-white font-medium py-2 px-4 text-sm hover:opacity-90 transition-opacity">
+            Atualizar Lista
+          </button>
+        </div>
+      </div>
+
+      <!-- Products Checklist -->
+      <div id="products-checklist" class="mt-6 max-h-96 overflow-y-auto">
+        <!-- Products will be rendered here -->
+        <p class="text-[var(--muted)] py-8 text-center">Carregando produtos...</p>
+      </div>
+
+      <!-- Finish Accert Section -->
+      <div id="finish-section" class="mt-8 pt-6 border-t border-[var(--border)] hidden">
+        <h3 class="text-lg font-semibold mb-4">Finalizar Acerto</h3>
+        
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">
+          <div>
+            <label class="block text-sm font-medium mb-2">Clientes</label>
+            <p id="selected-count" class="text-sm text-[var(--muted)]">0 selecionados</p>
+          </div>
+          <div>
+            <label class="block text-sm font-medium mb-2">Total Itens</label>
+            <p id="total-count" class="text-sm text-[var(--muted)]">0 itens</p>
+          </div>
+        </div>
+
+        <div>
+          <label class="block text-sm font-medium mb-2">Observações</label>
+          <textarea id="observations" rows="3" class="w-full rounded-lg bg-[var(--bg-secondary)] border border-[var(--border)] px-4 py-3 text-sm resize-none focus:outline-none focus:border-[var(--accent)] transition-colors" placeholder="Observações sobre o acerto..."></textarea>
+        </div>
+
+        <button id="finish-acerto" class="w-full rounded-lg bg-gradient-to-r from-[var(--error)] to-red-600 text-white font-medium py-3 px-6 mt-4 hover:opacity-90 transition-opacity">
+          Finalizar Acerto
+        </button>
+      </div>
+    </div>
+
+  </main>
+
+  <script>
+    // API Base URL - relativo para funcionar em localhost e no Render
+    const API_BASE = window.location.origin.includes('localhost') ? 'http://localhost:3000' : window.location.origin;
+
+    // State
+    let allProducts = [];
+    let filteredProducts = [];
+
+    // DOM Elements
+    const productSearch = document.getElementById('product-search');
+    const productStatus = document.getElementById('product-status');
+    const refreshProducts = document.getElementById('refresh-products');
+    const productsChecklist = document.getElementById('products-checklist');
+    const finishSection = document.getElementById('finish-section');
+    const finishAcerto = document.getElementById('finish-acerto');
+    const selectedCount = document.getElementById('selected-count');
+    const totalCount = document.getElementById('total-count');
+    const observations = document.getElementById('observations');
+
+    // Initialize
+    document.addEventListener('DOMContentLoaded', () => {
+      fetchConditionalProducts();
+      setupEventListeners();
+    });
+
+    // Setup Event Listeners
+    function setupEventListeners() {
+      productSearch.addEventListener('input', filterProducts);
+      productStatus.addEventListener('change', filterProducts);
+      refreshProducts.addEventListener('click', fetchConditionalProducts);
+      finishAcerto.addEventListener('click', handleFinishAcerto);
+    }
+
+    // Fetch Conditional Products
+    async function fetchConditionalProducts() {
+      try {
+        const response = await fetch(`${API_BASE}/api/admin/products/conditional`);
+        if (!response.ok) throw new Error('Failed to fetch conditional products');
+        allProducts = await response.json();
+        filteredProducts = allProducts;
+        renderProductsChecklist();
+      } catch (error) {
+        console.error('Error fetching conditional products:', error);
+        productsChecklist.innerHTML = '<p class="text-[var(--error)] py-8 text-center">Erro ao carregar produtos</p>';
+      }
+    }
+
+    // Render Products Checklist
+    function renderProductsChecklist() {
+      if (filteredProducts.length === 0) {
+        productsChecklist.innerHTML = `
+          <div class="py-12 text-center text-[var(--muted)]">
+            <svg class="w-12 h-12 mx-auto mb-3 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13A11.953 11.953 0 0112 2.253m0 13a9.958 9.958 0 00-9 10m9-10a9.953 9.953 0 01-9 10m9-10A8 8 0 104 12a8 8 0 00.908-7.971"/>
+            </svg>
+            <span>Nenhum produto com status CONDICIONAL</span>
+          </div>
+        `;
+        finishSection.classList.add('hidden');
+        return;
+      }
+
+      finishSection.classList.remove('hidden');
+      
+      const checkedCount = localStorage.getItem('acerto-checklist') ? JSON.parse(localStorage.getItem('acerto-checklist')).length : 0;
+      
+      productsChecklist.innerHTML = filteredProducts.map((product, index) => {
+        const savedChecks = JSON.parse(localStorage.getItem('acerto-checklist') || '[]');
+        const productChecks = savedChecks.find(s => s.sku === product.sku) || { bought: false, returned: false };
+        
+        return `
+          <div class="glass-panel rounded-xl p-5 mb-3 fade-in" style="animation-delay: ${index * 0.05}s;">
+            <div class="flex items-center gap-4">
+              <div class="w-10 h-10 rounded-lg bg-[var(--bg-secondary)] flex items-center justify-center flex-shrink-0">
+                <span class="text-sm font-medium">${product.nome.substring(0, 3).toUpperCase()}</span>
+              </div>
+              <div class="flex-1 min-w-0">
+                <p class="font-medium">${product.nome}</p>
+                <p class="text-xs text-[var(--muted)]">${product.sku}</p>
+                <p class="text-xs text-[var(--muted)]">Vezes em maleta: ${product.vezesEmMaleta || 0}</p>
+              </div>
+              <div class="w-14 flex items-center gap-2">
+                <label>
+                  <input type="checkbox" class="check-input ${productChecks.bought ? 'checked' : ''}" 
+                         data-product-sku="${product.sku}" data-bought="true">
+                  Comprou
+                </label>
+                <label>
+                  <input type="checkbox" class="check-input ${productChecks.returned ? 'checked' : ''}" 
+                         data-product-sku="${product.sku}" data-returned="true">
+                  Devolveu
+                </label>
+              </div>
+            </div>
+          </div>
+        `;
+      }).join('');
+
+      // Add event listeners to checkboxes
+      addCheckboxListeners();
+      
+      // Update counts
+      updateCounts();
+    }
+
+    // Add Checkbox Listeners
+    function addCheckboxListeners() {
+      const checkboxes = productsChecklist.querySelectorAll('input[type="checkbox"]');
+      
+      checkboxes.forEach(checkbox => {
+        checkbox.addEventListener('change', (e) => {
+          const sku = e.target.dataset.productSku || e.target.parentElement.parentElement.parentElement.dataset.sku;
+          const action = e.target.dataset.bought || e.target.dataset.returned;
+          
+          // Save checklist state to localStorage
+          let saved = JSON.parse(localStorage.getItem('acerto-checklist') || '[]');
+          const productIndex = saved.findIndex(s => s.sku === sku);
+          
+          if (productIndex === -1) {
+            saved.push({ [action]: true, sku });
+          } else {
+            saved[productIndex][action] = e.target.checked;
+          }
+          
+          // Remove if both are checked (optional - uncomment if needed)
+          // if (saved[productIndex].bought && saved[productIndex].returned) {
+          //   saved.splice(productIndex, 1);
+          // }
+          
+          localStorage.setItem('acerto-checklist', JSON.stringify(saved));
+          updateCounts();
+        });
+      });
+    }
+
+    // Update Counts
+    function updateCounts() {
+      const saved = JSON.parse(localStorage.getItem('acerto-checklist') || '[]');
+      const total = saved.length;
+      const selected = saved.filter(s => s.bought || s.returned).length;
+      
+      selectedCount.textContent = `${selected} selecionados`;
+      totalCount.textContent = `${total} itens`;
+    }
+
+    // Handle Finish Acerto
+    async function handleFinishAcerto() {
+      const saved = JSON.parse(localStorage.getItem('acerto-checklist') || '[]');
+      
+      if (saved.length === 0) {
+        alert('Nenhum produto foi selecionado para o acerto.');
+        return;
+      }
+
+      if (!confirm(`Deseja finalizar o acerto com ${saved.length} item(ns)?`)) {
+        return;
+      }
+
+      try {
+        // Prepare data for API
+        const updateData = saved.map(item => ({
+          sku: item.sku,
+          bought: item.bought,
+          returned: item.returned
+        }));
+
+        // Send to API - using POST as per requirements
+        const response = await fetch(`${API_BASE}/api/admin/acerto`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ itens: updateData, observacoes: observations.value })
+        });
+
+        if (!response.ok) {
+          const errorData = await response.json();
+          throw new Error(errorData.message || 'Failed to finish acerto');
+        }
+
+        alert('Acerto finalizado com sucesso!');
+        
+        // Clear localStorage and refresh
+        localStorage.removeItem('acerto-checklist');
+        observations.value = '';
+        fetchConditionalProducts();
+        
+      } catch (error) {
+        console.error('Error finishing acerto:', error);
+        alert('Erro ao finalizar acerto. Tente novamente.');
+      }
+    }
+
+    // Filter Products
+    function filterProducts() {
+      const searchTerm = productSearch.value.toLowerCase();
+      const statusFilter = productStatus.value;
+
+      filteredProducts = allProducts.filter(product => {
+        const matchesSearch = product.nome.toLowerCase().includes(searchTerm) || 
+                           product.sku.toLowerCase().includes(searchTerm);
+        const matchesStatus = !statusFilter || product.status === statusFilter;
+        return matchesSearch && matchesStatus;
+      });
+
+      renderProductsChecklist();
+    }
+  </script>
+</body>
+</html>

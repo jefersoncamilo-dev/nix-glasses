@@ -1,0 +1,515 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Nix Glasses - Óculos de Sol Premium</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    * { font-family: 'Inter', sans-serif; }
+    .glass-card { transition: transform 0.2s ease, box-shadow 0.2s ease; }
+    .glass-card:hover { transform: translateY(-4px); box-shadow: 0 20px 40px rgba(0,0,0,0.1); }
+    .modal-overlay { backdrop-filter: blur(4px); }
+    .toast { animation: slideIn 0.3s ease; }
+    @keyframes slideIn { from { opacity: 0; transform: translateX(100%); } to { opacity: 1; transform: translateX(0); } }
+  </style>
+</head>
+<body class="bg-gray-50 min-h-screen">
+  <!-- Header -->
+  <header class="bg-white border-b border-gray-200 sticky top-0 z-50">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex items-center justify-between h-16">
+        <a href="#" class="text-2xl font-bold text-gray-900 tracking-tight">Nix Glasses</a>
+        <nav class="hidden md:flex items-center space-x-8">
+          <a href="#catalogo" class="text-gray-600 hover:text-gray-900 font-medium">Catálogo</a>
+          <a href="#sobre" class="text-gray-600 hover:text-gray-900 font-medium">Sobre</a>
+          <a href="#contato" class="text-gray-600 hover:text-gray-900 font-medium">Contato</a>
+        </nav>
+        <div class="flex items-center space-x-4">
+          <button id="btnMaleta" class="relative p-2 text-gray-600 hover:text-gray-900" aria-label="Minha Maleta">
+            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z"/></svg>
+            <span id="maletaCount" class="absolute -top-1 -right-1 bg-orange-500 text-white text-xs w-5 h-5 rounded-full flex items-center justify-center hidden">0</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <!-- Hero -->
+  <section class="bg-gradient-to-br from-gray-900 via-gray-800 to-black text-white py-20 lg:py-32">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
+      <h1 class="text-4xl sm:text-5xl lg:text-6xl font-bold tracking-tight mb-6">Óculos que definem seu estilo</h1>
+      <p class="text-lg sm:text-xl text-gray-300 max-w-2xl mx-auto mb-10">Design exclusivo, qualidade premium e proteção UV400. Escolha seu modelo ideal.</p>
+      <a href="#catalogo" class="inline-block bg-orange-500 hover:bg-orange-600 text-white px-8 py-3 rounded-full font-semibold transition-colors">Ver Coleção</a>
+    </div>
+  </section>
+
+  <!-- Catálogo -->
+  <section id="catalogo" class="py-16 lg:py-24 bg-white">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex items-center justify-between mb-10">
+        <h2 class="text-3xl font-bold text-gray-900">Nossa Coleção</h2>
+        <div class="flex items-center space-x-4">
+          <select id="filtroStatus" class="px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500">
+            <option value="">Todos</option>
+            <option value="DISPONIVEL">Disponíveis</option>
+            <option value="CONDICIONAL">Em Condicional</option>
+          </select>
+          <select id="filtroFormato" class="px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500">
+            <option value="">Todos os Formatos</option>
+          </select>
+        </div>
+      </div>
+      <div id="catalogoGrid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+        <!-- Cards inseridos via JS -->
+      </div>
+      <div id="emptyState" class="hidden text-center py-12">
+        <svg class="mx-auto h-16 w-16 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4"/></svg>
+        <h3 class="mt-4 text-lg font-medium text-gray-900">Nenhum produto encontrado</h3>
+        <p class="mt-2 text-gray-500">Tente alterar os filtros ou volte mais tarde.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- Sobre -->
+  <section id="sobre" class="py-16 lg:py-24 bg-gray-50">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="grid lg:grid-cols-2 gap-12 items-center">
+        <div>
+          <h2 class="text-3xl font-bold text-gray-900 mb-4">A Nix Glasses</h2>
+          <p class="text-gray-600 mb-4">Fundada com a paixão por design e proteção ocular, a Nix Glasses nasceu para oferecer óculos de sol que unem estilo, qualidade e tecnologia.</p>
+          <p class="text-gray-600 mb-4">Todos nossos modelos possuem lentes com proteção UV400, armações em acetato italiano ou metal premium, e passam por rigoroso controle de qualidade.</p>
+          <p class="text-gray-600">Trabalhamos com o sistema de maleta: você experimenta em casa, escolhe seus favoritos e finaliza o pedido pelo WhatsApp.</p>
+        </div>
+        <div class="relative">
+          <div class="aspect-square bg-gradient-to-br from-orange-400 to-orange-600 rounded-3xl flex items-center justify-center">
+            <svg class="w-64 h-64 text-white/20" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1" d="M9.75 15L19.5 15M9.75 15L12 3m0 12l-2.25 2.25M9.75 15l-2.25 2.25m0 0L9.75 15M12 3l2.25 2.25M12 3l-2.25 2.25"/></svg>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Contato -->
+  <section id="contato" class="py-16 lg:py-24 bg-white">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
+      <h2 class="text-3xl font-bold text-gray-900 mb-4">Fale Conosco</h2>
+      <p class="text-gray-600 mb-8 max-w-2xl mx-auto">Dúvidas, sugestões ou quer ser um revendedor? Estamos à disposição.</p>
+      <a id="whatsappLink" href="#" class="inline-flex items-center px-6 py-3 bg-green-500 hover:bg-green-600 text-white rounded-full font-semibold transition-colors">
+        <svg class="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 24 24"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.466-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.472.099-.174.05-.372-.025-.521-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.372-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.076 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.402h-.004a9.87 9.87 0 01-5.031-1.378 3.43 3.43 0 01-.947-2.327c-.273-.731-.47-1.39-.47-2.308 0-1.853 1.598-3.22 3.435-3.683.338-.082.68-.112 1.023-.112.354 0 .696.032 1.038.111 1.955.482 3.44 1.934 3.683 3.717 0 .904-.21 1.565-.48 2.296a3.58 3.58 0 01-.927 2.225 9.87 9.87 0 01-5.034 1.416z"/></svg>
+        Falar no WhatsApp
+      </a>
+    </div>
+  </section>
+
+  <!-- Footer -->
+  <footer class="bg-gray-900 text-white py-12">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
+      <p class="text-gray-400">&copy; 2024 Nix Glasses. Todos os direitos reservados.</p>
+    </div>
+  </footer>
+
+  <!-- Modal Maleta -->
+  <div id="modalMaleta" class="fixed inset-0 modal-overlay bg-black/50 hidden z-50 flex items-center justify-center p-4">
+    <div class="bg-white rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-hidden flex flex-col">
+      <div class="flex items-center justify-between p-6 border-b border-gray-200">
+        <h3 class="text-xl font-bold text-gray-900">Minha Maleta</h3>
+        <button id="fecharMaleta" class="p-2 text-gray-500 hover:text-gray-700 rounded-lg hover:bg-gray-100">
+          <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+        </button>
+      </div>
+      <div class="p-6 overflow-y-auto flex-1">
+        <div id="maletaVazia" class="text-center py-12">
+          <svg class="mx-auto h-16 w-16 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z"/></svg>
+          <h4 class="mt-4 text-lg font-medium text-gray-900">Sua maleta está vazia</h4>
+          <p class="mt-2 text-gray-500">Adicione óculos ao catálogo para começar seu pedido.</p>
+        </div>
+        <div id="maletaItens" class="hidden space-y-4">
+          <!-- Itens inseridos via JS -->
+        </div>
+        <div id="maletaFormulario" class="hidden">
+          <h4 class="text-lg font-semibold text-gray-900 mb-4">Dados para Entrega</h4>
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1">Nome Completo *</label>
+              <input type="text" id="nomeCliente" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500" required>
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1">Telefone/WhatsApp *</label>
+              <input type="tel" id="telefoneCliente" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500" required>
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1">CEP *</label>
+              <input type="text" id="cepCliente" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500" placeholder="00000-000" maxlength="9" required>
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1">Número *</label>
+              <input type="text" id="numeroCliente" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500" required>
+            </div>
+            <div class="md:col-span-2">
+              <label class="block text-sm font-medium text-gray-700 mb-1">Rua</label>
+              <input type="text" id="ruaCliente" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500" readonly>
+            </div>
+            <div class="md:col-span-2">
+              <label class="block text-sm font-medium text-gray-700 mb-1">Bairro</label>
+              <input type="text" id="bairroCliente" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500" readonly>
+            </div>
+            <div class="md:col-span-2">
+              <label class="block text-sm font-medium text-gray-700 mb-1">Cidade/UF</label>
+              <input type="text" id="cidadeCliente" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500" readonly>
+            </div>
+            <div class="md:col-span-2">
+              <label class="block text-sm font-medium text-gray-700 mb-1">Complemento</label>
+              <input type="text" id="complementoCliente" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500">
+            </div>
+          </div>
+        </div>
+      </div>
+      <div id="maletaFooter" class="hidden p-6 border-t border-gray-200 bg-gray-50 rounded-b-2xl flex items-center justify-between">
+        <div>
+          <p class="text-sm text-gray-500">Total</p>
+          <p id="maletaTotal" class="text-2xl font-bold text-gray-900">R$ 0,00</p>
+        </div>
+        <button id="finalizarPedido" class="bg-orange-500 hover:bg-orange-600 text-white px-8 py-3 rounded-full font-semibold transition-colors">Finalizar Pedido no WhatsApp</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast -->
+  <div id="toastContainer" class="fixed bottom-6 right-6 z-50 space-y-2"></div>
+
+  <script>
+    // Estado
+    let produtos = [];
+    let maleta = JSON.parse(localStorage.getItem('nix_maleta')) || { itens: [] };
+    let whatsappNumero = '';
+
+    // Elementos DOM
+    const catalogoGrid = document.getElementById('catalogoGrid');
+    const emptyState = document.getElementById('emptyState');
+    const filtroStatus = document.getElementById('filtroStatus');
+    const filtroFormato = document.getElementById('filtroFormato');
+    const modalMaleta = document.getElementById('modalMaleta');
+    const btnMaleta = document.getElementById('btnMaleta');
+    const fecharMaleta = document.getElementById('fecharMaleta');
+    const maletaVazia = document.getElementById('maletaVazia');
+    const maletaItens = document.getElementById('maletaItens');
+    const maletaFormulario = document.getElementById('maletaFormulario');
+    const maletaFooter = document.getElementById('maletaFooter');
+    const maletaTotal = document.getElementById('maletaTotal');
+    const finalizarPedido = document.getElementById('finalizarPedido');
+    const whatsappLink = document.getElementById('whatsappLink');
+    const toastContainer = document.getElementById('toastContainer');
+    const cepInput = document.getElementById('cepCliente');
+
+    // Fallback de imagem (caso o upload falhe / arquivo ausente em /uploads)
+    function imgFallback(el) {
+      el.onerror = null;
+      el.src = "data:image/svg+xml;charset=UTF-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='600' height='600'%3E%3Crect width='100%25' height='100%25' fill='%23f3f4f6'/%3E%3Ctext x='50%25' y='50%25' font-family='sans-serif' font-size='28' fill='%239ca3af' text-anchor='middle' dy='.3em'%3ENix Glasses%3C/text%3E%3C/svg%3E";
+    }
+    window.imgFallback = imgFallback;
+
+    // Higieniza número do WhatsApp: remove tudo que não for dígito antes de gerar https://wa.me/
+    function sanitizeWhatsapp(num) {
+      return String(num || '').replace(/\D/g, '');
+    }
+
+    // Formatação de moeda
+    const formatarMoeda = (valor) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(valor);
+
+    // Toast
+    function mostrarToast(mensagem, tipo = 'success') {
+      const toast = document.createElement('div');
+      toast.className = `toast px-4 py-3 rounded-lg shadow-lg text-white ${tipo === 'success' ? 'bg-green-500' : 'bg-red-500'}`;
+      toast.textContent = mensagem;
+      toastContainer.appendChild(toast);
+      setTimeout(() => toast.remove(), 3000);
+    }
+
+    // Carregar produtos
+    async function carregarProdutos() {
+      try {
+        const response = await fetch('/api/produtos');
+        if (!response.ok) throw new Error('Erro ao buscar produtos');
+        produtos = await response.json();
+        preencherFiltroFormato();
+        renderizarCatalogo();
+      } catch (error) {
+        console.error('Erro ao carregar catálogo:', error);
+        mostrarToast('Erro ao carregar catálogo', 'error');
+      }
+    }
+
+    // Preencher filtro de formato
+    function preencherFiltroFormato() {
+      const formatos = [...new Set(produtos.map(p => p.formato).filter(Boolean))];
+      filtroFormato.innerHTML = '<option value="">Todos os Formatos</option>';
+      formatos.forEach(f => {
+        const opt = document.createElement('option');
+        opt.value = f;
+        opt.textContent = f;
+        filtroFormato.appendChild(opt);
+      });
+    }
+
+    // Renderizar catálogo
+    function renderizarCatalogo() {
+      const statusFiltro = filtroStatus.value;
+      const formatoFiltro = filtroFormato.value;
+
+      const filtrados = produtos.filter(p => {
+        if (statusFiltro && p.status !== statusFiltro) return false;
+        if (formatoFiltro && p.formato !== formatoFiltro) return false;
+        return true;
+      });
+
+      catalogoGrid.innerHTML = '';
+
+      if (filtrados.length === 0) {
+        catalogoGrid.classList.add('hidden');
+        emptyState.classList.remove('hidden');
+        return;
+      }
+
+      catalogoGrid.classList.remove('hidden');
+      emptyState.classList.add('hidden');
+
+      filtrados.forEach(produto => {
+        const jaNaMaleta = maleta.itens.some(i => i.id === produto.id);
+        const card = document.createElement('div');
+        card.className = 'glass-card bg-white rounded-2xl overflow-hidden border border-gray-100';
+        card.innerHTML = `
+          <div class="aspect-square bg-gray-100 relative overflow-hidden">
+            ${produto.imagem_url ? `<img src="${produto.imagem_url}" alt="${produto.nome}" class="w-full h-full object-cover" onerror="imgFallback(this)">` : '<div class="w-full h-full flex items-center justify-center text-gray-300"><svg class="w-16 h-16" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg></div>'}
+            <div class="absolute top-3 right-3">
+              <span class="px-2 py-1 text-xs font-medium rounded-full ${produto.status === 'DISPONIVEL' ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'}">${produto.status}</span>
+            </div>
+            ${jaNaMaleta ? '<div class="absolute top-3 left-3 bg-orange-500 text-white px-2 py-1 text-xs font-medium rounded-full">Na Maleta</div>' : ''}
+          </div>
+          <div class="p-4">
+            <h3 class="font-semibold text-gray-900 mb-1">${produto.nome}</h3>
+            <p class="text-sm text-gray-500 mb-2">${produto.codigo_sku}</p>
+            <div class="flex items-center justify-between mb-3">
+              <span class="text-xl font-bold text-gray-900">${formatarMoeda(produto.preco_venda)}</span>
+              ${produto.formato ? `<span class="text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded">${produto.formato}</span>` : ''}
+            </div>
+            <div class="flex items-center space-x-2 text-sm text-gray-500 mb-3">
+              ${produto.estilo ? `<span>${produto.estilo}</span>` : ''}
+              ${produto.cor_armacao ? `<span>•</span><span>${produto.cor_armacao}</span>` : ''}
+            </div>
+            <button onclick="toggleMaleta(${produto.id})" class="w-full ${jaNaMaleta ? 'bg-gray-100 text-gray-600' : 'bg-orange-500 hover:bg-orange-600 text-white'} py-2 rounded-lg font-medium transition-colors">
+              ${jaNaMaleta ? 'Remover da Maleta' : 'Adicionar à Maleta'}
+            </button>
+          </div>
+        `;
+        catalogoGrid.appendChild(card);
+      });
+    }
+
+    // Toggle maleta
+    function toggleMaleta(produtoId) {
+      const produto = produtos.find(p => p.id === produtoId);
+      if (!produto) return;
+
+      const index = maleta.itens.findIndex(i => i.id === produtoId);
+      if (index >= 0) {
+        maleta.itens.splice(index, 1);
+        mostrarToast(`${produto.nome} removido da maleta`);
+      } else {
+        maleta.itens.push({ id: produto.id, nome: produto.nome, preco: produto.preco_venda, imagem: produto.imagem_url });
+        mostrarToast(`${produto.nome} adicionado à maleta`);
+      }
+      salvarMaleta();
+      renderizarCatalogo();
+      atualizarMaletaUI();
+    }
+
+    // Salvar maleta no localStorage
+    function salvarMaleta() {
+      localStorage.setItem('nix_maleta', JSON.stringify(maleta));
+    }
+
+    // Atualizar UI da maleta
+    function atualizarMaletaUI() {
+      const count = maleta.itens.length;
+      const countEl = document.getElementById('maletaCount');
+      if (count > 0) {
+        countEl.textContent = count;
+        countEl.classList.remove('hidden');
+      } else {
+        countEl.classList.add('hidden');
+      }
+
+      if (maleta.itens.length === 0) {
+        maletaVazia.classList.remove('hidden');
+        maletaItens.classList.add('hidden');
+        maletaFormulario.classList.add('hidden');
+        maletaFooter.classList.add('hidden');
+      } else {
+        maletaVazia.classList.add('hidden');
+        maletaItens.classList.remove('hidden');
+        maletaFormulario.classList.remove('hidden');
+        maletaFooter.classList.remove('hidden');
+
+        maletaItens.innerHTML = maleta.itens.map((item, idx) => `
+          <div class="flex items-center space-3 p-3 bg-gray-50 rounded-lg">
+            ${item.imagem ? `<img src="${item.imagem}" alt="${item.nome}" class="w-16 h-16 object-cover rounded" onerror="imgFallback(this)">` : '<div class="w-16 h-16 bg-gray-200 rounded flex items-center justify-center"><svg class="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg></div>'}
+            <div class="flex-1 min-w-0">
+              <p class="font-medium text-gray-900 truncate">${item.nome}</p>
+              <p class="text-sm text-gray-500">${formatarMoeda(item.preco)}</p>
+            </div>
+            <button onclick="toggleMaleta(${item.id})" class="text-red-500 hover:text-red-700 p-1">
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+            </button>
+          </div>
+        `).join('');
+
+        const total = maleta.itens.reduce((sum, item) => sum + item.preco, 0);
+        maletaTotal.textContent = formatarMoeda(total);
+      }
+    }
+
+    // Modal maleta
+    btnMaleta.addEventListener('click', () => {
+      atualizarMaletaUI();
+      modalMaleta.classList.remove('hidden');
+      document.body.style.overflow = 'hidden';
+    });
+
+    fecharMaleta.addEventListener('click', () => {
+      modalMaleta.classList.add('hidden');
+      document.body.style.overflow = '';
+    });
+
+    modalMaleta.addEventListener('click', (e) => {
+      if (e.target === modalMaleta) {
+        modalMaleta.classList.add('hidden');
+        document.body.style.overflow = '';
+      }
+    });
+
+    // Máscara de CEP (00000-000) + busca ViaCEP funcional no modal da maleta
+    cepInput.addEventListener('input', () => {
+      let v = cepInput.value.replace(/\D/g, '').slice(0, 8);
+      if (v.length > 5) v = v.slice(0, 5) + '-' + v.slice(5);
+      cepInput.value = v;
+    });
+
+    // Buscar CEP
+    cepInput.addEventListener('blur', async () => {
+      const cep = cepInput.value.replace(/\D/g, '');
+      if (cep.length !== 8) return;
+
+      try {
+        const res = await fetch(`https://viacep.com.br/ws/${cep}/json/`);
+        const dados = await res.json();
+        if (!dados.erro) {
+          document.getElementById('ruaCliente').value = dados.logradouro || '';
+          document.getElementById('bairroCliente').value = dados.bairro || '';
+          document.getElementById('cidadeCliente').value = dados.localidade && dados.uf ? `${dados.localidade}/${dados.uf}` : '';
+        } else {
+          mostrarToast('CEP não encontrado', 'error');
+        }
+      } catch (err) {
+        console.error('Erro ao consultar CEP:', err);
+        mostrarToast('Erro ao consultar CEP', 'error');
+      }
+    });
+
+    // Carregar WhatsApp do backend (aceita {whatsapp} ou {valor}, higieniza antes do wa.me)
+    async function carregarWhatsApp() {
+      try {
+        const res = await fetch('/api/config/whatsapp');
+        const data = await res.json();
+        whatsappNumero = sanitizeWhatsapp(data.whatsapp || data.valor || data.number || '');
+        if (whatsappNumero) {
+          whatsappLink.href = `https://wa.me/${whatsappNumero}?text=${encodeURIComponent('Olá! Gostaria de saber mais sobre a Nix Glasses.')}`;
+        }
+      } catch (err) {
+        console.error('Erro ao carregar WhatsApp:', err);
+      }
+    }
+
+    // Montar mensagem WhatsApp
+    function montarTextoWhatsapp(maleta, dados) {
+      let msg = `*Nix Glasses - Novo Pedido*\n\n`;
+      msg += `*Cliente:* ${dados.nome}\n`;
+      msg += `*Telefone:* ${dados.telefone}\n`;
+      msg += `*Endereço:* ${dados.rua}, ${dados.numero} - ${dados.bairro}, ${dados.cidade}\n`;
+      if (dados.complemento) msg += `*Complemento:* ${dados.complemento}\n`;
+      msg += `\n*Itens da Maleta:*\n`;
+      
+      maleta.itens.forEach((item, i) => {
+        msg += `${i + 1}. ${item.nome} - ${formatarMoeda(item.preco)}\n`;
+      });
+      
+      const total = maleta.itens.reduce((sum, item) => sum + item.preco, 0);
+      msg += `\n*Total:* ${formatarMoeda(total)}\n\n`;
+      msg += `Aguardamos sua confirmação!`;
+      return msg;
+    }
+
+    // Finalizar pedido
+    finalizarPedido.addEventListener('click', async () => {
+      const nome = document.getElementById('nomeCliente').value.trim();
+      const telefone = document.getElementById('telefoneCliente').value.trim();
+      const cep = document.getElementById('cepCliente').value.trim();
+      const numero = document.getElementById('numeroCliente').value.trim();
+      const rua = document.getElementById('ruaCliente').value.trim();
+      const bairro = document.getElementById('bairroCliente').value.trim();
+      const cidade = document.getElementById('cidadeCliente').value.trim();
+      const complemento = document.getElementById('complementoCliente').value.trim();
+
+      if (!nome || !telefone || !cep || !numero || !rua) {
+        mostrarToast('Preencha todos os campos obrigatórios', 'error');
+        return;
+      }
+
+      if (!whatsappNumero) {
+        mostrarToast('WhatsApp não configurado. Contate o administrador.', 'error');
+        return;
+      }
+
+      try {
+        // 1. Registra métrica no backend
+        const idsProdutos = maleta.itens.map(item => item.id);
+        const resCheckout = await fetch('/api/maleta/checkout', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ produtoIds: idsProdutos })
+        });
+
+        if (!resCheckout.ok) throw new Error('Erro ao registrar maleta');
+
+        // 2. Abre WhatsApp (número higienizado: só dígitos)
+        const mensagem = montarTextoWhatsapp(maleta, { nome, telefone, cep, numero, rua, bairro, cidade, complemento });
+        const numeroLimpo = sanitizeWhatsapp(whatsappNumero);
+        const url = `https://wa.me/${numeroLimpo}?text=${encodeURIComponent(mensagem)}`;
+        
+        // 3. Limpa maleta e abre WhatsApp
+        localStorage.removeItem('nix_maleta');
+        maleta = { itens: [] };
+        modalMaleta.classList.add('hidden');
+        document.body.style.overflow = '';
+        window.open(url, '_blank');
+        mostrarToast('Pedido encaminhado para o WhatsApp!');
+      } catch (err) {
+        console.error('Erro ao finalizar pedido:', err);
+        mostrarToast('Erro ao finalizar pedido. Tente novamente.', 'error');
+      }
+    });
+
+    // Inicialização
+    document.addEventListener('DOMContentLoaded', () => {
+      carregarProdutos();
+      carregarWhatsApp();
+      atualizarMaletaUI();
+    });
+
+    // Filtros
+    filtroStatus.addEventListener('change', renderizarCatalogo);
+    filtroFormato.addEventListener('change', renderizarCatalogo);
+  </script>
+</body>
+</html>
