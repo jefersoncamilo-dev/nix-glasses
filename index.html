@@ -80,7 +80,12 @@
   <section id="catalogo" class="py-16 lg:py-24 bg-white">
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
       <div class="flex flex-col gap-4 mb-6 sm:mb-10 sm:flex-row sm:items-center sm:justify-between">
-        <h2 class="text-2xl sm:text-3xl font-bold text-gray-900 text-left">Nossa Coleção</h2>
+        <div class="flex items-center gap-3">
+          <span id="vitrineLogoChip" class="hidden items-center rounded-lg px-2 py-1" style="background:#232323">
+            <img src="/logo.png" alt="NIX" class="h-8 sm:h-10 w-auto" onload="document.getElementById('vitrineLogoChip').style.display='inline-flex'" onerror="document.getElementById('vitrineLogoChip').remove()">
+          </span>
+          <h2 class="text-2xl sm:text-3xl font-bold text-gray-900 text-left">Nossa Coleção</h2>
+        </div>
         <div class="grid grid-cols-2 gap-2 sm:flex sm:items-center sm:gap-4">
           <select id="filtroStatus" class="w-full sm:w-auto px-3 sm:px-4 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500">
             <option value="">Todos</option>
