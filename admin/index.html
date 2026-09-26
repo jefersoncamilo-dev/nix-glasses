@@ -8,8 +8,16 @@
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
   <style>
     * { font-family: 'Inter', sans-serif; }
+    html, body { overflow-x: hidden; }
     .sidebar { transition: transform 0.3s ease; }
-    @media (max-width: 768px) { .sidebar { transform: translateX(-100%); } .sidebar.open { transform: translateX(0); } }
+    /* Mobile (<lg): sidebar off-canvas, abre com .open. Desktop (>=lg): sempre visível. */
+    @media (max-width: 1023.98px) {
+      .sidebar { transform: translateX(-100%); box-shadow: 0 0 40px rgba(0,0,0,0.15); }
+      .sidebar.open { transform: translateX(0); }
+    }
+    @media (min-width: 1024px) {
+      .sidebar { transform: translateX(0); }
+    }
     .toast { animation: slideIn 0.3s ease; }
     @keyframes slideIn { from { opacity: 0; transform: translateY(-20px); } to { opacity: 1; transform: translateY(0); } }
     .modal-overlay { backdrop-filter: blur(4px); }
@@ -17,7 +25,7 @@
 </head>
 <body class="bg-gray-50 min-h-screen flex">
   <!-- Sidebar -->
-  <aside id="sidebar" class="sidebar fixed inset-y-0 left-0 z-50 w-64 bg-white border-r border-gray-200 hidden lg:block flex flex-col">
+  <aside id="sidebar" class="sidebar fixed inset-y-0 left-0 z-50 w-64 max-w-[85vw] bg-white border-r border-gray-200 flex flex-col">
     <div class="flex items-center justify-between h-16 px-6 border-b border-gray-200">
       <h1 class="text-xl font-bold text-gray-900">Nix Admin</h1>
       <button id="closeSidebar" class="lg:hidden p-2 text-gray-500 hover:text-gray-700"><svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg></button>
@@ -56,8 +64,8 @@
     <!-- Top Bar -->
     <header class="bg-white border-b border-gray-200 sticky top-0 z-30">
       <div class="flex items-center justify-between h-16 px-4 sm:px-6 lg:px-8">
-        <button id="openSidebar" class="lg:hidden p-2 text-gray-500 hover:text-gray-700"><svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/></svg></button>
-        <h2 id="pageTitle" class="text-xl font-semibold text-gray-900">Produtos</h2>
+        <button id="openSidebar" class="lg:hidden p-2 -ml-2 text-gray-500 hover:text-gray-700" aria-label="Abrir menu"><svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/></svg></button>
+        <h2 id="pageTitle" class="text-base sm:text-xl font-semibold text-gray-900 truncate">Produtos</h2>
         <div class="flex items-center space-x-4">
           <span class="text-sm text-gray-500 hidden sm:block">Admin Nix Glasses</span>
           <button id="btnSair" class="text-sm text-gray-500 hover:text-red-600 font-medium">Sair</button>
@@ -69,41 +77,41 @@
     <div class="p-4 sm:p-6 lg:p-8">
       <!-- Aba Produtos -->
       <div id="tab-produtos" class="tab-content">
-        <div class="flex items-center justify-between mb-6">
+        <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-6">
           <h3 class="text-lg font-semibold text-gray-900">Gerenciar Produtos</h3>
-          <button id="btnNovoProduto" class="bg-orange-500 hover:bg-orange-600 text-white px-4 py-2 rounded-lg font-medium transition-colors flex items-center">
+          <button id="btnNovoProduto" class="w-full sm:w-auto justify-center bg-orange-500 hover:bg-orange-600 text-white px-4 py-2 rounded-lg font-medium transition-colors flex items-center">
             <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
             Novo Produto
           </button>
         </div>
 
         <!-- Filtros -->
-        <div class="bg-white rounded-xl border border-gray-200 p-4 mb-6 flex flex-wrap gap-4">
-          <select id="filtroStatusAdmin" class="px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500">
+        <div class="bg-white rounded-xl border border-gray-200 p-4 mb-6 flex flex-col sm:flex-row sm:flex-wrap gap-3 sm:gap-4">
+          <select id="filtroStatusAdmin" class="w-full sm:w-auto px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500">
             <option value="">Todos os Status</option>
             <option value="DISPONIVEL">Disponível</option>
             <option value="CONDICIONAL">Condicional</option>
             <option value="ESGOTADO">Esgotado</option>
           </select>
-          <select id="filtroFormatoAdmin" class="px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500">
+          <select id="filtroFormatoAdmin" class="w-full sm:w-auto px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500">
             <option value="">Todos os Formatos</option>
           </select>
-          <input type="text" id="buscaAdmin" placeholder="Buscar por nome ou SKU..." class="px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 flex-1 min-w-[200px]">
+          <input type="text" id="buscaAdmin" placeholder="Buscar por nome ou SKU..." class="w-full sm:flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 sm:min-w-[200px]">
         </div>
 
         <!-- Tabela -->
         <div class="bg-white rounded-xl border border-gray-200 overflow-hidden">
-          <div class="overflow-x-auto">
-            <table class="w-full">
+          <div class="overflow-x-auto -mx-0">
+            <table class="w-full min-w-[760px]">
               <thead class="bg-gray-50 border-b border-gray-200">
                 <tr>
-                  <th class="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Imagem</th>
-                  <th class="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Nome / SKU</th>
-                  <th class="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Formato / Estilo / Cor</th>
-                  <th class="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Preços</th>
-                  <th class="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Status</th>
-                  <th class="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Maleta</th>
-                  <th class="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Ações</th>
+                  <th class="px-4 sm:px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Imagem</th>
+                  <th class="px-4 sm:px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Nome / SKU</th>
+                  <th class="hidden md:table-cell px-4 sm:px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Formato / Estilo / Cor</th>
+                  <th class="px-4 sm:px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Preços</th>
+                  <th class="px-4 sm:px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Status</th>
+                  <th class="hidden sm:table-cell px-4 sm:px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Maleta</th>
+                  <th class="px-4 sm:px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Ações</th>
                 </tr>
               </thead>
               <tbody id="tabelaProdutos" class="divide-y divide-gray-200">
@@ -267,11 +275,16 @@
         <div>
           <label class="block text-sm font-medium text-gray-700 mb-1">Imagem</label>
           <input type="file" id="imagem" name="imagem" accept="image/*" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500">
+          <input type="file" id="imagemCamera" accept="image/*" capture="environment" class="hidden">
+          <div class="flex flex-col sm:flex-row sm:items-center gap-2 mt-2">
+            <button type="button" id="btnCamera" class="w-full sm:w-auto px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors text-sm font-medium">📷 Tirar foto com a câmera</button>
+            <img id="previewImagem" class="hidden w-20 h-20 object-cover rounded-lg border border-gray-200" alt="Prévia da imagem">
+          </div>
           <p id="imagemAtual" class="text-sm text-gray-500 mt-1 hidden"></p>
         </div>
-        <div class="pt-4 border-t border-gray-200 flex justify-end space-x-3">
-          <button type="button" id="cancelarModal" class="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors">Cancelar</button>
-          <button type="submit" class="bg-orange-500 hover:bg-orange-600 text-white px-6 py-2 rounded-lg font-medium transition-colors">Salvar</button>
+        <div class="pt-4 border-t border-gray-200 flex flex-col-reverse sm:flex-row sm:justify-end gap-2 sm:gap-0 sm:space-x-3">
+          <button type="button" id="cancelarModal" class="w-full sm:w-auto px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors">Cancelar</button>
+          <button type="submit" class="w-full sm:w-auto bg-orange-500 hover:bg-orange-600 text-white px-6 py-2 rounded-lg font-medium transition-colors">Salvar</button>
         </div>
       </form>
     </div>
@@ -426,25 +439,25 @@
       emptyProdutos.classList.add('hidden');
       tabelaProdutos.innerHTML = filtrados.map(p => `
         <tr class="hover:bg-gray-50">
-          <td class="px-6 py-4">
-            ${p.imagem_url ? `<img src="${p.imagem_url}" alt="${p.nome}" class="w-16 h-16 object-cover rounded" onerror="imgFallback(this)">` : '<div class="w-16 h-16 bg-gray-100 rounded flex items-center justify-center"><svg class="w-6 h-6 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg></div>'}
+          <td class="px-4 sm:px-6 py-4">
+            ${p.imagem_url ? `<img src="${p.imagem_url}" alt="${p.nome}" class="w-12 h-12 sm:w-16 sm:h-16 object-cover rounded" onerror="imgFallback(this)">` : '<div class="w-12 h-12 sm:w-16 sm:h-16 bg-gray-100 rounded flex items-center justify-center"><svg class="w-6 h-6 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg></div>'}
           </td>
-          <td class="px-6 py-4">
-            <p class="font-medium text-gray-900">${p.nome}</p>
-            <p class="text-sm text-gray-500">${p.codigo_sku}</p>
+          <td class="px-4 sm:px-6 py-4">
+            <p class="font-medium text-gray-900 text-sm sm:text-base">${p.nome}</p>
+            <p class="text-xs sm:text-sm text-gray-500">${p.codigo_sku}</p>
           </td>
-          <td class="px-6 py-4 text-sm text-gray-500">
+          <td class="hidden md:table-cell px-4 sm:px-6 py-4 text-sm text-gray-500">
             ${p.formato || '-'} ${p.estilo ? '• ' + p.estilo : ''} ${p.cor_armacao ? '• ' + p.cor_armacao : ''}
           </td>
-          <td class="px-6 py-4">
-            <p class="text-gray-900 font-medium">${formatarMoeda(p.preco_venda)}</p>
-            <p class="text-sm text-gray-500">Custo: ${formatarMoeda(p.preco_custo)}</p>
+          <td class="px-4 sm:px-6 py-4">
+            <p class="text-gray-900 font-medium text-sm sm:text-base">${formatarMoeda(p.preco_venda)}</p>
+            <p class="text-xs sm:text-sm text-gray-500">Custo: ${formatarMoeda(p.preco_custo)}</p>
           </td>
-          <td class="px-6 py-4">
+          <td class="px-4 sm:px-6 py-4">
             <span class="px-2 py-1 text-xs font-medium rounded-full ${statusClass(p.status)}">${p.status}</span>
           </td>
-          <td class="px-6 py-4 text-gray-900 font-medium">${p.vezes_em_maleta || 0}</td>
-          <td class="px-6 py-4">
+          <td class="hidden sm:table-cell px-4 sm:px-6 py-4 text-gray-900 font-medium">${p.vezes_em_maleta || 0}</td>
+          <td class="px-4 sm:px-6 py-4">
             <div class="flex items-center space-x-2">
               <button onclick="editarProduto(${p.id})" class="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors" title="Editar"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg></button>
               <button onclick="excluirProduto(${p.id})" class="p-2 text-red-500 hover:text-red-700 hover:bg-red-50 rounded-lg transition-colors" title="Excluir"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg></button>
@@ -457,12 +470,36 @@
     // Filtros
     [filtroStatusAdmin, filtroFormatoAdmin, buscaAdmin].forEach(el => el.addEventListener('input', renderizarTabela));
 
+    // Câmera + preview de imagem (mobile: capture="environment" abre a câmera traseira)
+    const inputImagem = document.getElementById('imagem');
+    const inputCamera = document.getElementById('imagemCamera');
+    const previewImagem = document.getElementById('previewImagem');
+    function mostrarPreview(file) {
+      if (!file) { previewImagem.classList.add('hidden'); previewImagem.removeAttribute('src'); return; }
+      previewImagem.src = URL.createObjectURL(file);
+      previewImagem.classList.remove('hidden');
+    }
+    document.getElementById('btnCamera')?.addEventListener('click', () => inputCamera.click());
+    inputCamera?.addEventListener('change', () => {
+      const file = inputCamera.files[0];
+      if (!file) return;
+      // Espelha o arquivo da câmera no input principal para o submit
+      try {
+        const dt = new DataTransfer();
+        dt.items.add(file);
+        inputImagem.files = dt.files;
+      } catch {}
+      mostrarPreview(file);
+    });
+    inputImagem?.addEventListener('change', () => mostrarPreview(inputImagem.files[0]));
+
     // Modal Produto
     function abrirModal(produto = null) {
       produtoEditando = produto;
       formProduto.reset();
       document.getElementById('produtoId').value = '';
       document.getElementById('imagemAtual').classList.add('hidden');
+      mostrarPreview(null);
 
       if (produto) {
         modalTitulo.textContent = 'Editar Produto';
@@ -505,7 +542,7 @@
         const val = document.getElementById(field).value;
         if (val) formData.append(field, val);
       });
-      const img = document.getElementById('imagem').files[0];
+      const img = document.getElementById('imagem').files[0] || document.getElementById('imagemCamera').files[0];
       if (img) formData.append('imagem', img);
 
       try {
