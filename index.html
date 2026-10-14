@@ -223,7 +223,7 @@
     </div>
   </div>
 
-  <!-- Modal Área do Cliente (identificação por e-mail, guardada só neste navegador) -->
+  <!-- Modal Área do Cliente (conta com e-mail e senha) -->
   <div id="modalCliente" class="fixed inset-0 modal-overlay bg-black/50 hidden z-50 flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-labelledby="clienteTitulo">
     <div class="bg-white rounded-2xl max-w-md w-full overflow-hidden">
       <div class="flex items-center justify-between p-6 border-b border-gray-200">
@@ -232,21 +232,37 @@
           <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
         </button>
       </div>
+      <div id="clienteConectado" class="hidden p-6 space-y-4">
+        <p class="text-sm text-gray-500">Você entrou como</p>
+        <div>
+          <p id="clienteConectadoNome" class="font-semibold text-gray-900"></p>
+          <p id="clienteConectadoEmail" class="text-sm text-gray-600 break-all"></p>
+        </div>
+        <p class="text-sm text-gray-500">Seu nome já vem preenchido na maleta e seu e-mail vai junto no pedido do WhatsApp.</p>
+        <div class="flex justify-end pt-2">
+          <button type="button" id="sairCliente" class="px-6 py-3 rounded-full text-sm font-semibold text-gray-600 border border-gray-300 hover:bg-gray-100">Sair</button>
+        </div>
+      </div>
       <form id="formCliente" class="p-6 space-y-4" novalidate>
-        <p class="text-sm text-gray-500">Informe seu e-mail para que a gente identifique seus pedidos. Seus dados ficam salvos só neste aparelho.</p>
+        <div class="grid grid-cols-2 gap-1 p-1 bg-gray-100 rounded-full text-sm font-semibold" role="tablist">
+          <button type="button" id="abaEntrar" role="tab" class="py-2 rounded-full">Entrar</button>
+          <button type="button" id="abaCadastro" role="tab" class="py-2 rounded-full">Criar conta</button>
+        </div>
+        <div id="campoNomeCliente" class="hidden">
+          <label for="clienteNome" class="block text-sm font-medium text-gray-700 mb-1">Nome</label>
+          <input type="text" id="clienteNome" autocomplete="name" maxlength="100" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500">
+        </div>
         <div>
           <label for="clienteEmail" class="block text-sm font-medium text-gray-700 mb-1">E-mail *</label>
           <input type="email" id="clienteEmail" autocomplete="email" maxlength="254" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500" placeholder="voce@exemplo.com" required>
         </div>
         <div>
-          <label for="clienteNome" class="block text-sm font-medium text-gray-700 mb-1">Nome</label>
-          <input type="text" id="clienteNome" autocomplete="name" maxlength="100" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500">
+          <label for="clienteSenha" class="block text-sm font-medium text-gray-700 mb-1">Senha *</label>
+          <input type="password" id="clienteSenha" autocomplete="current-password" maxlength="200" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500" required>
+          <p id="dicaSenha" class="hidden mt-1 text-xs text-gray-500">Pelo menos 8 caracteres.</p>
         </div>
-        <p id="clienteErro" class="hidden text-sm text-red-600"></p>
-        <div class="flex flex-col-reverse gap-3 sm:flex-row sm:justify-between pt-2">
-          <button type="button" id="sairCliente" class="hidden px-6 py-3 rounded-full text-sm font-semibold text-gray-600 hover:bg-gray-100">Sair</button>
-          <button type="submit" class="sm:ml-auto bg-orange-500 hover:bg-orange-600 text-white px-8 py-3 rounded-full text-sm font-semibold transition-colors">Entrar</button>
-        </div>
+        <p id="clienteErro" class="hidden text-sm text-red-600" role="alert"></p>
+        <button type="submit" id="enviarCliente" class="w-full bg-orange-500 hover:bg-orange-600 disabled:opacity-60 text-white px-8 py-3 rounded-full text-sm font-semibold transition-colors">Entrar</button>
       </form>
     </div>
   </div>
@@ -696,18 +712,21 @@
       }
     });
 
-    // Área do Cliente: identificação leve por e-mail, sem senha, guardada no localStorage
+    // Área do Cliente: conta com e-mail e senha no servidor; aqui fica só o token da sessão
     function validarEmail(email) {
       const e = String(email ?? '').trim();
       return e.length <= 254 && /^[^\s@]+@[^\s@.]+(\.[^\s@.]+)+$/.test(e);
     }
 
-    // Normaliza o que vem do formulário ou do localStorage; null se o e-mail não for válido
+    // Sessão salva: { token, cliente: { email, nome } }; qualquer coisa fora disso vira null
     function normalizarCliente(dados) {
-      if (!dados || typeof dados !== 'object' || !validarEmail(dados.email)) return null;
+      if (!dados || typeof dados !== 'object' || typeof dados.token !== 'string' || !dados.token) return null;
+      const c = dados.cliente;
+      if (!c || typeof c !== 'object' || !validarEmail(c.email)) return null;
       return {
-        email: String(dados.email).trim().toLowerCase(),
-        nome: String(dados.nome ?? '').trim().replace(/\s+/g, ' ').slice(0, 100),
+        token: dados.token,
+        email: String(c.email).trim().toLowerCase(),
+        nome: String(c.nome ?? '').trim().replace(/\s+/g, ' ').slice(0, 100),
       };
     }
 
@@ -719,22 +738,58 @@
       }
     }
 
-    // Cabeçalho mostra "Entrar" ou o nome/e-mail do cliente (textContent: nunca vira HTML)
+    function guardarCliente(sessao) {
+      cliente = normalizarCliente(sessao);
+      try {
+        if (cliente) localStorage.setItem('nix_cliente', JSON.stringify({ token: cliente.token, cliente: { email: cliente.email, nome: cliente.nome } }));
+        else localStorage.removeItem('nix_cliente');
+      } catch {}
+      renderizarCliente();
+    }
+
+    let modoCliente = 'entrar';
+
+    // Cabeçalho e modal mostram o cliente só por textContent (nunca vira HTML)
     function renderizarCliente() {
       const rotulo = document.getElementById('clienteHeader');
       rotulo.textContent = cliente ? (cliente.nome.split(' ')[0] || cliente.email) : 'Entrar';
       rotulo.title = cliente ? cliente.email : '';
-      document.getElementById('sairCliente').classList.toggle('hidden', !cliente);
+      document.getElementById('clienteConectado').classList.toggle('hidden', !cliente);
+      document.getElementById('formCliente').classList.toggle('hidden', !!cliente);
+      document.getElementById('clienteConectadoNome').textContent = cliente ? (cliente.nome || 'Cliente Nix') : '';
+      document.getElementById('clienteConectadoEmail').textContent = cliente ? cliente.email : '';
+
+      const cadastro = modoCliente === 'cadastro';
+      document.getElementById('campoNomeCliente').classList.toggle('hidden', !cadastro);
+      document.getElementById('dicaSenha').classList.toggle('hidden', !cadastro);
+      document.getElementById('clienteSenha').setAttribute('autocomplete', cadastro ? 'new-password' : 'current-password');
+      document.getElementById('enviarCliente').textContent = cadastro ? 'Criar conta' : 'Entrar';
+      for (const [id, ativo] of [['abaEntrar', !cadastro], ['abaCadastro', cadastro]]) {
+        const aba = document.getElementById(id);
+        aba.setAttribute('aria-selected', String(ativo));
+        aba.className = `py-2 rounded-full ${ativo ? 'bg-white text-gray-900 shadow' : 'text-gray-500'}`;
+      }
+    }
+
+    function mostrarErroCliente(texto) {
+      const erro = document.getElementById('clienteErro');
+      erro.textContent = texto || '';
+      erro.classList.toggle('hidden', !texto);
+    }
+
+    function trocarModoCliente(modo) {
+      modoCliente = modo;
+      mostrarErroCliente('');
+      renderizarCliente();
     }
 
     function abrirCliente() {
-      document.getElementById('clienteEmail').value = cliente ? cliente.email : '';
-      document.getElementById('clienteNome').value = cliente ? cliente.nome : '';
-      document.getElementById('clienteErro').classList.add('hidden');
+      document.getElementById('clienteSenha').value = '';
+      mostrarErroCliente('');
       renderizarCliente();
       modalCliente.classList.remove('hidden');
       document.body.style.overflow = 'hidden';
-      document.getElementById('clienteEmail').focus();
+      if (!cliente) document.getElementById('clienteEmail').focus();
     }
 
     function fecharCliente() {
@@ -748,37 +803,64 @@
       if (cliente && cliente.nome && !campoNome.value.trim()) campoNome.value = cliente.nome;
     }
 
+    // Confere no servidor se a sessão salva ainda vale (conta existe, token não expirou)
+    async function conferirSessaoCliente() {
+      if (!cliente) return;
+      try {
+        const res = await fetch('/api/clientes/me', { headers: { Authorization: `Bearer ${cliente.token}` } });
+        if (res.status === 401) return guardarCliente(null);
+        if (res.ok) guardarCliente({ token: cliente.token, cliente: (await res.json()).cliente });
+      } catch (err) {
+        console.error('Erro ao conferir sessão do cliente:', err);
+      }
+    }
+
     const modalCliente = document.getElementById('modalCliente');
     document.getElementById('btnCliente').addEventListener('click', abrirCliente);
     document.getElementById('fecharCliente').addEventListener('click', fecharCliente);
+    document.getElementById('abaEntrar').addEventListener('click', () => trocarModoCliente('entrar'));
+    document.getElementById('abaCadastro').addEventListener('click', () => trocarModoCliente('cadastro'));
     modalCliente.addEventListener('click', (e) => { if (e.target === modalCliente) fecharCliente(); });
     document.addEventListener('keydown', (e) => {
       if (e.key === 'Escape' && !modalCliente.classList.contains('hidden')) fecharCliente();
     });
 
-    document.getElementById('formCliente').addEventListener('submit', (e) => {
+    document.getElementById('formCliente').addEventListener('submit', async (e) => {
       e.preventDefault();
-      const novo = normalizarCliente({
-        email: document.getElementById('clienteEmail').value,
-        nome: document.getElementById('clienteNome').value,
-      });
-      const erro = document.getElementById('clienteErro');
-      if (!novo) {
-        erro.textContent = 'Informe um e-mail válido.';
-        erro.classList.remove('hidden');
-        return;
+      const cadastro = modoCliente === 'cadastro';
+      const email = document.getElementById('clienteEmail').value.trim();
+      const senha = document.getElementById('clienteSenha').value;
+      const nome = document.getElementById('clienteNome').value.trim();
+      if (!validarEmail(email)) return mostrarErroCliente('Informe um e-mail válido.');
+      if (cadastro && senha.length < 8) return mostrarErroCliente('A senha precisa ter pelo menos 8 caracteres.');
+      if (!senha) return mostrarErroCliente('Informe sua senha.');
+
+      const botao = document.getElementById('enviarCliente');
+      botao.disabled = true;
+      mostrarErroCliente('');
+      try {
+        const res = await fetch(cadastro ? '/api/clientes/cadastro' : '/api/clientes/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(cadastro ? { email, senha, nome } : { email, senha }),
+        });
+        const dados = await res.json().catch(() => ({}));
+        if (!res.ok) return mostrarErroCliente(dados.error || 'Não foi possível entrar. Tente novamente.');
+        guardarCliente(dados);
+        document.getElementById('clienteSenha').value = '';
+        fecharCliente();
+        const primeiroNome = cliente && cliente.nome ? ', ' + cliente.nome.split(' ')[0] : '';
+        mostrarToast(cadastro ? `Conta criada! Bem-vindo(a)${primeiroNome}.` : `Olá${primeiroNome}! Você entrou na sua conta.`);
+      } catch (err) {
+        console.error('Erro na Área do Cliente:', err);
+        mostrarErroCliente('Erro de conexão. Tente novamente.');
+      } finally {
+        botao.disabled = false;
       }
-      cliente = novo;
-      localStorage.setItem('nix_cliente', JSON.stringify(cliente));
-      renderizarCliente();
-      fecharCliente();
-      mostrarToast(`Olá${cliente.nome ? ', ' + cliente.nome.split(' ')[0] : ''}! Você está identificado.`);
     });
 
     document.getElementById('sairCliente').addEventListener('click', () => {
-      cliente = null;
-      localStorage.removeItem('nix_cliente');
-      renderizarCliente();
+      guardarCliente(null);
       fecharCliente();
       mostrarToast('Você saiu da sua conta.');
     });
@@ -883,6 +965,7 @@
       carregarWhatsApp();
       atualizarMaletaUI();
       renderizarCliente();
+      conferirSessaoCliente();
     });
 
     // Filtros

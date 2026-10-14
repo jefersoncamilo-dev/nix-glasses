@@ -34,6 +34,7 @@ function elemento() {
 
 const armazem = (valor) => ({ getItem: () => valor });
 const FUNCOES = ['validarEmail', 'normalizarCliente', 'lerCliente'];
+const sessao = (cliente, token = 'tok.abc') => JSON.stringify({ token, cliente });
 
 describe('validarEmail', () => {
   const { validarEmail } = carregar(['validarEmail']);
@@ -42,53 +43,64 @@ describe('validarEmail', () => {
     it(`recusa ${JSON.stringify(ruim)}`, () => assert.equal(validarEmail(ruim), false));
 });
 
-describe('cliente no localStorage', () => {
-  it('normaliza e-mail e nome', () => {
-    const { normalizarCliente } = carregar(FUNCOES);
-    assert.deepEqual({ ...normalizarCliente({ email: '  Ana@Exemplo.COM ', nome: '  Ana   Souza ' }) }, { email: 'ana@exemplo.com', nome: 'Ana Souza' });
-    assert.equal(normalizarCliente({ email: 'invalido', nome: 'X' }), null);
+describe('sessão do cliente no localStorage', () => {
+  it('lê a sessão salva (token + cliente) e normaliza', () => {
+    const { lerCliente } = carregar(FUNCOES);
+    assert.deepEqual({ ...lerCliente(armazem(sessao({ email: ' Bia@Nix.com ', nome: '  Bia   Lima ' }))) }, { token: 'tok.abc', email: 'bia@nix.com', nome: 'Bia Lima' });
   });
 
-  it('ignora dado ausente, corrompido ou adulterado', () => {
+  it('ignora sessão ausente, corrompida, sem token ou adulterada', () => {
     const { lerCliente } = carregar(FUNCOES);
     assert.equal(lerCliente(armazem(null)), null);
     assert.equal(lerCliente(armazem('{quebrado')), null);
     assert.equal(lerCliente(armazem('"texto"')), null);
-    assert.equal(lerCliente(armazem(JSON.stringify({ email: '<img src=x onerror=alert(1)>' }))), null);
+    // formato antigo (só e-mail, sem senha): precisa entrar de novo
+    assert.equal(lerCliente(armazem(JSON.stringify({ email: 'bia@nix.com', nome: 'Bia' }))), null);
+    assert.equal(lerCliente(armazem(sessao({ email: 'bia@nix.com' }, ''))), null);
+    assert.equal(lerCliente(armazem(sessao({ email: '<img src=x onerror=alert(1)>' }))), null);
     assert.equal(lerCliente({ getItem() { throw new Error('bloqueado'); } }), null);
-  });
-
-  it('lê o cliente salvo', () => {
-    const { lerCliente } = carregar(FUNCOES);
-    assert.deepEqual({ ...lerCliente(armazem(JSON.stringify({ email: 'bia@nix.com', nome: 'Bia' }))) }, { email: 'bia@nix.com', nome: 'Bia' });
   });
 });
 
-describe('cabeçalho mostra o cliente como texto', () => {
-  function montar(cliente) {
-    const els = { clienteHeader: elemento(), sairCliente: elemento() };
-    const ctx = carregar(['renderizarCliente'], { cliente, document: { getElementById: id => els[id] } });
+describe('cabeçalho e modal mostram o cliente como texto', () => {
+  const IDS = ['clienteHeader', 'clienteConectado', 'formCliente', 'clienteConectadoNome', 'clienteConectadoEmail',
+    'campoNomeCliente', 'dicaSenha', 'clienteSenha', 'enviarCliente', 'abaEntrar', 'abaCadastro'];
+  function montar(cliente, modoCliente = 'entrar') {
+    const els = {};
+    for (const id of IDS) els[id] = { ...elemento(), atributos: {}, setAttribute(k, v) { this.atributos[k] = v; } };
+    const ctx = carregar(['renderizarCliente'], { cliente, modoCliente, document: { getElementById: id => els[id] } });
     ctx.renderizarCliente();
     return els;
   }
 
-  it('sem cliente mostra Entrar e esconde Sair', () => {
+  it('sem cliente mostra Entrar e o formulário de login', () => {
     const els = montar(null);
     assert.equal(els.clienteHeader.textContent, 'Entrar');
-    assert.ok(els.sairCliente.classes.has('hidden'));
+    assert.ok(els.clienteConectado.classes.has('hidden'));
+    assert.ok(!els.formCliente.classes.has('hidden'));
+    assert.ok(els.campoNomeCliente.classes.has('hidden'));
+    assert.equal(els.clienteSenha.atributos.autocomplete, 'current-password');
   });
 
-  it('com cliente mostra o primeiro nome, ou o e-mail se não houver nome', () => {
-    let els = montar({ email: 'bia@nix.com', nome: 'Beatriz Lima' });
-    assert.equal(els.clienteHeader.textContent, 'Beatriz');
-    assert.equal(els.clienteHeader.title, 'bia@nix.com');
-    assert.ok(!els.sairCliente.classes.has('hidden'));
-    els = montar({ email: 'bia@nix.com', nome: '' });
-    assert.equal(els.clienteHeader.textContent, 'bia@nix.com');
+  it('no modo Criar conta mostra o campo nome e a dica de senha', () => {
+    const els = montar(null, 'cadastro');
+    assert.ok(!els.campoNomeCliente.classes.has('hidden'));
+    assert.equal(els.enviarCliente.textContent, 'Criar conta');
+    assert.equal(els.clienteSenha.atributos.autocomplete, 'new-password');
+  });
+
+  it('com cliente mostra o primeiro nome no cabeçalho e os dados no modal', () => {
+    const els = montar({ email: 'bia@nix.com', nome: '<b>Beatriz</b> Lima', token: 't' });
+    assert.equal(els.clienteHeader.textContent, '<b>Beatriz</b>');
+    assert.equal(els.clienteConectadoEmail.textContent, 'bia@nix.com');
+    assert.ok(els.formCliente.classes.has('hidden'));
+    assert.ok(!els.clienteConectado.classes.has('hidden'));
+    assert.equal(montar({ email: 'bia@nix.com', nome: '', token: 't' }).clienteHeader.textContent, 'bia@nix.com');
   });
 
   it('a página usa textContent (nunca innerHTML) para o cliente', () => {
     assert.doesNotMatch(extrairFuncao('renderizarCliente'), /innerHTML/);
+    assert.doesNotMatch(extrairFuncao('mostrarErroCliente'), /innerHTML/);
   });
 });
 
