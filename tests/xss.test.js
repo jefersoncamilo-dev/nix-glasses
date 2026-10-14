@@ -177,6 +177,36 @@ describe('painel (admin/index.html) escapa dados de produto', () => {
   });
 });
 
+describe('painel (admin/index.html) escapa clientes e pedidos', () => {
+  const globais = { formatarMoeda: v => `R$ ${v}`, formatarData: v => String(v) };
+
+  it('na tabela de clientes', () => {
+    const tbody = elemento();
+    const ctx = carregar('admin/index.html', ['escapeHtml', 'renderizarClientes'], {
+      ...globais,
+      document: { getElementById: () => tbody },
+    });
+    ctx.renderizarClientes([{ id: '1" onclick="alert(1)', nome: PAYLOAD, email: PAYLOAD, created_at: PAYLOAD, pedidos: 2, total_pedidos: '10.00', ultimo_pedido: null }]);
+    semInjecao(tbody.innerHTML);
+    assert.match(tbody.innerHTML, /data-cliente="NaN"/);
+  });
+
+  it('nos pedidos', () => {
+    const lista = elemento();
+    const ctx = carregar('admin/index.html', ['escapeHtml', 'renderizarPedidos'], {
+      ...globais,
+      document: { getElementById: () => lista },
+    });
+    ctx.renderizarPedidos([{
+      id: 3, nome: PAYLOAD, telefone: PAYLOAD, email: PAYLOAD, endereco: PAYLOAD, created_at: PAYLOAD, total: '200.00', sinal: '50.00',
+      itens: [{ nome: PAYLOAD, codigo_sku: PAYLOAD, preco: 100, encomenda: true }, { nome: PAYLOAD, codigo_sku: PAYLOAD, preco: 100, encomenda: false }],
+    }]);
+    semInjecao(lista.innerHTML);
+    assert.match(lista.innerHTML, /SOB ENCOMENDA/);
+    assert.match(lista.innerHTML, /PRONTA ENTREGA/);
+  });
+});
+
 describe('acerto (admin/acerto.html) escapa dados de produto', () => {
   it('no checklist', () => {
     const productsChecklist = elemento();

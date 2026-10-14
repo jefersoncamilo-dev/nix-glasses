@@ -157,10 +157,10 @@ describe('maleta', () => {
     }
   });
 
-  it('responde 500 e não altera nada com ID inválido', async () => {
+  it('responde 400 e não altera nada com ID inválido', async () => {
     const { body: a } = await criarProduto(base('M-3'));
     const r = await api('POST', '/api/maleta/checkout', { auth: false, body: { ids: [a.id, 'abc'] } });
-    assert.equal(r.status, 500);
+    assert.equal(r.status, 400);
     const { rows } = await h.pool.query('SELECT vezes_em_maleta FROM produtos WHERE id = $1', [a.id]);
     assert.equal(rows[0].vezes_em_maleta, 0);
   });

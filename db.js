@@ -98,6 +98,27 @@ async function initTables() {
       )
     `);
 
+    // Pedidos finalizados na vitrine (o pedido em si segue pelo WhatsApp).
+    // Preços e encomenda/pronta entrega vêm do banco na hora do checkout e ficam
+    // congelados em `itens`. cliente_id só quando o cliente estava logado.
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS pedidos (
+        id SERIAL PRIMARY KEY,
+        cliente_id INTEGER REFERENCES clientes(id) ON DELETE SET NULL,
+        nome VARCHAR(100) NOT NULL DEFAULT '',
+        telefone VARCHAR(30) NOT NULL DEFAULT '',
+        email VARCHAR(254) NOT NULL DEFAULT '',
+        endereco TEXT NOT NULL DEFAULT '',
+        itens JSONB NOT NULL DEFAULT '[]',
+        total_prova DECIMAL(10,2) NOT NULL DEFAULT 0,
+        total_encomendas DECIMAL(10,2) NOT NULL DEFAULT 0,
+        sinal DECIMAL(10,2) NOT NULL DEFAULT 0,
+        total DECIMAL(10,2) NOT NULL DEFAULT 0,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+    await client.query('CREATE INDEX IF NOT EXISTS pedidos_cliente_idx ON pedidos (cliente_id, created_at DESC)');
+
     await client.query(`
       CREATE TABLE IF NOT EXISTS configuracoes (
         chave VARCHAR(100) PRIMARY KEY,
