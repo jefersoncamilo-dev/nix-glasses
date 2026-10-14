@@ -46,6 +46,17 @@ async function initTables() {
       )
     `);
 
+    // Fotos dos produtos ficam no próprio Postgres: o disco do Render Free é
+    // apagado a cada deploy/restart, então /uploads não serve para guardar nada.
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS imagens (
+        id VARCHAR(32) PRIMARY KEY,
+        mime_type VARCHAR(50) NOT NULL,
+        dados BYTEA NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
     // Histórico de acertos de condicional (produtos vendidos/devolvidos e observações)
     await client.query(`
       CREATE TABLE IF NOT EXISTS acertos (
