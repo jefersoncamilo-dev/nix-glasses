@@ -385,33 +385,91 @@ async function startServer() {
       return res.status(400).json({ error: 'Arrays "comprados" e/ou "devolvidos" são obrigatórios' });
     }
 
+    const toIds = (list) => [...new Set((Array.isArray(list) ? list : []).map(Number))];
+    comprados = toIds(comprados);
+    devolvidos = toIds(devolvidos);
+
+    if ([...comprados, ...devolvidos].some((id) => !Number.isInteger(id) || id <= 0)) {
+      return res.status(400).json({ error: 'IDs de produto inválidos' });
+    }
+    if (comprados.some((id) => devolvidos.includes(id))) {
+      return res.status(400).json({ error: 'Um produto não pode ser marcado como comprado e devolvido ao mesmo tempo' });
+    }
+    if (comprados.length === 0 && devolvidos.length === 0) {
+      return res.status(400).json({ error: 'Selecione pelo menos um produto' });
+    }
+
+    const obs = typeof observacoes === 'string' ? observacoes.trim().slice(0, 2000) : '';
+
     let client;
     try {
       client = await pool.connect();
       await client.query('BEGIN');
 
-      if (Array.isArray(comprados) && comprados.length > 0) {
-        await client.query(
-          `UPDATE produtos SET status = 'ESGOTADO', updated_at = CURRENT_TIMESTAMP WHERE id = ANY($1)`,
+      // Só produtos em CONDICIONAL participam do acerto: evita que um produto
+      // já vendido (ESGOTADO) volte para DISPONIVEL por engano.
+      let vendidos = [];
+      if (comprados.length > 0) {
+        const r = await client.query(
+          `UPDATE produtos SET status = 'ESGOTADO', updated_at = CURRENT_TIMESTAMP
+           WHERE id = ANY($1) AND status = 'CONDICIONAL'
+           RETURNING id`,
           [comprados]
         );
+        vendidos = r.rows.map((row) => row.id);
       }
 
-      if (Array.isArray(devolvidos) && devolvidos.length > 0) {
-        await client.query(
-          `UPDATE produtos SET status = 'DISPONIVEL', updated_at = CURRENT_TIMESTAMP WHERE id = ANY($1)`,
+      let retornados = [];
+      if (devolvidos.length > 0) {
+        const r = await client.query(
+          `UPDATE produtos SET status = 'DISPONIVEL', updated_at = CURRENT_TIMESTAMP
+           WHERE id = ANY($1) AND status = 'CONDICIONAL'
+           RETURNING id`,
           [devolvidos]
         );
+        retornados = r.rows.map((row) => row.id);
       }
 
+      const ignorados = [...comprados, ...devolvidos].filter(
+        (id) => !vendidos.includes(id) && !retornados.includes(id)
+      );
+
+      if (vendidos.length === 0 && retornados.length === 0) {
+        await client.query('ROLLBACK');
+        return res.status(409).json({
+          error: 'Nenhum dos produtos selecionados está em condicional',
+          ignorados,
+        });
+      }
+
+      await client.query(
+        `INSERT INTO acertos (comprados, devolvidos, observacoes) VALUES ($1, $2, $3)`,
+        [vendidos, retornados, obs || null]
+      );
+
       await client.query('COMMIT');
-      res.json({ sucesso: true, success: true });
+      res.json({ sucesso: true, success: true, comprados: vendidos, devolvidos: retornados, ignorados });
     } catch (err) {
       if (client) await client.query('ROLLBACK').catch(() => {});
       console.error(err);
       res.status(500).json({ error: 'Erro ao processar acerto' });
     } finally {
       if (client) client.release();
+    }
+  }
+
+  async function handleListAcertos(req, res) {
+    try {
+      const result = await pool.query(
+        `SELECT id, comprados, devolvidos, observacoes, created_at
+         FROM acertos
+         ORDER BY created_at DESC
+         LIMIT 100`
+      );
+      res.json(result.rows);
+    } catch (err) {
+      console.error(err);
+      res.status(500).json({ error: 'Erro ao buscar histórico de acertos' });
     }
   }
 
@@ -516,6 +574,7 @@ async function startServer() {
   app.post('/api/produtos', requireAdmin, uploadImagem, handleCreateProduto);
   app.put('/api/produtos/:id', requireAdmin, uploadImagem, handleUpdateProduto);
   app.post('/api/admin/acerto', requireAdmin, handleAcerto);
+  app.get('/api/admin/acertos', requireAdmin, handleListAcertos);
   app.post('/api/config/whatsapp', requireAdmin, handlePostWhatsapp);
   app.post('/api/admin/whatsapp', requireAdmin, handlePostWhatsapp);
   app.get('/api/admin/metrics', requireAdmin, handleMetrics);

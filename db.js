@@ -46,6 +46,17 @@ async function initTables() {
       )
     `);
 
+    // Histórico de acertos de condicional (produtos vendidos/devolvidos e observações)
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS acertos (
+        id SERIAL PRIMARY KEY,
+        comprados INTEGER[] NOT NULL DEFAULT '{}',
+        devolvidos INTEGER[] NOT NULL DEFAULT '{}',
+        observacoes TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
     await client.query(`
       CREATE TABLE IF NOT EXISTS configuracoes (
         chave VARCHAR(100) PRIMARY KEY,
