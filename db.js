@@ -87,6 +87,17 @@ async function initTables() {
       )
     `);
 
+    // Contas de clientes da vitrine (e-mail + senha com scrypt). E-mail sempre minúsculo.
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS clientes (
+        id SERIAL PRIMARY KEY,
+        email VARCHAR(254) UNIQUE NOT NULL,
+        nome VARCHAR(100) NOT NULL DEFAULT '',
+        senha_hash TEXT NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
     await client.query(`
       CREATE TABLE IF NOT EXISTS configuracoes (
         chave VARCHAR(100) PRIMARY KEY,

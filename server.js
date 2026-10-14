@@ -238,6 +238,142 @@ async function handleLogin(req, res) {
   res.json({ token, expiresIn: '12h', user: cfg.user });
 }
 
+// ---------- Contas de clientes (vitrine) ----------
+// Senha com scrypt (salt:hash, como o admin). O token do cliente é assinado com
+// uma chave derivada só para clientes, então nunca passa no requireAdmin.
+const scryptAsync = (senha, salt) => new Promise((resolve, reject) =>
+  crypto.scrypt(senha, salt, 64, (err, key) => (err ? reject(err) : resolve(key))));
+
+async function hashSenhaCliente(senha) {
+  const salt = crypto.randomBytes(16);
+  return `${salt.toString('hex')}:${(await scryptAsync(String(senha), salt)).toString('hex')}`;
+}
+
+async function conferirSenhaCliente(senha, stored) {
+  const [saltHex, hashHex] = String(stored || '').split(':');
+  if (!saltHex || !hashHex) return false;
+  const derivada = await scryptAsync(String(senha || ''), Buffer.from(saltHex, 'hex'));
+  const esperada = Buffer.from(hashHex, 'hex');
+  return derivada.length === esperada.length && crypto.timingSafeEqual(derivada, esperada);
+}
+
+// Usado quando o e-mail não existe, para o login levar o mesmo tempo nos dois casos
+const HASH_FALSO = `${'0'.repeat(32)}:${'0'.repeat(128)}`;
+
+function chaveTokenCliente() {
+  return crypto.createHmac('sha256', getTokenSecret()).update('nix-glasses:clientes').digest();
+}
+
+function assinarTokenCliente(id, dias = 30) {
+  const now = Math.floor(Date.now() / 1000);
+  const body = b64urlEncode({ c: id, t: 'cliente', iat: now, exp: now + dias * 86400 });
+  return `${body}.${crypto.createHmac('sha256', chaveTokenCliente()).update(body).digest('hex')}`;
+}
+
+function verificarTokenCliente(token) {
+  const [body, sig] = String(token || '').split('.');
+  if (!body || !sig) throw new Error('Token inválido');
+  const a = Buffer.from(sig);
+  const b = Buffer.from(crypto.createHmac('sha256', chaveTokenCliente()).update(body).digest('hex'));
+  if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) throw new Error('Token inválido');
+  const payload = JSON.parse(b64urlDecode(body));
+  if (payload.t !== 'cliente' || !Number.isInteger(payload.c)) throw new Error('Token inválido');
+  if (!payload.exp || payload.exp < Math.floor(Date.now() / 1000)) throw new Error('Sessão expirada');
+  return payload;
+}
+
+function validarEmailCliente(email) {
+  const e = typeof email === 'string' ? email.trim() : '';
+  return e.length <= 254 && /^[^\s@]+@[^\s@.]+(\.[^\s@.]+)+$/.test(e) ? e.toLowerCase() : null;
+}
+
+const SENHA_MIN = 8;
+const SENHA_MAX = 200;
+
+// Freio de força bruta: 10 senhas erradas por e-mail a cada 15 minutos
+const TENTATIVAS_MAX = 10;
+const JANELA_TENTATIVAS_MS = 15 * 60 * 1000;
+const tentativasLogin = new Map();
+
+function loginBloqueado(email) {
+  const t = tentativasLogin.get(email);
+  if (t && Date.now() - t.inicio > JANELA_TENTATIVAS_MS) tentativasLogin.delete(email);
+  return (tentativasLogin.get(email)?.falhas || 0) >= TENTATIVAS_MAX;
+}
+
+function registrarFalhaLogin(email) {
+  if (tentativasLogin.size > 10000) {
+    for (const [k, v] of tentativasLogin) if (Date.now() - v.inicio > JANELA_TENTATIVAS_MS) tentativasLogin.delete(k);
+  }
+  const t = tentativasLogin.get(email) || { inicio: Date.now(), falhas: 0 };
+  t.falhas++;
+  tentativasLogin.set(email, t);
+}
+
+const clientePublico = (row) => ({ id: row.id, email: row.email, nome: row.nome });
+
+async function handleCadastroCliente(req, res) {
+  const { email, senha, nome } = req.body || {};
+  const emailOk = validarEmailCliente(email);
+  if (!emailOk) return res.status(400).json({ error: 'E-mail inválido' });
+  if (typeof senha !== 'string' || senha.length < SENHA_MIN || senha.length > SENHA_MAX) {
+    return res.status(400).json({ error: `A senha precisa ter pelo menos ${SENHA_MIN} caracteres` });
+  }
+  const nomeOk = typeof nome === 'string' ? nome.trim().replace(/\s+/g, ' ').slice(0, 100) : '';
+  try {
+    const { rows } = await pool.query(
+      `INSERT INTO clientes (email, nome, senha_hash) VALUES ($1, $2, $3)
+       ON CONFLICT (email) DO NOTHING RETURNING id, email, nome`,
+      [emailOk, nomeOk, await hashSenhaCliente(senha)]
+    );
+    if (!rows.length) return res.status(409).json({ error: 'Já existe uma conta com este e-mail. Faça login.' });
+    res.status(201).json({ token: assinarTokenCliente(rows[0].id), cliente: clientePublico(rows[0]) });
+  } catch (err) {
+    console.error('Erro ao cadastrar cliente:', err);
+    res.status(500).json({ error: 'Erro ao criar conta' });
+  }
+}
+
+async function handleLoginCliente(req, res) {
+  const { email, senha } = req.body || {};
+  const emailOk = validarEmailCliente(email);
+  if (!emailOk || typeof senha !== 'string') return res.status(401).json({ error: 'E-mail ou senha inválidos' });
+  if (loginBloqueado(emailOk)) {
+    return res.status(429).json({ error: 'Muitas tentativas. Aguarde alguns minutos e tente de novo.' });
+  }
+  try {
+    const { rows } = await pool.query('SELECT id, email, nome, senha_hash FROM clientes WHERE email = $1', [emailOk]);
+    const ok = await conferirSenhaCliente(senha.slice(0, SENHA_MAX), rows[0] ? rows[0].senha_hash : HASH_FALSO);
+    if (!rows[0] || !ok) {
+      registrarFalhaLogin(emailOk);
+      return res.status(401).json({ error: 'E-mail ou senha inválidos' });
+    }
+    tentativasLogin.delete(emailOk);
+    res.json({ token: assinarTokenCliente(rows[0].id), cliente: clientePublico(rows[0]) });
+  } catch (err) {
+    console.error('Erro no login do cliente:', err);
+    res.status(500).json({ error: 'Erro ao entrar' });
+  }
+}
+
+async function handleClienteAtual(req, res) {
+  const h = req.headers.authorization || '';
+  let payload;
+  try {
+    payload = verificarTokenCliente(h.startsWith('Bearer ') ? h.slice(7) : '');
+  } catch {
+    return res.status(401).json({ error: 'Sessão expirada. Entre novamente.' });
+  }
+  try {
+    const { rows } = await pool.query('SELECT id, email, nome FROM clientes WHERE id = $1', [payload.c]);
+    if (!rows.length) return res.status(401).json({ error: 'Conta não encontrada' });
+    res.json({ cliente: clientePublico(rows[0]) });
+  } catch (err) {
+    console.error('Erro ao buscar cliente:', err);
+    res.status(500).json({ error: 'Erro ao buscar conta' });
+  }
+}
+
 async function startServer() {
   if (!isAdminAuthEnabled()) {
     console.warn('[auth] ADMIN_USER/ADMIN_PASS_HASH não definidos: rotas admin ficarão bloqueadas (503).');
@@ -690,6 +826,9 @@ async function startServer() {
   });
 
   // ---------- Rotas públicas (vitrine) ----------
+  app.post('/api/clientes/cadastro', handleCadastroCliente);
+  app.post('/api/clientes/login', handleLoginCliente);
+  app.get('/api/clientes/me', handleClienteAtual);
   // GET produtos e GET whatsapp precisam ficar abertos para o site público.
   app.get('/api/produtos', handleListPublicos);
   app.get('/imagens/:id', handleGetImagem);
