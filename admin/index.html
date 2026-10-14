@@ -93,6 +93,11 @@
             <option value="CONDICIONAL">Condicional</option>
             <option value="ESGOTADO">Esgotado</option>
           </select>
+          <select id="filtroDisponibilidadeAdmin" class="w-full sm:w-auto px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500">
+            <option value="">Todas as Disponibilidades</option>
+            <option value="PRONTA_ENTREGA">Pronta Entrega</option>
+            <option value="SOB_ENCOMENDA">Sob Encomenda</option>
+          </select>
           <select id="filtroFormatoAdmin" class="w-full sm:w-auto px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500">
             <option value="">Todos os Formatos</option>
           </select>
@@ -271,6 +276,14 @@
               <option value="ESGOTADO">Esgotado</option>
             </select>
           </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Disponibilidade *</label>
+            <select id="disponibilidade" name="disponibilidade" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500" required>
+              <option value="PRONTA_ENTREGA">Pronta Entrega</option>
+              <option value="SOB_ENCOMENDA">Sob Encomenda (50% de sinal)</option>
+            </select>
+            <p id="avisoSinal" class="text-xs text-blue-700 mt-1 hidden"></p>
+          </div>
         </div>
         <div>
           <label class="block text-sm font-medium text-gray-700 mb-1">Imagem</label>
@@ -305,6 +318,7 @@
     const emptyProdutos = document.getElementById('emptyProdutos');
     const filtroStatusAdmin = document.getElementById('filtroStatusAdmin');
     const filtroFormatoAdmin = document.getElementById('filtroFormatoAdmin');
+    const filtroDisponibilidadeAdmin = document.getElementById('filtroDisponibilidadeAdmin');
     const buscaAdmin = document.getElementById('buscaAdmin');
     const modalProduto = document.getElementById('modalProduto');
     const formProduto = document.getElementById('formProduto');
@@ -425,11 +439,13 @@
 
     function renderizarTabela() {
       const statusFiltro = filtroStatusAdmin.value;
+      const disponibilidadeFiltro = filtroDisponibilidadeAdmin.value;
       const formatoFiltro = filtroFormatoAdmin.value;
       const busca = buscaAdmin.value.toLowerCase();
 
       const filtrados = todosProdutos.filter(p => {
         if (statusFiltro && p.status !== statusFiltro) return false;
+        if (disponibilidadeFiltro && (p.disponibilidade || 'PRONTA_ENTREGA') !== disponibilidadeFiltro) return false;
         if (formatoFiltro && p.formato !== formatoFiltro) return false;
         if (busca && !p.nome.toLowerCase().includes(busca) && !p.codigo_sku.toLowerCase().includes(busca)) return false;
         return true;
@@ -460,6 +476,7 @@
           </td>
           <td class="px-4 sm:px-6 py-4">
             <span class="px-2 py-1 text-xs font-medium rounded-full ${statusClass(p.status)}">${escapeHtml(p.status)}</span>
+            ${p.disponibilidade === 'SOB_ENCOMENDA' ? '<span class="block w-max mt-1 px-2 py-1 text-xs font-medium rounded-full bg-blue-100 text-blue-700">SOB ENCOMENDA</span>' : ''}
           </td>
           <td class="hidden sm:table-cell px-4 sm:px-6 py-4 text-gray-900 font-medium">${Number(p.vezes_em_maleta) || 0}</td>
           <td class="px-4 sm:px-6 py-4">
@@ -473,7 +490,7 @@
     }
 
     // Filtros
-    [filtroStatusAdmin, filtroFormatoAdmin, buscaAdmin].forEach(el => el.addEventListener('input', renderizarTabela));
+    [filtroStatusAdmin, filtroDisponibilidadeAdmin, filtroFormatoAdmin, buscaAdmin].forEach(el => el.addEventListener('input', renderizarTabela));
 
     // Câmera + preview de imagem (mobile: capture="environment" abre a câmera traseira)
     const inputImagem = document.getElementById('imagem');
@@ -544,6 +561,7 @@
         document.getElementById('estilo').value = produto.estilo || '';
         document.getElementById('cor_armacao').value = produto.cor_armacao || '';
         document.getElementById('status').value = produto.status;
+        document.getElementById('disponibilidade').value = produto.disponibilidade || 'PRONTA_ENTREGA';
         if (produto.imagem_url) {
           document.getElementById('imagemAtual').textContent = `Imagem atual: ${produto.imagem_url}`;
           document.getElementById('imagemAtual').classList.remove('hidden');
@@ -551,9 +569,21 @@
       } else {
         modalTitulo.textContent = 'Novo Produto';
       }
+      atualizarAvisoSinal();
       modalProduto.classList.remove('hidden');
       document.body.style.overflow = 'hidden';
     }
+
+    // Mostra no formulário quanto fica o sinal (50%, arredondado para centavos)
+    function atualizarAvisoSinal() {
+      const aviso = document.getElementById('avisoSinal');
+      const encomenda = document.getElementById('disponibilidade').value === 'SOB_ENCOMENDA';
+      const preco = Number(document.getElementById('preco_venda').value) || 0;
+      aviso.textContent = `Sinal de ${formatarMoeda(Math.round(preco * 50) / 100)} + restante na entrega.`;
+      aviso.classList.toggle('hidden', !encomenda);
+    }
+    document.getElementById('disponibilidade').addEventListener('change', atualizarAvisoSinal);
+    document.getElementById('preco_venda').addEventListener('input', atualizarAvisoSinal);
 
     function fecharModal() {
       modalProduto.classList.add('hidden');
@@ -570,7 +600,7 @@
       e.preventDefault();
       const id = document.getElementById('produtoId').value;
       const formData = new FormData();
-      ['nome', 'codigo_sku', 'preco_custo', 'preco_venda', 'formato', 'estilo', 'cor_armacao', 'status'].forEach(field => {
+      ['nome', 'codigo_sku', 'preco_custo', 'preco_venda', 'formato', 'estilo', 'cor_armacao', 'status', 'disponibilidade'].forEach(field => {
         const val = document.getElementById(field).value;
         if (val) formData.append(field, val);
       });

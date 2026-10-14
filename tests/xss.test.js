@@ -24,7 +24,7 @@ function extrairFuncao(html, nome) {
 function carregar(arquivo, funcoes, globais) {
   const html = fs.readFileSync(path.join(__dirname, '..', ...arquivo.split('/')), 'utf8');
   const fonte = funcoes.map(f => extrairFuncao(html, f)).join('\n');
-  const ctx = vm.createContext({ ...globais, Intl, Number, String });
+  const ctx = vm.createContext({ ...globais, Intl, Number, String, Math });
   vm.runInContext(`${fonte}\n${funcoes.map(f => `this.${f} = ${f};`).join('\n')}`, ctx);
   return ctx;
 }
@@ -71,10 +71,10 @@ function semInjecao(html) {
 }
 
 describe('vitrine (index.html) escapa dados de produto', () => {
-  it('no catálogo', () => {
+  for (const disponibilidade of ['PRONTA_ENTREGA', 'SOB_ENCOMENDA']) it(`no catálogo (${disponibilidade})`, () => {
     const catalogoGrid = elemento();
-    const ctx = carregar('index.html', ['escapeHtml', 'renderizarCatalogo'], {
-      produtos: [produtoMalicioso()],
+    const ctx = carregar('index.html', ['escapeHtml', 'ehSobEncomenda', 'calcularSinal', 'passaFiltroStatus', 'etiquetaProduto', 'renderizarCatalogo'], {
+      produtos: [produtoMalicioso({ disponibilidade })],
       maleta: { itens: [] },
       filtroStatus: elemento(),
       filtroFormato: elemento(),
@@ -112,6 +112,7 @@ describe('painel (admin/index.html) escapa dados de produto', () => {
     const ctx = carregar('admin/index.html', ['escapeHtml', 'renderizarTabela'], {
       todosProdutos: [produtoMalicioso({ status: PAYLOAD })],
       filtroStatusAdmin: elemento(),
+      filtroDisponibilidadeAdmin: elemento(),
       filtroFormatoAdmin: elemento(),
       buscaAdmin: elemento(),
       tabelaProdutos,

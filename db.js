@@ -46,6 +46,13 @@ async function initTables() {
       )
     `);
 
+    // Disponibilidade: PRONTA_ENTREGA (estoque) ou SOB_ENCOMENDA (50% de sinal).
+    // Produtos já cadastrados ficam como pronta entrega.
+    await client.query(`
+      ALTER TABLE produtos
+      ADD COLUMN IF NOT EXISTS disponibilidade VARCHAR(20) NOT NULL DEFAULT 'PRONTA_ENTREGA'
+    `);
+
     // Fotos dos produtos ficam no próprio Postgres: o disco do Render Free é
     // apagado a cada deploy/restart, então /uploads não serve para guardar nada.
     await client.query(`
