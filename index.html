@@ -216,6 +216,7 @@
         <div class="flex items-baseline justify-between sm:block">
           <p class="text-sm text-gray-500">Total</p>
           <p id="maletaTotal" class="text-xl sm:text-2xl font-bold text-gray-900">R$ 0,00</p>
+          <p id="maletaSinal" class="hidden text-xs font-medium text-blue-700"></p>
         </div>
         <button id="finalizarPedido" class="w-full sm:w-auto bg-orange-500 hover:bg-orange-600 text-white px-6 sm:px-8 py-3 rounded-full text-sm sm:text-base font-semibold transition-colors">Finalizar Pedido no WhatsApp</button>
       </div>
@@ -283,6 +284,7 @@
     const maletaFormulario = document.getElementById('maletaFormulario');
     const maletaFooter = document.getElementById('maletaFooter');
     const maletaTotal = document.getElementById('maletaTotal');
+    const maletaSinal = document.getElementById('maletaSinal');
     const finalizarPedido = document.getElementById('finalizarPedido');
     const whatsappLink = document.getElementById('whatsappLink');
     const toastContainer = document.getElementById('toastContainer');
@@ -384,20 +386,18 @@
       return { texto: p.status, classe: 'bg-gray-100 text-gray-700' };
     }
 
-    function montarTextoEncomenda(p) {
-      return `Olá! Gostaria de encomendar o modelo ${p.nome} (Ref: ${p.codigo_sku}). ` +
-        `O valor é ${formatarMoeda(p.preco_venda)} (com sinal de 50% de ${formatarMoeda(calcularSinal(p.preco_venda))}). Como procedemos?`;
+    // Itens da maleta marcados como encomenda (guardados assim ao adicionar)
+    function itemEhEncomenda(item) {
+      return item.encomenda === true;
     }
 
-    // Encomenda não entra na maleta: vai direto para o WhatsApp com a mensagem da encomenda
-    function encomendarProduto(produtoId) {
-      const produto = produtos.find(p => p.id === produtoId);
-      if (!produto) return;
-      if (!whatsappNumero) {
-        mostrarToast('WhatsApp não configurado. Contate o administrador.', 'error');
-        return;
-      }
-      window.open(`https://wa.me/${sanitizeWhatsapp(whatsappNumero)}?text=${encodeURIComponent(montarTextoEncomenda(produto))}`, '_blank');
+    // Separa a maleta em itens para prova (pronta entrega) e encomendas, com totais e sinal
+    function resumoMaleta(itens) {
+      const soma = lista => Math.round(lista.reduce((t, item) => t + Number(item.preco) * 100, 0)) / 100;
+      const prova = itens.filter(item => !itemEhEncomenda(item));
+      const encomendas = itens.filter(itemEhEncomenda);
+      const sinal = Math.round(encomendas.reduce((t, item) => t + calcularSinal(item.preco) * 100, 0)) / 100;
+      return { prova, encomendas, totalProva: soma(prova), totalEncomendas: soma(encomendas), sinal, total: soma(itens) };
     }
 
     // Renderizar catálogo
@@ -460,11 +460,9 @@
               ${produto.cor_armacao ? `<span>•</span><span>${escapeHtml(produto.cor_armacao)}</span>` : ''}
             </div>
             ${encomenda ? `<p class="text-[10px] sm:text-xs text-blue-700 bg-blue-50 rounded px-1.5 sm:px-2 py-1 mb-2 sm:mb-3 leading-tight">50% sinal + 50% na entrega<span class="hidden sm:inline"> (sinal de ${formatarMoeda(calcularSinal(produto.preco_venda))})</span></p>` : ''}
-            ${encomenda ? `<button onclick="encomendarProduto(${Number(produto.id)})" class="w-full bg-blue-600 hover:bg-blue-700 text-white py-1.5 sm:py-2 rounded-lg text-xs sm:text-sm font-medium transition-colors">
-              <span class="sm:hidden">Encomendar</span><span class="hidden sm:inline">Encomendar no WhatsApp</span>
-            </button>` : `<button onclick="toggleMaleta(${Number(produto.id)})" class="w-full ${jaNaMaleta ? 'bg-gray-100 text-gray-600' : 'bg-orange-500 hover:bg-orange-600 text-white'} py-1.5 sm:py-2 rounded-lg text-xs sm:text-sm font-medium transition-colors">
-              <span class="sm:hidden">${jaNaMaleta ? 'Remover' : '+ Maleta'}</span><span class="hidden sm:inline">${jaNaMaleta ? 'Remover da Maleta' : 'Adicionar à Maleta'}</span>
-            </button>`}
+            <button onclick="toggleMaleta(${Number(produto.id)})" class="w-full ${jaNaMaleta ? 'bg-gray-100 text-gray-600' : encomenda ? 'bg-blue-600 hover:bg-blue-700 text-white' : 'bg-orange-500 hover:bg-orange-600 text-white'} py-1.5 sm:py-2 rounded-lg text-xs sm:text-sm font-medium transition-colors">
+              <span class="sm:hidden">${jaNaMaleta ? 'Remover' : encomenda ? '+ Encomenda' : '+ Maleta'}</span><span class="hidden sm:inline">${jaNaMaleta ? 'Remover da Maleta' : encomenda ? 'Encomendar (na Maleta)' : 'Adicionar à Maleta'}</span>
+            </button>
           </div>
         `;
         catalogoGrid.appendChild(card);
@@ -555,9 +553,7 @@
             </dl>
             ${encomenda ? `<p class="text-sm text-blue-700 bg-blue-50 rounded-lg px-3 py-2 mb-4">50% sinal + 50% na entrega (sinal de ${formatarMoeda(calcularSinal(produto.preco_venda))})</p>` : ''}
             <div class="mt-auto">
-              ${encomenda
-                ? `<button onclick="encomendarProduto(${id})" class="w-full bg-blue-600 hover:bg-blue-700 text-white py-3 rounded-lg font-medium transition-colors">Encomendar no WhatsApp</button>`
-                : `<button onclick="toggleMaleta(${id}); renderizarDetalhes()" class="w-full ${jaNaMaleta ? 'bg-gray-100 text-gray-600' : 'bg-orange-500 hover:bg-orange-600 text-white'} py-3 rounded-lg font-medium transition-colors">${jaNaMaleta ? 'Remover da Maleta' : 'Adicionar à Maleta'}</button>`}
+              <button onclick="toggleMaleta(${id}); renderizarDetalhes()" class="w-full ${jaNaMaleta ? 'bg-gray-100 text-gray-600' : encomenda ? 'bg-blue-600 hover:bg-blue-700 text-white' : 'bg-orange-500 hover:bg-orange-600 text-white'} py-3 rounded-lg font-medium transition-colors">${jaNaMaleta ? 'Remover da Maleta' : encomenda ? 'Encomendar (adicionar à Maleta)' : 'Adicionar à Maleta'}</button>
             </div>
           </div>
         </div>
@@ -590,13 +586,13 @@
       if (!produto) return;
 
       const index = maleta.itens.findIndex(i => i.id === produtoId);
-      if (index < 0 && ehSobEncomenda(produto)) return encomendarProduto(produtoId);
       if (index >= 0) {
         maleta.itens.splice(index, 1);
         mostrarToast(`${produto.nome} removido da maleta`);
       } else {
-        maleta.itens.push({ id: produto.id, nome: produto.nome, preco: produto.preco_venda, imagem: produto.imagem_url });
-        mostrarToast(`${produto.nome} adicionado à maleta`);
+        const encomenda = ehSobEncomenda(produto);
+        maleta.itens.push({ id: produto.id, nome: produto.nome, preco: Number(produto.preco_venda), imagem: produto.imagem_url, encomenda });
+        mostrarToast(`${produto.nome} adicionado à maleta${encomenda ? ' (sob encomenda)' : ''}`);
       }
       salvarMaleta();
       renderizarCatalogo();
@@ -631,11 +627,13 @@
         maletaFooter.classList.remove('hidden');
 
         maletaItens.innerHTML = maleta.itens.map((item, idx) => `
-          <div class="flex items-center space-3 p-3 bg-gray-50 rounded-lg">
+          <div class="flex items-center space-3 p-3 rounded-lg ${itemEhEncomenda(item) ? 'bg-blue-50 border border-blue-200' : 'bg-gray-50'}">
             ${item.imagem ? `<img src="${escapeHtml(item.imagem)}" alt="${escapeHtml(item.nome)}" class="w-16 h-16 object-cover rounded" onerror="imgFallback(this)">` : '<div class="w-16 h-16 bg-gray-200 rounded flex items-center justify-center"><svg class="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg></div>'}
             <div class="flex-1 min-w-0">
+              ${itemEhEncomenda(item) ? '<span class="inline-block mb-1 px-2 py-0.5 text-[10px] font-semibold rounded-full bg-blue-600 text-white">SOB ENCOMENDA</span>' : ''}
               <p class="font-medium text-gray-900 truncate">${escapeHtml(item.nome)}</p>
               <p class="text-sm text-gray-500">${formatarMoeda(item.preco)}</p>
+              ${itemEhEncomenda(item) ? `<p class="text-xs font-medium text-blue-700">50% de sinal: ${formatarMoeda(calcularSinal(item.preco))}</p>` : ''}
             </div>
             <button onclick="toggleMaleta(${Number(item.id)})" class="text-red-500 hover:text-red-700 p-1">
               <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
@@ -643,8 +641,10 @@
           </div>
         `).join('');
 
-        const total = maleta.itens.reduce((sum, item) => sum + item.preco, 0);
-        maletaTotal.textContent = formatarMoeda(total);
+        const resumo = resumoMaleta(maleta.itens);
+        maletaTotal.textContent = formatarMoeda(resumo.total);
+        maletaSinal.textContent = resumo.encomendas.length ? `Sinal das encomendas (50%): ${formatarMoeda(resumo.sinal)}` : '';
+        maletaSinal.classList[resumo.encomendas.length ? 'remove' : 'add']('hidden');
       }
     }
 
@@ -805,14 +805,23 @@
       if (dados.email) msg += `*E-mail:* ${dados.email}\n`;
       msg += `*Endereço:* ${dados.rua}, ${dados.numero} - ${dados.bairro}, ${dados.cidade}\n`;
       if (dados.complemento) msg += `*Complemento:* ${dados.complemento}\n`;
-      msg += `\n*Itens da Maleta:*\n`;
-      
-      maleta.itens.forEach((item, i) => {
-        msg += `${i + 1}. ${item.nome} - ${formatarMoeda(item.preco)}\n`;
-      });
-      
-      const total = maleta.itens.reduce((sum, item) => sum + item.preco, 0);
-      msg += `\n*Total:* ${formatarMoeda(total)}\n\n`;
+      const resumo = resumoMaleta(maleta.itens);
+      if (resumo.prova.length) {
+        msg += `\n*Para provar (pronta entrega):*\n`;
+        resumo.prova.forEach((item, i) => {
+          msg += `${i + 1}. ${item.nome} - ${formatarMoeda(item.preco)}\n`;
+        });
+        msg += `*Subtotal para prova:* ${formatarMoeda(resumo.totalProva)}\n`;
+      }
+      if (resumo.encomendas.length) {
+        msg += `\n*Sob encomenda (sinal de 50%):*\n`;
+        resumo.encomendas.forEach((item, i) => {
+          msg += `${i + 1}. ${item.nome} - ${formatarMoeda(item.preco)} | Sinal 50%: ${formatarMoeda(calcularSinal(item.preco))}\n`;
+        });
+        msg += `*Total das encomendas:* ${formatarMoeda(resumo.totalEncomendas)}\n`;
+        msg += `*Sinal a pagar (50%):* ${formatarMoeda(resumo.sinal)}\n`;
+      }
+      msg += `\n*Total geral:* ${formatarMoeda(resumo.total)}\n\n`;
       msg += `Aguardamos sua confirmação!`;
       return msg;
     }
