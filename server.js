@@ -12,8 +12,15 @@ const PORT = process.env.PORT || 3000;
 app.use(cors());
 app.use(express.json());
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
-// Serve front-end estático (site público + admin) — necessário no Render
-app.use(express.static(__dirname));
+// Serve front-end estático (site público + admin) — necessário no Render.
+// Só arquivos da lista abaixo saem da raiz: server.js, db.js, .env, package*.json,
+// node_modules/ e scripts/ NUNCA podem ser servidos.
+const PUBLIC_ROOT_FILES = new Set(['index.html', 'logo.png', 'favicon.ico', 'robots.txt']);
+app.get('/', (req, res) => res.sendFile(path.join(__dirname, 'index.html')));
+app.get('/:file', (req, res, next) => {
+  if (!PUBLIC_ROOT_FILES.has(req.params.file)) return next();
+  res.sendFile(path.join(__dirname, req.params.file), (err) => err && next());
+});
 app.use('/admin', express.static(path.join(__dirname, 'admin')));
 
 // Só imagens comuns; SVG/HTML ficam de fora porque seriam servidos pelo mesmo domínio em /uploads.
@@ -140,8 +147,10 @@ function verifyToken(token) {
 }
 
 function requireAdmin(req, res, next) {
-  // Se ADMIN_USER/ADMIN_PASS_HASH não configurados, mantém aberto (dev) com aviso.
-  if (!isAdminAuthEnabled()) return next();
+  // Sem ADMIN_USER/ADMIN_PASS_HASH configurados, o admin fica FECHADO (nunca aberto por padrão).
+  if (!isAdminAuthEnabled()) {
+    return res.status(503).json({ error: 'Admin não configurado (defina ADMIN_USER e ADMIN_PASS_HASH)' });
+  }
   const h = req.headers.authorization || '';
   const token = h.startsWith('Bearer ') ? h.slice(7) : null;
   if (!token) return res.status(401).json({ error: 'Não autorizado' });
@@ -176,6 +185,9 @@ async function handleLogin(req, res) {
 }
 
 async function startServer() {
+  if (!isAdminAuthEnabled()) {
+    console.warn('[auth] ADMIN_USER/ADMIN_PASS_HASH não definidos: rotas admin ficarão bloqueadas (503).');
+  }
   await initTables();
 
   // ---------- Handlers reutilizáveis ----------
@@ -499,7 +511,7 @@ async function startServer() {
   app.post('/api/maleta/checkout', handleMaletaCheckout);
   app.post('/api/case/checkout', handleMaletaCheckout);
 
-  // ---------- Rotas admin (exigem token quando ADMIN_USER/ADMIN_PASS_HASH configurados) ----------
+  // ---------- Rotas admin (sempre exigem token; sem ADMIN_USER/ADMIN_PASS_HASH respondem 503) ----------
   app.get('/api/admin/produtos', requireAdmin, handleListAdmin);
   app.post('/api/produtos', requireAdmin, uploadImagem, handleCreateProduto);
   app.put('/api/produtos/:id', requireAdmin, uploadImagem, handleUpdateProduto);
