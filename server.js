@@ -11,7 +11,6 @@ const PORT = process.env.PORT || 3000;
 
 app.use(cors());
 app.use(express.json());
-app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 // Serve front-end estático (site público + admin) — necessário no Render.
 // Só arquivos da lista abaixo saem da raiz: server.js, db.js, .env, package*.json,
 // node_modules/ e scripts/ NUNCA podem ser servidos.
@@ -23,40 +22,56 @@ app.get('/:file', (req, res, next) => {
 });
 app.use('/admin', express.static(path.join(__dirname, 'admin')));
 
-// Só imagens comuns; SVG/HTML ficam de fora porque seriam servidos pelo mesmo domínio em /uploads.
-// A extensão vem do tipo validado, nunca do nome enviado pelo cliente.
-const TIPOS_IMAGEM = {
-  'image/jpeg': '.jpg',
-  'image/png': '.png',
-  'image/webp': '.webp',
-};
+// Só imagens comuns; SVG/HTML ficam de fora porque seriam servidos pelo mesmo domínio em /imagens.
+// O tipo gravado vem da assinatura do arquivo (bytes iniciais), não do que o cliente declarou.
+const TIPOS_IMAGEM = new Set(['image/jpeg', 'image/png', 'image/webp']);
 const TAMANHO_MAX_IMAGEM = 8 * 1024 * 1024; // 8 MB (fotos da câmera do celular cabem)
 
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    cb(null, path.join(__dirname, 'uploads'));
-  },
-  filename: (req, file, cb) => {
-    const uniqueSuffix = Date.now() + '-' + crypto.randomBytes(8).toString('hex');
-    cb(null, uniqueSuffix + TIPOS_IMAGEM[file.mimetype]);
-  },
-});
+function detectarTipoImagem(buf) {
+  if (!buf || buf.length < 12) return null;
+  if (buf[0] === 0xff && buf[1] === 0xd8 && buf[2] === 0xff) return 'image/jpeg';
+  if (buf.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))) return 'image/png';
+  if (buf.toString('ascii', 0, 4) === 'RIFF' && buf.toString('ascii', 8, 12) === 'WEBP') return 'image/webp';
+  return null;
+}
 
 const upload = multer({
-  storage,
+  storage: multer.memoryStorage(),
   limits: { fileSize: TAMANHO_MAX_IMAGEM, files: 1 },
   fileFilter: (req, file, cb) => {
-    if (TIPOS_IMAGEM[file.mimetype]) return cb(null, true);
+    if (TIPOS_IMAGEM.has(file.mimetype)) return cb(null, true);
     const err = new Error('Formato de imagem não suportado. Use JPG, PNG ou WEBP.');
     err.status = 400;
     cb(err);
   },
 });
 
+// Grava a imagem enviada na tabela `imagens` e devolve a URL pública (/imagens/<id>).
+async function salvarImagem(db, file) {
+  const id = crypto.randomBytes(16).toString('hex');
+  await db.query(
+    `INSERT INTO imagens (id, mime_type, dados) VALUES ($1, $2, $3)`,
+    [id, file.tipoDetectado, file.buffer]
+  );
+  return `/imagens/${id}`;
+}
+
+function idDaImagem(url) {
+  const m = /^\/imagens\/([0-9a-f]{32})$/.exec(String(url || ''));
+  return m ? m[1] : null;
+}
+
 // Converte erros do upload em 400 com JSON (o admin mostra err.error no toast)
 function uploadImagem(req, res, next) {
   upload.single('imagem')(req, res, (err) => {
-    if (!err) return next();
+    if (!err) {
+      if (!req.file) return next();
+      req.file.tipoDetectado = detectarTipoImagem(req.file.buffer);
+      if (!req.file.tipoDetectado) {
+        return res.status(400).json({ error: 'Arquivo não é uma imagem JPG, PNG ou WEBP válida.' });
+      }
+      return next();
+    }
     if (err instanceof multer.MulterError) {
       const msg = err.code === 'LIMIT_FILE_SIZE'
         ? `Imagem muito grande (máximo ${TAMANHO_MAX_IMAGEM / 1024 / 1024} MB)`
@@ -249,22 +264,29 @@ async function startServer() {
   async function handleCreateProduto(req, res) {
     const { nome, codigo_sku, sku, preco_custo, preco_venda, formato, estilo, cor_armacao } = req.body;
     const codigoFinal = codigo_sku || sku;
-    const imagem_url = req.file ? `/uploads/${req.file.filename}` : null;
 
+    let client;
     try {
-      const result = await pool.query(
+      client = await pool.connect();
+      await client.query('BEGIN');
+      const imagem_url = req.file ? await salvarImagem(client, req.file) : null;
+      const result = await client.query(
         `INSERT INTO produtos (nome, codigo_sku, preco_custo, preco_venda, imagem_url, formato, estilo, cor_armacao)
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
          RETURNING *`,
         [nome, codigoFinal, preco_custo, preco_venda, imagem_url, formato, estilo, cor_armacao]
       );
+      await client.query('COMMIT');
       res.status(201).json(result.rows[0]);
     } catch (err) {
+      if (client) await client.query('ROLLBACK').catch(() => {});
       console.error(err);
       if (err.code === '23505') {
         return res.status(400).json({ error: 'SKU já cadastrado' });
       }
       res.status(500).json({ error: 'Erro ao cadastrar produto' });
+    } finally {
+      if (client) client.release();
     }
   }
 
@@ -272,9 +294,13 @@ async function startServer() {
     const { id } = req.params;
     const { nome, codigo_sku, sku, preco_custo, preco_venda, status, formato, estilo, cor_armacao } = req.body;
     const codigoFinal = codigo_sku !== undefined ? codigo_sku : sku;
-    const imagem_url = req.file ? `/uploads/${req.file.filename}` : undefined;
 
+    let client;
     try {
+      client = await pool.connect();
+      await client.query('BEGIN');
+      const imagem_url = req.file ? await salvarImagem(client, req.file) : undefined;
+
       const fields = [];
       const values = [];
       let paramCount = 1;
@@ -300,26 +326,37 @@ async function startServer() {
       }
 
       if (fields.length === 0) {
+        await client.query('ROLLBACK');
         return res.status(400).json({ error: 'Nenhum campo para atualizar' });
+      }
+
+      // Guarda a foto antiga para apagá-la quando for trocada (FOR UPDATE trava a linha até o COMMIT)
+      const anterior = await client.query(`SELECT imagem_url FROM produtos WHERE id = $1 FOR UPDATE`, [id]);
+      if (anterior.rows.length === 0) {
+        await client.query('ROLLBACK');
+        return res.status(404).json({ error: 'Produto não encontrado' });
       }
 
       fields.push(`updated_at = CURRENT_TIMESTAMP`);
       values.push(id);
 
       const query = `UPDATE produtos SET ${fields.join(', ')} WHERE id = $${paramCount} RETURNING *`;
-      const result = await pool.query(query, values);
+      const result = await client.query(query, values);
 
-      if (result.rows.length === 0) {
-        return res.status(404).json({ error: 'Produto não encontrado' });
-      }
+      const idAntigo = imagem_url !== undefined ? idDaImagem(anterior.rows[0].imagem_url) : null;
+      if (idAntigo) await client.query(`DELETE FROM imagens WHERE id = $1`, [idAntigo]);
 
+      await client.query('COMMIT');
       res.json(result.rows[0]);
     } catch (err) {
+      if (client) await client.query('ROLLBACK').catch(() => {});
       console.error(err);
       if (err.code === '23505') {
         return res.status(400).json({ error: 'SKU já cadastrado' });
       }
       res.status(500).json({ error: 'Erro ao atualizar produto' });
+    } finally {
+      if (client) client.release();
     }
   }
 
@@ -497,6 +534,25 @@ async function startServer() {
     }
   }
 
+  async function handleGetImagem(req, res) {
+    if (!/^[0-9a-f]{32}$/.test(req.params.id)) return res.status(404).end();
+    try {
+      const result = await pool.query(`SELECT mime_type, dados FROM imagens WHERE id = $1`, [req.params.id]);
+      if (result.rows.length === 0) return res.status(404).end();
+      const { mime_type, dados } = result.rows[0];
+      // O id muda sempre que a foto é trocada, então o conteúdo de uma URL nunca muda: cache longo.
+      res.set({
+        'Content-Type': mime_type,
+        'Cache-Control': 'public, max-age=31536000, immutable',
+        'X-Content-Type-Options': 'nosniff',
+      });
+      res.send(dados);
+    } catch (err) {
+      console.error(err);
+      res.status(500).end();
+    }
+  }
+
   // ---------- Login admin (público; demais /api/admin exigem Bearer) ----------
   app.post('/api/admin/login', handleLogin);
   app.get('/api/admin/status', (req, res) => {
@@ -506,6 +562,7 @@ async function startServer() {
   // ---------- Rotas públicas (vitrine) ----------
   // GET produtos e GET whatsapp precisam ficar abertos para o site público.
   app.get('/api/produtos', handleListPublicos);
+  app.get('/imagens/:id', handleGetImagem);
   app.get('/api/config/whatsapp', handleGetWhatsapp);
   app.get('/api/admin/whatsapp', handleGetWhatsapp);
   app.post('/api/maleta/checkout', handleMaletaCheckout);

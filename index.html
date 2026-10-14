@@ -241,7 +241,7 @@
     const toastContainer = document.getElementById('toastContainer');
     const cepInput = document.getElementById('cepCliente');
 
-    // Fallback de imagem (caso o upload falhe / arquivo ausente em /uploads)
+    // Fallback de imagem (caso o upload falhe / imagem ausente)
     function imgFallback(el) {
       el.onerror = null;
       el.src = "data:image/svg+xml;charset=UTF-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='600' height='600'%3E%3Crect width='100%25' height='100%25' fill='%23f3f4f6'/%3E%3Ctext x='50%25' y='50%25' font-family='sans-serif' font-size='28' fill='%239ca3af' text-anchor='middle' dy='.3em'%3ENix Glasses%3C/text%3E%3C/svg%3E";

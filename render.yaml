@@ -1,6 +1,5 @@
-# Plano FREE: sem `disk` (disco persistente exige plano pago).
-# Uploads em /uploads serão efêmeros (apagados a cada restart/redeploy).
-# Para persistir imagens no Free, use S3/Cloudinary no futuro.
+# Plano FREE: sem `disk` (disco persistente exige plano pago), o disco é apagado a cada deploy.
+# Por isso as fotos dos produtos ficam no Postgres (tabela `imagens`), servidas em /imagens/<id>.
 services:
   - type: web
     name: nix-glasses

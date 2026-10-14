@@ -3,7 +3,6 @@
 // precisar mudar o server.js para ser importável.
 const { spawn } = require('node:child_process');
 const crypto = require('node:crypto');
-const fs = require('node:fs');
 const net = require('node:net');
 const path = require('node:path');
 const { Pool } = require('pg');
@@ -86,12 +85,7 @@ async function iniciarServidor({ comAdmin = true } = {}) {
 const pool = new Pool({ connectionString: DATABASE_URL });
 
 async function limparBanco() {
-  // Apaga as imagens que os testes subiram para não sujar a pasta uploads/
-  const { rows } = await pool.query(`SELECT imagem_url FROM produtos WHERE imagem_url LIKE '/uploads/%'`);
-  for (const { imagem_url } of rows) {
-    fs.rmSync(path.join(ROOT, 'uploads', path.basename(imagem_url)), { force: true });
-  }
-  await pool.query('TRUNCATE produtos RESTART IDENTITY');
+  await pool.query('TRUNCATE produtos, imagens RESTART IDENTITY');
   await pool.query(`UPDATE configuracoes SET valor = '' WHERE chave = 'whatsapp_number'`);
 }
 

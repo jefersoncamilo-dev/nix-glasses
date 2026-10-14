@@ -213,6 +213,47 @@ describe('upload de imagens', () => {
     assert.equal(rows[0].n, 0);
   });
 
+  it('recusa arquivo que diz ser PNG mas não é imagem', async () => {
+    const res = await enviar(Buffer.from('<html><script>alert(1)</script></html>'), 'foto.png', 'image/png');
+    assert.equal(res.status, 400);
+    const { rows } = await h.pool.query('SELECT (SELECT COUNT(*) FROM produtos)::int AS p, (SELECT COUNT(*) FROM imagens)::int AS i');
+    assert.deepEqual(rows[0], { p: 0, i: 0 });
+  });
+
+  it('a foto fica no banco e sobrevive a um restart do servidor', async () => {
+    const res = await enviar(h.PNG_1x1, 'foto.png', 'image/png');
+    const { imagem_url } = await res.json();
+    assert.match(imagem_url, /^\/imagens\/[0-9a-f]{32}$/);
+    await srv.parar();
+    srv = await h.iniciarServidor();
+    token = await h.login(srv);
+    const img = await fetch(new URL(imagem_url, srv.base));
+    assert.equal(img.status, 200);
+    assert.deepEqual(Buffer.from(await img.arrayBuffer()), h.PNG_1x1);
+  });
+
+  it('trocar a foto apaga a antiga; editar sem foto mantém a atual', async () => {
+    const criado = await (await enviar(h.PNG_1x1, 'a.png', 'image/png')).json();
+    const editar = (form) => fetch(srv.url(`/api/produtos/${criado.id}`), {
+      method: 'PUT',
+      headers: { Authorization: `Bearer ${token}` },
+      body: form,
+    });
+
+    const comFoto = new FormData();
+    comFoto.append('imagem', new Blob([h.PNG_1x1], { type: 'image/png' }), 'b.png');
+    const { imagem_url: nova } = await (await editar(comFoto)).json();
+    assert.notEqual(nova, criado.imagem_url);
+    assert.equal((await fetch(new URL(criado.imagem_url, srv.base))).status, 404);
+
+    const semFoto = new FormData();
+    semFoto.append('nome', 'Outro nome');
+    const atualizado = await (await editar(semFoto)).json();
+    assert.equal(atualizado.imagem_url, nova);
+    const { rows } = await h.pool.query('SELECT COUNT(*)::int AS n FROM imagens');
+    assert.equal(rows[0].n, 1);
+  });
+
   it('recusa imagem acima de 8 MB', async () => {
     const res = await enviar(Buffer.alloc(8 * 1024 * 1024 + 1), 'grande.jpg', 'image/jpeg');
     assert.equal(res.status, 400);
