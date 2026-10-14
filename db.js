@@ -53,6 +53,18 @@ async function initTables() {
       ADD COLUMN IF NOT EXISTS disponibilidade VARCHAR(20) NOT NULL DEFAULT 'PRONTA_ENTREGA'
     `);
 
+    // Até 4 fotos por produto (URLs /imagens/<id>, na ordem de exibição).
+    // imagem_url continua sendo a 1ª foto, para quem só lê uma (métricas, acerto, maleta).
+    // Produtos antigos: a foto única vira a foto 1.
+    await client.query(`
+      ALTER TABLE produtos
+      ADD COLUMN IF NOT EXISTS fotos TEXT[] NOT NULL DEFAULT '{}'
+    `);
+    await client.query(`
+      UPDATE produtos SET fotos = ARRAY[imagem_url]
+      WHERE cardinality(fotos) = 0 AND imagem_url IS NOT NULL AND imagem_url <> ''
+    `);
+
     // Fotos dos produtos ficam no próprio Postgres: o disco do Render Free é
     // apagado a cada deploy/restart, então /uploads não serve para guardar nada.
     await client.query(`
