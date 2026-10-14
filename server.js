@@ -23,17 +23,50 @@ app.get('/:file', (req, res, next) => {
 });
 app.use('/admin', express.static(path.join(__dirname, 'admin')));
 
+// Só imagens comuns; SVG/HTML ficam de fora porque seriam servidos pelo mesmo domínio em /uploads.
+// A extensão vem do tipo validado, nunca do nome enviado pelo cliente.
+const TIPOS_IMAGEM = {
+  'image/jpeg': '.jpg',
+  'image/png': '.png',
+  'image/webp': '.webp',
+};
+const TAMANHO_MAX_IMAGEM = 8 * 1024 * 1024; // 8 MB (fotos da câmera do celular cabem)
+
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
     cb(null, path.join(__dirname, 'uploads'));
   },
   filename: (req, file, cb) => {
-    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
-    cb(null, uniqueSuffix + path.extname(file.originalname));
+    const uniqueSuffix = Date.now() + '-' + crypto.randomBytes(8).toString('hex');
+    cb(null, uniqueSuffix + TIPOS_IMAGEM[file.mimetype]);
   },
 });
 
-const upload = multer({ storage });
+const upload = multer({
+  storage,
+  limits: { fileSize: TAMANHO_MAX_IMAGEM, files: 1 },
+  fileFilter: (req, file, cb) => {
+    if (TIPOS_IMAGEM[file.mimetype]) return cb(null, true);
+    const err = new Error('Formato de imagem não suportado. Use JPG, PNG ou WEBP.');
+    err.status = 400;
+    cb(err);
+  },
+});
+
+// Converte erros do upload em 400 com JSON (o admin mostra err.error no toast)
+function uploadImagem(req, res, next) {
+  upload.single('imagem')(req, res, (err) => {
+    if (!err) return next();
+    if (err instanceof multer.MulterError) {
+      const msg = err.code === 'LIMIT_FILE_SIZE'
+        ? `Imagem muito grande (máximo ${TAMANHO_MAX_IMAGEM / 1024 / 1024} MB)`
+        : 'Upload inválido';
+      return res.status(400).json({ error: msg });
+    }
+    if (err.status === 400) return res.status(400).json({ error: err.message });
+    next(err);
+  });
+}
 
 // Sanitiza número de WhatsApp: remove tudo que não for dígito
 function sanitizeWhatsapp(num) {
@@ -298,10 +331,12 @@ async function startServer() {
       return res.status(400).json({ error: 'Array de IDs de produtos é obrigatório' });
     }
 
+    let client;
     try {
-      await pool.query('BEGIN');
+      client = await pool.connect();
+      await client.query('BEGIN');
 
-      const result = await pool.query(
+      const result = await client.query(
         `UPDATE produtos
          SET vezes_em_maleta = vezes_em_maleta + 1
          WHERE id = ANY($1)
@@ -309,12 +344,14 @@ async function startServer() {
         [list]
       );
 
-      await pool.query('COMMIT');
+      await client.query('COMMIT');
       res.json({ atualizados: result.rows });
     } catch (err) {
-      await pool.query('ROLLBACK');
+      if (client) await client.query('ROLLBACK').catch(() => {});
       console.error(err);
       res.status(500).json({ error: 'Erro ao processar checkout da maleta' });
+    } finally {
+      if (client) client.release();
     }
   }
 
@@ -348,29 +385,33 @@ async function startServer() {
       return res.status(400).json({ error: 'Arrays "comprados" e/ou "devolvidos" são obrigatórios' });
     }
 
+    let client;
     try {
-      await pool.query('BEGIN');
+      client = await pool.connect();
+      await client.query('BEGIN');
 
       if (Array.isArray(comprados) && comprados.length > 0) {
-        await pool.query(
+        await client.query(
           `UPDATE produtos SET status = 'ESGOTADO', updated_at = CURRENT_TIMESTAMP WHERE id = ANY($1)`,
           [comprados]
         );
       }
 
       if (Array.isArray(devolvidos) && devolvidos.length > 0) {
-        await pool.query(
+        await client.query(
           `UPDATE produtos SET status = 'DISPONIVEL', updated_at = CURRENT_TIMESTAMP WHERE id = ANY($1)`,
           [devolvidos]
         );
       }
 
-      await pool.query('COMMIT');
+      await client.query('COMMIT');
       res.json({ sucesso: true, success: true });
     } catch (err) {
-      await pool.query('ROLLBACK');
+      if (client) await client.query('ROLLBACK').catch(() => {});
       console.error(err);
       res.status(500).json({ error: 'Erro ao processar acerto' });
+    } finally {
+      if (client) client.release();
     }
   }
 
@@ -472,8 +513,8 @@ async function startServer() {
 
   // ---------- Rotas admin (sempre exigem token; sem ADMIN_USER/ADMIN_PASS_HASH respondem 503) ----------
   app.get('/api/admin/produtos', requireAdmin, handleListAdmin);
-  app.post('/api/produtos', requireAdmin, upload.single('imagem'), handleCreateProduto);
-  app.put('/api/produtos/:id', requireAdmin, upload.single('imagem'), handleUpdateProduto);
+  app.post('/api/produtos', requireAdmin, uploadImagem, handleCreateProduto);
+  app.put('/api/produtos/:id', requireAdmin, uploadImagem, handleUpdateProduto);
   app.post('/api/admin/acerto', requireAdmin, handleAcerto);
   app.post('/api/config/whatsapp', requireAdmin, handlePostWhatsapp);
   app.post('/api/admin/whatsapp', requireAdmin, handlePostWhatsapp);
@@ -482,10 +523,10 @@ async function startServer() {
   // ---------- Aliases EN (compatibilidade front-end em inglês) ----------
   app.get('/api/products', handleListPublicos);
   app.get('/api/admin/products', requireAdmin, handleListAdmin);
-  app.post('/api/products', requireAdmin, upload.single('imagem'), handleCreateProduto);
-  app.post('/api/admin/products', requireAdmin, upload.single('imagem'), handleCreateProduto);
-  app.put('/api/products/:id', requireAdmin, upload.single('imagem'), handleUpdateProduto);
-  app.put('/api/admin/products/:id', requireAdmin, upload.single('imagem'), handleUpdateProduto);
+  app.post('/api/products', requireAdmin, uploadImagem, handleCreateProduto);
+  app.post('/api/admin/products', requireAdmin, uploadImagem, handleCreateProduto);
+  app.put('/api/products/:id', requireAdmin, uploadImagem, handleUpdateProduto);
+  app.put('/api/admin/products/:id', requireAdmin, uploadImagem, handleUpdateProduto);
 
   // admin/acerto.html usa /api/admin/products/conditional
   app.get('/api/admin/products/conditional', requireAdmin, handleListConditional);
