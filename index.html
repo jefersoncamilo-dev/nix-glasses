@@ -90,6 +90,7 @@
           <select id="filtroStatus" class="w-full sm:w-auto px-3 sm:px-4 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500">
             <option value="">Todos</option>
             <option value="DISPONIVEL">Disponíveis</option>
+            <option value="SOB_ENCOMENDA">Sob Encomenda</option>
             <option value="CONDICIONAL">Em Condicional</option>
           </select>
           <select id="filtroFormato" class="w-full sm:w-auto px-3 sm:px-4 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500">
@@ -296,13 +297,53 @@
       return String(v ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
     }
 
+    function ehSobEncomenda(p) {
+      return p.disponibilidade === 'SOB_ENCOMENDA';
+    }
+
+    // Sinal da encomenda: 50% do preço, arredondado para centavos
+    function calcularSinal(preco) {
+      return Math.round(Number(preco) * 50) / 100;
+    }
+
+    // "Disponíveis" mostra só pronta entrega; "Sob Encomenda" mostra só encomendas
+    function passaFiltroStatus(p, filtro) {
+      if (!filtro) return true;
+      if (filtro === 'SOB_ENCOMENDA') return ehSobEncomenda(p);
+      return !ehSobEncomenda(p) && p.status === filtro;
+    }
+
+    // Etiqueta do card: encomenda tem a sua; pronta entrega mostra o status
+    function etiquetaProduto(p) {
+      if (ehSobEncomenda(p)) return { texto: 'SOB ENCOMENDA', classe: 'bg-blue-100 text-blue-700' };
+      if (p.status === 'DISPONIVEL') return { texto: 'DISPONÍVEL', classe: 'bg-green-100 text-green-700' };
+      if (p.status === 'CONDICIONAL') return { texto: 'EM CONDICIONAL', classe: 'bg-yellow-100 text-yellow-700' };
+      return { texto: p.status, classe: 'bg-gray-100 text-gray-700' };
+    }
+
+    function montarTextoEncomenda(p) {
+      return `Olá! Gostaria de encomendar o modelo ${p.nome} (Ref: ${p.codigo_sku}). ` +
+        `O valor é ${formatarMoeda(p.preco_venda)} (com sinal de 50% de ${formatarMoeda(calcularSinal(p.preco_venda))}). Como procedemos?`;
+    }
+
+    // Encomenda não entra na maleta: vai direto para o WhatsApp com a mensagem da encomenda
+    function encomendarProduto(produtoId) {
+      const produto = produtos.find(p => p.id === produtoId);
+      if (!produto) return;
+      if (!whatsappNumero) {
+        mostrarToast('WhatsApp não configurado. Contate o administrador.', 'error');
+        return;
+      }
+      window.open(`https://wa.me/${sanitizeWhatsapp(whatsappNumero)}?text=${encodeURIComponent(montarTextoEncomenda(produto))}`, '_blank');
+    }
+
     // Renderizar catálogo
     function renderizarCatalogo() {
       const statusFiltro = filtroStatus.value;
       const formatoFiltro = filtroFormato.value;
 
       const filtrados = produtos.filter(p => {
-        if (statusFiltro && p.status !== statusFiltro) return false;
+        if (!passaFiltroStatus(p, statusFiltro)) return false;
         if (formatoFiltro && p.formato !== formatoFiltro) return false;
         return true;
       });
@@ -320,13 +361,15 @@
 
       filtrados.forEach(produto => {
         const jaNaMaleta = maleta.itens.some(i => i.id === produto.id);
+        const encomenda = ehSobEncomenda(produto);
+        const etiqueta = etiquetaProduto(produto);
         const card = document.createElement('div');
         card.className = 'glass-card bg-white rounded-xl sm:rounded-2xl overflow-hidden border border-gray-100';
         card.innerHTML = `
           <div class="aspect-square bg-gray-100 relative overflow-hidden">
             ${produto.imagem_url ? `<img src="${escapeHtml(produto.imagem_url)}" alt="${escapeHtml(produto.nome)}" loading="lazy" class="w-full h-full object-cover" onerror="imgFallback(this)">` : '<div class="w-full h-full flex items-center justify-center text-gray-300"><svg class="w-8 h-8 sm:w-16 sm:h-16" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg></div>'}
             <div class="absolute top-1.5 right-1.5 sm:top-3 sm:right-3">
-              <span class="px-1.5 sm:px-2 py-0.5 sm:py-1 text-[9px] sm:text-xs font-medium rounded-full ${produto.status === 'DISPONIVEL' ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'}">${escapeHtml(produto.status)}</span>
+              <span class="px-1.5 sm:px-2 py-0.5 sm:py-1 text-[9px] sm:text-xs font-medium rounded-full ${etiqueta.classe}">${escapeHtml(etiqueta.texto)}</span>
             </div>
             ${jaNaMaleta ? '<div class="absolute top-1.5 left-1.5 sm:top-3 sm:left-3 bg-orange-500 text-white px-1.5 sm:px-2 py-0.5 sm:py-1 text-[9px] sm:text-xs font-medium rounded-full">Na Maleta</div>' : ''}
           </div>
@@ -341,9 +384,12 @@
               ${produto.estilo ? `<span>${escapeHtml(produto.estilo)}</span>` : ''}
               ${produto.cor_armacao ? `<span>•</span><span>${escapeHtml(produto.cor_armacao)}</span>` : ''}
             </div>
-            <button onclick="toggleMaleta(${Number(produto.id)})" class="w-full ${jaNaMaleta ? 'bg-gray-100 text-gray-600' : 'bg-orange-500 hover:bg-orange-600 text-white'} py-1.5 sm:py-2 rounded-lg text-xs sm:text-sm font-medium transition-colors">
+            ${encomenda ? `<p class="text-[10px] sm:text-xs text-blue-700 bg-blue-50 rounded px-1.5 sm:px-2 py-1 mb-2 sm:mb-3 leading-tight">50% sinal + 50% na entrega<span class="hidden sm:inline"> (sinal de ${formatarMoeda(calcularSinal(produto.preco_venda))})</span></p>` : ''}
+            ${encomenda ? `<button onclick="encomendarProduto(${Number(produto.id)})" class="w-full bg-blue-600 hover:bg-blue-700 text-white py-1.5 sm:py-2 rounded-lg text-xs sm:text-sm font-medium transition-colors">
+              <span class="sm:hidden">Encomendar</span><span class="hidden sm:inline">Encomendar no WhatsApp</span>
+            </button>` : `<button onclick="toggleMaleta(${Number(produto.id)})" class="w-full ${jaNaMaleta ? 'bg-gray-100 text-gray-600' : 'bg-orange-500 hover:bg-orange-600 text-white'} py-1.5 sm:py-2 rounded-lg text-xs sm:text-sm font-medium transition-colors">
               <span class="sm:hidden">${jaNaMaleta ? 'Remover' : '+ Maleta'}</span><span class="hidden sm:inline">${jaNaMaleta ? 'Remover da Maleta' : 'Adicionar à Maleta'}</span>
-            </button>
+            </button>`}
           </div>
         `;
         catalogoGrid.appendChild(card);
@@ -356,6 +402,7 @@
       if (!produto) return;
 
       const index = maleta.itens.findIndex(i => i.id === produtoId);
+      if (index < 0 && ehSobEncomenda(produto)) return encomendarProduto(produtoId);
       if (index >= 0) {
         maleta.itens.splice(index, 1);
         mostrarToast(`${produto.nome} removido da maleta`);

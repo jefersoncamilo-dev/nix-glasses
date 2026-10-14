@@ -207,10 +207,12 @@ async function startServer() {
 
   // ---------- Handlers reutilizáveis ----------
 
+  const DISPONIBILIDADES = ['PRONTA_ENTREGA', 'SOB_ENCOMENDA'];
+
   async function handleListPublicos(req, res) {
     try {
       const result = await pool.query(
-        `SELECT id, nome, codigo_sku, preco_venda, imagem_url, status, formato, estilo, cor_armacao
+        `SELECT id, nome, codigo_sku, preco_venda, imagem_url, status, disponibilidade, formato, estilo, cor_armacao
          FROM produtos
          WHERE status IN ('DISPONIVEL', 'CONDICIONAL')
          ORDER BY created_at DESC`
@@ -225,7 +227,7 @@ async function startServer() {
   async function handleListAdmin(req, res) {
     try {
       const result = await pool.query(
-        `SELECT id, nome, codigo_sku, preco_custo, preco_venda, imagem_url, status, formato, estilo, cor_armacao, vezes_em_maleta
+        `SELECT id, nome, codigo_sku, preco_custo, preco_venda, imagem_url, status, disponibilidade, formato, estilo, cor_armacao, vezes_em_maleta
          FROM produtos
          ORDER BY created_at DESC`
       );
@@ -239,7 +241,7 @@ async function startServer() {
   async function handleListConditional(req, res) {
     try {
       const result = await pool.query(
-        `SELECT id, nome, codigo_sku, preco_custo, preco_venda, imagem_url, status, formato, estilo, cor_armacao, vezes_em_maleta
+        `SELECT id, nome, codigo_sku, preco_custo, preco_venda, imagem_url, status, disponibilidade, formato, estilo, cor_armacao, vezes_em_maleta
          FROM produtos
          WHERE status = 'CONDICIONAL'
          ORDER BY created_at DESC`
@@ -264,6 +266,10 @@ async function startServer() {
   async function handleCreateProduto(req, res) {
     const { nome, codigo_sku, sku, preco_custo, preco_venda, formato, estilo, cor_armacao } = req.body;
     const codigoFinal = codigo_sku || sku;
+    const disponibilidade = req.body.disponibilidade || 'PRONTA_ENTREGA';
+    if (!DISPONIBILIDADES.includes(disponibilidade)) {
+      return res.status(400).json({ error: 'Disponibilidade inválida' });
+    }
 
     let client;
     try {
@@ -271,10 +277,10 @@ async function startServer() {
       await client.query('BEGIN');
       const imagem_url = req.file ? await salvarImagem(client, req.file) : null;
       const result = await client.query(
-        `INSERT INTO produtos (nome, codigo_sku, preco_custo, preco_venda, imagem_url, formato, estilo, cor_armacao)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+        `INSERT INTO produtos (nome, codigo_sku, preco_custo, preco_venda, imagem_url, disponibilidade, formato, estilo, cor_armacao)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
          RETURNING *`,
-        [nome, codigoFinal, preco_custo, preco_venda, imagem_url, formato, estilo, cor_armacao]
+        [nome, codigoFinal, preco_custo, preco_venda, imagem_url, disponibilidade, formato, estilo, cor_armacao]
       );
       await client.query('COMMIT');
       res.status(201).json(result.rows[0]);
@@ -292,8 +298,11 @@ async function startServer() {
 
   async function handleUpdateProduto(req, res) {
     const { id } = req.params;
-    const { nome, codigo_sku, sku, preco_custo, preco_venda, status, formato, estilo, cor_armacao } = req.body;
+    const { nome, codigo_sku, sku, preco_custo, preco_venda, status, disponibilidade, formato, estilo, cor_armacao } = req.body;
     const codigoFinal = codigo_sku !== undefined ? codigo_sku : sku;
+    if (disponibilidade !== undefined && !DISPONIBILIDADES.includes(disponibilidade)) {
+      return res.status(400).json({ error: 'Disponibilidade inválida' });
+    }
 
     let client;
     try {
@@ -318,6 +327,7 @@ async function startServer() {
       addField('preco_custo', preco_custo);
       addField('preco_venda', preco_venda);
       addField('status', status);
+      addField('disponibilidade', disponibilidade);
       addField('formato', formato);
       addField('estilo', estilo);
       addField('cor_armacao', cor_armacao);
