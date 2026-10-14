@@ -59,6 +59,10 @@
           <a href="#contato" class="font-medium transition-colors" style="color:var(--nix-muted)" onmouseover="this.style.color='#fff'" onmouseout="this.style.color='var(--nix-muted)'">Contato</a>
         </nav>
         <div class="flex items-center space-x-4">
+          <button id="btnCliente" class="flex items-center gap-2 p-2 transition-colors" style="color:var(--nix-muted)" onmouseover="this.style.color='#fff'" onmouseout="this.style.color='var(--nix-muted)'" aria-label="Área do Cliente">
+            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/></svg>
+            <span id="clienteHeader" class="hidden sm:inline text-sm font-medium max-w-[10rem] truncate">Entrar</span>
+          </button>
           <button id="btnMaleta" class="relative p-2 transition-colors" style="color:var(--nix-muted)" onmouseover="this.style.color='#fff'" onmouseout="this.style.color='var(--nix-muted)'" aria-label="Minha Maleta">
             <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z"/></svg>
             <span id="maletaCount" class="chrome-btn absolute -top-1 -right-1 text-xs font-bold w-5 h-5 rounded-full flex items-center justify-center hidden">0</span>
@@ -218,6 +222,34 @@
     </div>
   </div>
 
+  <!-- Modal Área do Cliente (identificação por e-mail, guardada só neste navegador) -->
+  <div id="modalCliente" class="fixed inset-0 modal-overlay bg-black/50 hidden z-50 flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-labelledby="clienteTitulo">
+    <div class="bg-white rounded-2xl max-w-md w-full overflow-hidden">
+      <div class="flex items-center justify-between p-6 border-b border-gray-200">
+        <h3 id="clienteTitulo" class="text-xl font-bold text-gray-900">Área do Cliente</h3>
+        <button id="fecharCliente" class="p-2 text-gray-500 hover:text-gray-700 rounded-lg hover:bg-gray-100" aria-label="Fechar">
+          <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+        </button>
+      </div>
+      <form id="formCliente" class="p-6 space-y-4" novalidate>
+        <p class="text-sm text-gray-500">Informe seu e-mail para que a gente identifique seus pedidos. Seus dados ficam salvos só neste aparelho.</p>
+        <div>
+          <label for="clienteEmail" class="block text-sm font-medium text-gray-700 mb-1">E-mail *</label>
+          <input type="email" id="clienteEmail" autocomplete="email" maxlength="254" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500" placeholder="voce@exemplo.com" required>
+        </div>
+        <div>
+          <label for="clienteNome" class="block text-sm font-medium text-gray-700 mb-1">Nome</label>
+          <input type="text" id="clienteNome" autocomplete="name" maxlength="100" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500">
+        </div>
+        <p id="clienteErro" class="hidden text-sm text-red-600"></p>
+        <div class="flex flex-col-reverse gap-3 sm:flex-row sm:justify-between pt-2">
+          <button type="button" id="sairCliente" class="hidden px-6 py-3 rounded-full text-sm font-semibold text-gray-600 hover:bg-gray-100">Sair</button>
+          <button type="submit" class="sm:ml-auto bg-orange-500 hover:bg-orange-600 text-white px-8 py-3 rounded-full text-sm font-semibold transition-colors">Entrar</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
   <!-- Modal Detalhes do produto (carrossel de fotos) -->
   <div id="modalDetalhes" class="fixed inset-0 modal-overlay bg-black/70 hidden z-50 flex items-center justify-center p-2 sm:p-4" role="dialog" aria-modal="true" aria-label="Detalhes do produto">
     <div class="bg-white rounded-2xl max-w-4xl w-full max-h-[95vh] overflow-y-auto relative">
@@ -236,6 +268,7 @@
     let produtos = [];
     let maleta = JSON.parse(localStorage.getItem('nix_maleta')) || { itens: [] };
     let whatsappNumero = '';
+    let cliente = lerCliente(localStorage);
 
     // Elementos DOM
     const catalogoGrid = document.getElementById('catalogoGrid');
@@ -618,6 +651,7 @@
     // Modal maleta
     btnMaleta.addEventListener('click', () => {
       atualizarMaletaUI();
+      preencherDadosCliente();
       modalMaleta.classList.remove('hidden');
       document.body.style.overflow = 'hidden';
     });
@@ -662,6 +696,93 @@
       }
     });
 
+    // Área do Cliente: identificação leve por e-mail, sem senha, guardada no localStorage
+    function validarEmail(email) {
+      const e = String(email ?? '').trim();
+      return e.length <= 254 && /^[^\s@]+@[^\s@.]+(\.[^\s@.]+)+$/.test(e);
+    }
+
+    // Normaliza o que vem do formulário ou do localStorage; null se o e-mail não for válido
+    function normalizarCliente(dados) {
+      if (!dados || typeof dados !== 'object' || !validarEmail(dados.email)) return null;
+      return {
+        email: String(dados.email).trim().toLowerCase(),
+        nome: String(dados.nome ?? '').trim().replace(/\s+/g, ' ').slice(0, 100),
+      };
+    }
+
+    function lerCliente(storage) {
+      try {
+        return normalizarCliente(JSON.parse(storage.getItem('nix_cliente')));
+      } catch {
+        return null;
+      }
+    }
+
+    // Cabeçalho mostra "Entrar" ou o nome/e-mail do cliente (textContent: nunca vira HTML)
+    function renderizarCliente() {
+      const rotulo = document.getElementById('clienteHeader');
+      rotulo.textContent = cliente ? (cliente.nome.split(' ')[0] || cliente.email) : 'Entrar';
+      rotulo.title = cliente ? cliente.email : '';
+      document.getElementById('sairCliente').classList.toggle('hidden', !cliente);
+    }
+
+    function abrirCliente() {
+      document.getElementById('clienteEmail').value = cliente ? cliente.email : '';
+      document.getElementById('clienteNome').value = cliente ? cliente.nome : '';
+      document.getElementById('clienteErro').classList.add('hidden');
+      renderizarCliente();
+      modalCliente.classList.remove('hidden');
+      document.body.style.overflow = 'hidden';
+      document.getElementById('clienteEmail').focus();
+    }
+
+    function fecharCliente() {
+      modalCliente.classList.add('hidden');
+      document.body.style.overflow = '';
+    }
+
+    // Preenche o nome da entrega com o do cliente, sem apagar o que já foi digitado
+    function preencherDadosCliente() {
+      const campoNome = document.getElementById('nomeCliente');
+      if (cliente && cliente.nome && !campoNome.value.trim()) campoNome.value = cliente.nome;
+    }
+
+    const modalCliente = document.getElementById('modalCliente');
+    document.getElementById('btnCliente').addEventListener('click', abrirCliente);
+    document.getElementById('fecharCliente').addEventListener('click', fecharCliente);
+    modalCliente.addEventListener('click', (e) => { if (e.target === modalCliente) fecharCliente(); });
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && !modalCliente.classList.contains('hidden')) fecharCliente();
+    });
+
+    document.getElementById('formCliente').addEventListener('submit', (e) => {
+      e.preventDefault();
+      const novo = normalizarCliente({
+        email: document.getElementById('clienteEmail').value,
+        nome: document.getElementById('clienteNome').value,
+      });
+      const erro = document.getElementById('clienteErro');
+      if (!novo) {
+        erro.textContent = 'Informe um e-mail válido.';
+        erro.classList.remove('hidden');
+        return;
+      }
+      cliente = novo;
+      localStorage.setItem('nix_cliente', JSON.stringify(cliente));
+      renderizarCliente();
+      fecharCliente();
+      mostrarToast(`Olá${cliente.nome ? ', ' + cliente.nome.split(' ')[0] : ''}! Você está identificado.`);
+    });
+
+    document.getElementById('sairCliente').addEventListener('click', () => {
+      cliente = null;
+      localStorage.removeItem('nix_cliente');
+      renderizarCliente();
+      fecharCliente();
+      mostrarToast('Você saiu da sua conta.');
+    });
+
     // Carregar WhatsApp do backend (aceita {whatsapp} ou {valor}, higieniza antes do wa.me)
     async function carregarWhatsApp() {
       try {
@@ -681,6 +802,7 @@
       let msg = `*Nix Glasses - Novo Pedido*\n\n`;
       msg += `*Cliente:* ${dados.nome}\n`;
       msg += `*Telefone:* ${dados.telefone}\n`;
+      if (dados.email) msg += `*E-mail:* ${dados.email}\n`;
       msg += `*Endereço:* ${dados.rua}, ${dados.numero} - ${dados.bairro}, ${dados.cidade}\n`;
       if (dados.complemento) msg += `*Complemento:* ${dados.complemento}\n`;
       msg += `\n*Itens da Maleta:*\n`;
@@ -728,7 +850,8 @@
         if (!resCheckout.ok) throw new Error('Erro ao registrar maleta');
 
         // 2. Abre WhatsApp (número higienizado: só dígitos)
-        const mensagem = montarTextoWhatsapp(maleta, { nome, telefone, cep, numero, rua, bairro, cidade, complemento });
+        const email = cliente ? cliente.email : '';
+        const mensagem = montarTextoWhatsapp(maleta, { nome, telefone, email, cep, numero, rua, bairro, cidade, complemento });
         const numeroLimpo = sanitizeWhatsapp(whatsappNumero);
         const url = `https://wa.me/${numeroLimpo}?text=${encodeURIComponent(mensagem)}`;
         
@@ -750,6 +873,7 @@
       carregarProdutos();
       carregarWhatsApp();
       atualizarMaletaUI();
+      renderizarCliente();
     });
 
     // Filtros
