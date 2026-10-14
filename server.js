@@ -26,6 +26,9 @@ app.use('/admin', express.static(path.join(__dirname, 'admin')));
 // O tipo gravado vem da assinatura do arquivo (bytes iniciais), não do que o cliente declarou.
 const TIPOS_IMAGEM = new Set(['image/jpeg', 'image/png', 'image/webp']);
 const TAMANHO_MAX_IMAGEM = 8 * 1024 * 1024; // 8 MB (fotos da câmera do celular cabem)
+const MAX_FOTOS = 4;
+// foto1..foto4 são as posições do formulário; `imagem` é o campo antigo (= foto1).
+const CAMPOS_FOTO = Array.from({ length: MAX_FOTOS }, (_, i) => `foto${i + 1}`);
 
 function detectarTipoImagem(buf) {
   if (!buf || buf.length < 12) return null;
@@ -37,7 +40,7 @@ function detectarTipoImagem(buf) {
 
 const upload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: TAMANHO_MAX_IMAGEM, files: 1 },
+  limits: { fileSize: TAMANHO_MAX_IMAGEM, files: MAX_FOTOS },
   fileFilter: (req, file, cb) => {
     if (TIPOS_IMAGEM.has(file.mimetype)) return cb(null, true);
     const err = new Error('Formato de imagem não suportado. Use JPG, PNG ou WEBP.');
@@ -61,26 +64,62 @@ function idDaImagem(url) {
   return m ? m[1] : null;
 }
 
-// Converte erros do upload em 400 com JSON (o admin mostra err.error no toast)
+const camposUpload = upload.fields([
+  { name: 'imagem', maxCount: 1 },
+  ...CAMPOS_FOTO.map((name) => ({ name, maxCount: 1 })),
+]);
+
+// Converte erros do upload em 400 com JSON (o admin mostra err.error no toast).
+// Deixa em req.fotosEnviadas um array de 4 posições: o arquivo novo de cada foto ou null.
 function uploadImagem(req, res, next) {
-  upload.single('imagem')(req, res, (err) => {
+  camposUpload(req, res, (err) => {
     if (!err) {
-      if (!req.file) return next();
-      req.file.tipoDetectado = detectarTipoImagem(req.file.buffer);
-      if (!req.file.tipoDetectado) {
-        return res.status(400).json({ error: 'Arquivo não é uma imagem JPG, PNG ou WEBP válida.' });
+      const arquivos = req.files || {};
+      if (arquivos.imagem && arquivos.foto1) {
+        return res.status(400).json({ error: 'Envie a foto 1 em "foto1" ou "imagem", não nos dois.' });
+      }
+      req.fotosEnviadas = CAMPOS_FOTO.map((campo, i) =>
+        (arquivos[campo] || (i === 0 && arquivos.imagem) || [])[0] || null
+      );
+      for (const file of req.fotosEnviadas) {
+        if (!file) continue;
+        file.tipoDetectado = detectarTipoImagem(file.buffer);
+        if (!file.tipoDetectado) {
+          return res.status(400).json({ error: 'Arquivo não é uma imagem JPG, PNG ou WEBP válida.' });
+        }
       }
       return next();
     }
     if (err instanceof multer.MulterError) {
       const msg = err.code === 'LIMIT_FILE_SIZE'
         ? `Imagem muito grande (máximo ${TAMANHO_MAX_IMAGEM / 1024 / 1024} MB)`
-        : 'Upload inválido';
+        : err.code === 'LIMIT_FILE_COUNT'
+          ? `No máximo ${MAX_FOTOS} fotos por produto`
+          : 'Upload inválido';
       return res.status(400).json({ error: msg });
     }
     if (err.status === 400) return res.status(400).json({ error: err.message });
     next(err);
   });
+}
+
+// Fotos atuais de um produto; linhas gravadas antes da coluna `fotos` só têm imagem_url.
+function fotosDoProduto(row) {
+  if (Array.isArray(row.fotos) && row.fotos.length) return row.fotos.slice(0, MAX_FOTOS);
+  return row.imagem_url ? [row.imagem_url] : [];
+}
+
+// fotos_manter (multipart, JSON): até 4 posições com a URL atual a manter ou null para remover.
+// undefined = campo ausente; false = valor inválido.
+function lerFotosManter(raw) {
+  if (raw === undefined) return undefined;
+  let lista = raw;
+  if (typeof raw === 'string') {
+    try { lista = JSON.parse(raw); } catch { return false; }
+  }
+  if (!Array.isArray(lista) || lista.length > MAX_FOTOS) return false;
+  if (lista.some((url) => url !== null && typeof url !== 'string')) return false;
+  return lista;
 }
 
 // Sanitiza número de WhatsApp: remove tudo que não for dígito
@@ -212,7 +251,7 @@ async function startServer() {
   async function handleListPublicos(req, res) {
     try {
       const result = await pool.query(
-        `SELECT id, nome, codigo_sku, preco_venda, imagem_url, status, disponibilidade, formato, estilo, cor_armacao
+        `SELECT id, nome, codigo_sku, preco_venda, imagem_url, fotos, status, disponibilidade, formato, estilo, cor_armacao
          FROM produtos
          WHERE status IN ('DISPONIVEL', 'CONDICIONAL')
          ORDER BY created_at DESC`
@@ -227,7 +266,7 @@ async function startServer() {
   async function handleListAdmin(req, res) {
     try {
       const result = await pool.query(
-        `SELECT id, nome, codigo_sku, preco_custo, preco_venda, imagem_url, status, disponibilidade, formato, estilo, cor_armacao, vezes_em_maleta
+        `SELECT id, nome, codigo_sku, preco_custo, preco_venda, imagem_url, fotos, status, disponibilidade, formato, estilo, cor_armacao, vezes_em_maleta
          FROM produtos
          ORDER BY created_at DESC`
       );
@@ -241,7 +280,7 @@ async function startServer() {
   async function handleListConditional(req, res) {
     try {
       const result = await pool.query(
-        `SELECT id, nome, codigo_sku, preco_custo, preco_venda, imagem_url, status, disponibilidade, formato, estilo, cor_armacao, vezes_em_maleta
+        `SELECT id, nome, codigo_sku, preco_custo, preco_venda, imagem_url, fotos, status, disponibilidade, formato, estilo, cor_armacao, vezes_em_maleta
          FROM produtos
          WHERE status = 'CONDICIONAL'
          ORDER BY created_at DESC`
@@ -275,12 +314,15 @@ async function startServer() {
     try {
       client = await pool.connect();
       await client.query('BEGIN');
-      const imagem_url = req.file ? await salvarImagem(client, req.file) : null;
+      const fotos = [];
+      for (const file of req.fotosEnviadas || []) {
+        if (file) fotos.push(await salvarImagem(client, file));
+      }
       const result = await client.query(
-        `INSERT INTO produtos (nome, codigo_sku, preco_custo, preco_venda, imagem_url, disponibilidade, formato, estilo, cor_armacao)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+        `INSERT INTO produtos (nome, codigo_sku, preco_custo, preco_venda, imagem_url, fotos, disponibilidade, formato, estilo, cor_armacao)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
          RETURNING *`,
-        [nome, codigoFinal, preco_custo, preco_venda, imagem_url, disponibilidade, formato, estilo, cor_armacao]
+        [nome, codigoFinal, preco_custo, preco_venda, fotos[0] || null, fotos, disponibilidade, formato, estilo, cor_armacao]
       );
       await client.query('COMMIT');
       res.status(201).json(result.rows[0]);
@@ -303,12 +345,17 @@ async function startServer() {
     if (disponibilidade !== undefined && !DISPONIBILIDADES.includes(disponibilidade)) {
       return res.status(400).json({ error: 'Disponibilidade inválida' });
     }
+    const enviadas = req.fotosEnviadas || [];
+    const manter = lerFotosManter(req.body.fotos_manter);
+    if (manter === false) {
+      return res.status(400).json({ error: 'fotos_manter inválido' });
+    }
+    const mexeNasFotos = manter !== undefined || enviadas.some(Boolean);
 
     let client;
     try {
       client = await pool.connect();
       await client.query('BEGIN');
-      const imagem_url = req.file ? await salvarImagem(client, req.file) : undefined;
 
       const fields = [];
       const values = [];
@@ -331,20 +378,35 @@ async function startServer() {
       addField('formato', formato);
       addField('estilo', estilo);
       addField('cor_armacao', cor_armacao);
-      if (imagem_url !== undefined) {
-        addField('imagem_url', imagem_url);
-      }
 
-      if (fields.length === 0) {
+      if (fields.length === 0 && !mexeNasFotos) {
         await client.query('ROLLBACK');
         return res.status(400).json({ error: 'Nenhum campo para atualizar' });
       }
 
-      // Guarda a foto antiga para apagá-la quando for trocada (FOR UPDATE trava a linha até o COMMIT)
-      const anterior = await client.query(`SELECT imagem_url FROM produtos WHERE id = $1 FOR UPDATE`, [id]);
+      // Lê as fotos atuais para montar a nova lista e apagar as que saírem (FOR UPDATE trava a linha até o COMMIT)
+      const anterior = await client.query(`SELECT imagem_url, fotos FROM produtos WHERE id = $1 FOR UPDATE`, [id]);
       if (anterior.rows.length === 0) {
         await client.query('ROLLBACK');
         return res.status(404).json({ error: 'Produto não encontrado' });
+      }
+
+      let removidas = [];
+      if (mexeNasFotos) {
+        const atuais = fotosDoProduto(anterior.rows[0]);
+        // Sem fotos_manter, cada posição sem arquivo novo continua com a foto que já tinha.
+        // Só aceita manter URLs que já são deste produto.
+        const base = manter !== undefined
+          ? manter.map((url) => (url && atuais.includes(url) ? url : null))
+          : atuais;
+        const novas = [];
+        for (let i = 0; i < MAX_FOTOS; i++) {
+          if (enviadas[i]) novas.push(await salvarImagem(client, enviadas[i]));
+          else if (base[i] && !novas.includes(base[i])) novas.push(base[i]);
+        }
+        removidas = atuais.filter((url) => !novas.includes(url));
+        addField('fotos', novas);
+        addField('imagem_url', novas[0] || null);
       }
 
       fields.push(`updated_at = CURRENT_TIMESTAMP`);
@@ -353,8 +415,8 @@ async function startServer() {
       const query = `UPDATE produtos SET ${fields.join(', ')} WHERE id = $${paramCount} RETURNING *`;
       const result = await client.query(query, values);
 
-      const idAntigo = imagem_url !== undefined ? idDaImagem(anterior.rows[0].imagem_url) : null;
-      if (idAntigo) await client.query(`DELETE FROM imagens WHERE id = $1`, [idAntigo]);
+      const idsRemovidos = removidas.map(idDaImagem).filter(Boolean);
+      if (idsRemovidos.length) await client.query(`DELETE FROM imagens WHERE id = ANY($1)`, [idsRemovidos]);
 
       await client.query('COMMIT');
       res.json(result.rows[0]);

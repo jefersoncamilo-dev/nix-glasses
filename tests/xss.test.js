@@ -35,6 +35,7 @@ function elemento() {
     value: '',
     textContent: '',
     filhos: [],
+    dataset: {},
     classList: { add() {}, remove() {}, toggle() {} },
     appendChild(f) { this.filhos.push(f); },
     get html() { return this.innerHTML + this.filhos.map(f => f.innerHTML).join(''); },
@@ -52,6 +53,7 @@ function produtoMalicioso(extra = {}) {
     cor_armacao: PAYLOAD,
     status: 'CONDICIONAL',
     imagem_url: `x" onerror="alert(1)`,
+    fotos: [`x" onerror="alert(1)`, `y'><script>alert(2)</script>`],
     preco_venda: 100,
     preco_custo: 50,
     vezes_em_maleta: 3,
@@ -73,9 +75,10 @@ function semInjecao(html) {
 describe('vitrine (index.html) escapa dados de produto', () => {
   for (const disponibilidade of ['PRONTA_ENTREGA', 'SOB_ENCOMENDA']) it(`no catálogo (${disponibilidade})`, () => {
     const catalogoGrid = elemento();
-    const ctx = carregar('index.html', ['escapeHtml', 'ehSobEncomenda', 'calcularSinal', 'passaFiltroStatus', 'etiquetaProduto', 'renderizarCatalogo'], {
+    const ctx = carregar('index.html', ['escapeHtml', 'fotosDoProduto', 'indiceCircular', 'ehSobEncomenda', 'calcularSinal', 'passaFiltroStatus', 'etiquetaProduto', 'renderizarCatalogo'], {
       produtos: [produtoMalicioso({ disponibilidade })],
       maleta: { itens: [] },
+      fotoCard: {},
       filtroStatus: elemento(),
       filtroFormato: elemento(),
       catalogoGrid,
@@ -85,6 +88,21 @@ describe('vitrine (index.html) escapa dados de produto', () => {
     });
     ctx.renderizarCatalogo();
     semInjecao(catalogoGrid.html);
+  });
+
+  it('nos detalhes do produto (carrossel e miniaturas)', () => {
+    const detalhesConteudo = elemento();
+    const ctx = carregar('index.html', ['escapeHtml', 'fotosDoProduto', 'indiceCircular', 'ehSobEncomenda', 'calcularSinal', 'etiquetaProduto', 'renderizarDetalhes'], {
+      produtos: [produtoMalicioso()],
+      maleta: { itens: [] },
+      detalhes: { id: 7, indice: 1 },
+      detalhesConteudo,
+      formatarMoeda: v => `R$ ${v}`,
+      fecharDetalhes: () => assert.fail('fechou os detalhes'),
+    });
+    ctx.renderizarDetalhes();
+    semInjecao(detalhesConteudo.innerHTML);
+    assert.doesNotMatch(detalhesConteudo.innerHTML, /<script>/);
   });
 
   it('na maleta guardada no navegador', () => {

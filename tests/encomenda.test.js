@@ -99,12 +99,12 @@ function extrairFuncao(html, nome) {
   }
 }
 
-const FUNCOES = ['escapeHtml', 'ehSobEncomenda', 'calcularSinal', 'passaFiltroStatus', 'etiquetaProduto',
+const FUNCOES = ['escapeHtml', 'fotosDoProduto', 'indiceCircular', 'ehSobEncomenda', 'calcularSinal', 'passaFiltroStatus', 'etiquetaProduto',
   'montarTextoEncomenda', 'encomendarProduto', 'renderizarCatalogo'];
 
 function elemento() {
   return {
-    innerHTML: '', value: '', filhos: [],
+    innerHTML: '', value: '', filhos: [], dataset: {},
     classList: { add() {}, remove() {} },
     appendChild(f) { this.filhos.push(f); },
   };
@@ -118,6 +118,7 @@ function vitrine(produtos, filtro = '') {
   const ctx = vm.createContext({
     produtos,
     maleta: { itens: [] },
+    fotoCard: {},
     whatsappNumero: '5511999990000',
     filtroStatus: { value: filtro },
     filtroFormato: { value: '' },
