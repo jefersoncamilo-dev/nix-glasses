@@ -29,6 +29,19 @@
     const form = document.getElementById('formLogin');
     const erro = document.getElementById('loginErro');
 
+    // Só aceita destino relativo dentro do próprio site (bloqueia javascript:, //evil.com, https://...)
+    function safeNext(next) {
+      const fallback = './index.html';
+      if (!next || !next.startsWith('/') || next.startsWith('//') || next.startsWith('/\\')) return fallback;
+      try {
+        const url = new URL(next, window.location.origin);
+        if (url.origin !== window.location.origin) return fallback;
+        return url.pathname + url.search + url.hash;
+      } catch {
+        return fallback;
+      }
+    }
+
     // Se já tem token válido, vai direto ao painel
     (async () => {
       const token = localStorage.getItem('nix_admin_token');
@@ -54,8 +67,7 @@
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || 'Falha no login');
         localStorage.setItem('nix_admin_token', data.token);
-        const next = new URLSearchParams(window.location.search).get('next') || './index.html';
-        window.location.href = next;
+        window.location.href = safeNext(new URLSearchParams(window.location.search).get('next'));
       } catch (err) {
         erro.textContent = err.message;
         erro.classList.remove('hidden');

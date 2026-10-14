@@ -226,13 +226,11 @@
 
     // Initialize
     document.addEventListener('DOMContentLoaded', async () => {
-      try {
-        const st = await fetch(`${API_BASE}/api/admin/status`).then(r => r.json());
-        if (st.authEnabled && !localStorage.getItem('nix_admin_token')) {
-          window.location.href = './login.html?next=' + encodeURIComponent(window.location.pathname);
-          return;
-        }
-      } catch {}
+      // Sempre exige login: sem token, vai para a tela de login
+      if (!localStorage.getItem('nix_admin_token')) {
+        window.location.href = './login.html?next=' + encodeURIComponent(window.location.pathname);
+        return;
+      }
       fetchConditionalProducts();
       setupEventListeners();
     });
