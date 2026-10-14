@@ -91,7 +91,7 @@ async function limparBanco() {
   for (const { imagem_url } of rows) {
     fs.rmSync(path.join(ROOT, 'uploads', path.basename(imagem_url)), { force: true });
   }
-  await pool.query('TRUNCATE produtos RESTART IDENTITY');
+  await pool.query('TRUNCATE produtos, acertos RESTART IDENTITY');
   await pool.query(`UPDATE configuracoes SET valor = '' WHERE chave = 'whatsapp_number'`);
 }
 

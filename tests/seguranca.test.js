@@ -65,6 +65,7 @@ describe('admin sem credenciais configuradas', () => {
       ['POST', '/api/produtos'],
       ['PUT', '/api/produtos/1'],
       ['POST', '/api/admin/acerto'],
+      ['GET', '/api/admin/acertos'],
       ['POST', '/api/config/whatsapp'],
     ];
     for (const [method, p] of rotas) {
