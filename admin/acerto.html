@@ -167,11 +167,11 @@
         
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">
           <div>
-            <label class="block text-sm font-medium mb-2">Clientes</label>
+            <label class="block text-sm font-medium mb-2">Marcados</label>
             <p id="selected-count" class="text-sm text-[var(--muted)]">0 selecionados</p>
           </div>
           <div>
-            <label class="block text-sm font-medium mb-2">Total Itens</label>
+            <label class="block text-sm font-medium mb-2">Resultado</label>
             <p id="total-count" class="text-sm text-[var(--muted)]">0 itens</p>
           </div>
         </div>
@@ -191,7 +191,7 @@
 
   <script>
     // API Base URL - relativo para funcionar em localhost e no Render
-    const API_BASE = window.location.origin.includes('localhost') ? 'http://localhost:3000' : window.location.origin;
+    const API_BASE = '';
 
     // State
     let allProducts = [];
@@ -249,12 +249,37 @@
         const response = await fetchAdmin(`${API_BASE}/api/admin/products/conditional`);
         if (!response.ok) throw new Error('Failed to fetch conditional products');
         allProducts = await response.json();
-        filteredProducts = allProducts;
-        renderProductsChecklist();
+        pruneChecklist();
+        filterProducts();
       } catch (error) {
         console.error('Error fetching conditional products:', error);
         productsChecklist.innerHTML = '<p class="text-[var(--error)] py-8 text-center">Erro ao carregar produtos</p>';
       }
+    }
+
+    function escapeHtml(v) {
+      return String(v ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+    }
+
+    // Estado do checklist em localStorage: [{ id, sku, bought, returned }].
+    // Itens que saíram de CONDICIONAL (acertados em outra tela, por exemplo)
+    // são descartados para não serem reenviados.
+    function loadChecklist() {
+      try {
+        const saved = JSON.parse(localStorage.getItem('acerto-checklist') || '[]');
+        return Array.isArray(saved) ? saved : [];
+      } catch {
+        return [];
+      }
+    }
+
+    function saveChecklist(saved) {
+      localStorage.setItem('acerto-checklist', JSON.stringify(saved));
+    }
+
+    function pruneChecklist() {
+      const ids = new Set(allProducts.map(p => p.id));
+      saveChecklist(loadChecklist().filter(s => ids.has(s.id) && (s.bought || s.returned)));
     }
 
     // Render Products Checklist
@@ -268,38 +293,37 @@
             <span>Nenhum produto com status CONDICIONAL</span>
           </div>
         `;
-        finishSection.classList.add('hidden');
+        finishSection.classList.toggle('hidden', allProducts.length === 0);
+        updateCounts();
         return;
       }
 
       finishSection.classList.remove('hidden');
-      
-      const checkedCount = localStorage.getItem('acerto-checklist') ? JSON.parse(localStorage.getItem('acerto-checklist')).length : 0;
-      
+
+      const savedChecks = loadChecklist();
+
       productsChecklist.innerHTML = filteredProducts.map((product, index) => {
-        const savedChecks = JSON.parse(localStorage.getItem('acerto-checklist') || '[]');
-        const productChecks = savedChecks.find(s => s.sku === product.sku) || { bought: false, returned: false };
-        
+        const productChecks = savedChecks.find(s => s.id === product.id) || { bought: false, returned: false };
+        const id = Number(product.id);
+
         return `
           <div class="glass-panel rounded-xl p-5 mb-3 fade-in" style="animation-delay: ${index * 0.05}s;">
             <div class="flex items-center gap-4">
               <div class="w-10 h-10 rounded-lg bg-[var(--bg-secondary)] flex items-center justify-center flex-shrink-0">
-                <span class="text-sm font-medium">${product.nome.substring(0, 3).toUpperCase()}</span>
+                <span class="text-sm font-medium">${escapeHtml(product.nome.substring(0, 3).toUpperCase())}</span>
               </div>
               <div class="flex-1 min-w-0">
-                <p class="font-medium">${product.nome}</p>
-                <p class="text-xs text-[var(--muted)]">${product.sku}</p>
-                <p class="text-xs text-[var(--muted)]">Vezes em maleta: ${product.vezesEmMaleta || 0}</p>
+                <p class="font-medium">${escapeHtml(product.nome)}</p>
+                <p class="text-xs text-[var(--muted)]">${escapeHtml(product.sku)}</p>
+                <p class="text-xs text-[var(--muted)]">Vezes em maleta: ${Number(product.vezesEmMaleta) || 0}</p>
               </div>
-              <div class="w-14 flex items-center gap-2">
-                <label>
-                  <input type="checkbox" class="check-input ${productChecks.bought ? 'checked' : ''}" 
-                         data-product-sku="${product.sku}" data-bought="true">
+              <div class="flex items-center gap-3 flex-shrink-0">
+                <label class="flex items-center gap-1 text-sm">
+                  <input type="checkbox" class="check-input" data-product-id="${id}" data-action="bought" ${productChecks.bought ? 'checked' : ''}>
                   Comprou
                 </label>
-                <label>
-                  <input type="checkbox" class="check-input ${productChecks.returned ? 'checked' : ''}" 
-                         data-product-sku="${product.sku}" data-returned="true">
+                <label class="flex items-center gap-1 text-sm">
+                  <input type="checkbox" class="check-input" data-product-id="${id}" data-action="returned" ${productChecks.returned ? 'checked' : ''}>
                   Devolveu
                 </label>
               </div>
@@ -310,7 +334,7 @@
 
       // Add event listeners to checkboxes
       addCheckboxListeners();
-      
+
       // Update counts
       updateCounts();
     }
@@ -318,28 +342,31 @@
     // Add Checkbox Listeners
     function addCheckboxListeners() {
       const checkboxes = productsChecklist.querySelectorAll('input[type="checkbox"]');
-      
+
       checkboxes.forEach(checkbox => {
         checkbox.addEventListener('change', (e) => {
-          const sku = e.target.dataset.productSku || e.target.parentElement.parentElement.parentElement.dataset.sku;
-          const action = e.target.dataset.bought || e.target.dataset.returned;
-          
-          // Save checklist state to localStorage
-          let saved = JSON.parse(localStorage.getItem('acerto-checklist') || '[]');
-          const productIndex = saved.findIndex(s => s.sku === sku);
-          
-          if (productIndex === -1) {
-            saved.push({ [action]: true, sku });
-          } else {
-            saved[productIndex][action] = e.target.checked;
+          const id = Number(e.target.dataset.productId);
+          const action = e.target.dataset.action;
+          const other = action === 'bought' ? 'returned' : 'bought';
+          const product = allProducts.find(p => p.id === id);
+
+          let saved = loadChecklist();
+          let entry = saved.find(s => s.id === id);
+          if (!entry) {
+            entry = { id, sku: product ? product.sku : undefined, bought: false, returned: false };
+            saved.push(entry);
           }
-          
-          // Remove if both are checked (optional - uncomment if needed)
-          // if (saved[productIndex].bought && saved[productIndex].returned) {
-          //   saved.splice(productIndex, 1);
-          // }
-          
-          localStorage.setItem('acerto-checklist', JSON.stringify(saved));
+          entry[action] = e.target.checked;
+
+          // Comprou e Devolveu são excludentes
+          if (e.target.checked) {
+            entry[other] = false;
+            const twin = productsChecklist.querySelector(`input[data-product-id="${id}"][data-action="${other}"]`);
+            if (twin) twin.checked = false;
+          }
+
+          saved = saved.filter(s => s.bought || s.returned);
+          saveChecklist(saved);
           updateCounts();
         });
       });
@@ -347,20 +374,20 @@
 
     // Update Counts
     function updateCounts() {
-      const saved = JSON.parse(localStorage.getItem('acerto-checklist') || '[]');
-      const total = saved.length;
-      const selected = saved.filter(s => s.bought || s.returned).length;
-      
-      selectedCount.textContent = `${selected} selecionados`;
-      totalCount.textContent = `${total} itens`;
+      const saved = loadChecklist();
+      const bought = saved.filter(s => s.bought).length;
+      const returned = saved.filter(s => s.returned).length;
+
+      selectedCount.textContent = `${saved.length} de ${allProducts.length} marcados`;
+      totalCount.textContent = `${bought} comprado(s) • ${returned} devolvido(s)`;
     }
 
     // Handle Finish Acerto
     async function handleFinishAcerto() {
-      const saved = JSON.parse(localStorage.getItem('acerto-checklist') || '[]');
-      
+      const saved = loadChecklist();
+
       if (saved.length === 0) {
-        alert('Nenhum produto foi selecionado para o acerto.');
+        alert('Nenhum produto foi marcado como comprado ou devolvido.');
         return;
       }
 
@@ -369,37 +396,35 @@
       }
 
       try {
-        // Prepare data for API
-        const updateData = saved.map(item => ({
-          sku: item.sku,
-          bought: item.bought,
-          returned: item.returned
-        }));
+        const comprados = saved.filter(s => s.bought).map(s => s.id);
+        const devolvidos = saved.filter(s => s.returned).map(s => s.id);
 
-        // Send to API - using POST as per requirements
         const response = await fetchAdmin(`${API_BASE}/api/admin/acerto`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
           },
-          body: JSON.stringify({ itens: updateData, observacoes: observations.value })
+          body: JSON.stringify({ comprados, devolvidos, observacoes: observations.value })
         });
 
+        const data = await response.json().catch(() => ({}));
         if (!response.ok) {
-          const errorData = await response.json();
-          throw new Error(errorData.message || 'Failed to finish acerto');
+          throw new Error(data.error || 'Erro ao finalizar acerto');
         }
 
-        alert('Acerto finalizado com sucesso!');
-        
+        const ignorados = (data.ignorados || []).length;
+        alert(ignorados
+          ? `Acerto finalizado. ${ignorados} item(ns) já não estavam em condicional e foram ignorados.`
+          : 'Acerto finalizado com sucesso!');
+
         // Clear localStorage and refresh
         localStorage.removeItem('acerto-checklist');
         observations.value = '';
         fetchConditionalProducts();
-        
+
       } catch (error) {
         console.error('Error finishing acerto:', error);
-        alert('Erro ao finalizar acerto. Tente novamente.');
+        alert(`Erro ao finalizar acerto: ${error.message}`);
       }
     }
 

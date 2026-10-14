@@ -216,13 +216,57 @@ describe('acerto', () => {
     ]);
   });
 
-  it('desfaz tudo se uma parte do acerto falhar', async () => {
+  it('recusa IDs inválidos sem alterar nada', async () => {
     const { body: a } = await criarProduto(base('TX-1'));
     await definirStatus(a.id, 'CONDICIONAL');
     const r = await api('POST', '/api/admin/acerto', { body: { comprados: [a.id], devolvidos: ['abc'] } });
-    assert.equal(r.status, 500);
+    assert.equal(r.status, 400);
     const { rows } = await h.pool.query('SELECT status FROM produtos WHERE id = $1', [a.id]);
     assert.equal(rows[0].status, 'CONDICIONAL');
+  });
+
+  it('recusa o mesmo produto como comprado e devolvido', async () => {
+    const { body: a } = await criarProduto(base('DUP-1'));
+    await definirStatus(a.id, 'CONDICIONAL');
+    const r = await api('POST', '/api/admin/acerto', { body: { comprados: [a.id], devolvidos: [a.id] } });
+    assert.equal(r.status, 400);
+    const { rows } = await h.pool.query('SELECT status FROM produtos WHERE id = $1', [a.id]);
+    assert.equal(rows[0].status, 'CONDICIONAL');
+  });
+
+  it('não devolve para DISPONIVEL um produto já vendido', async () => {
+    const { body: a } = await criarProduto(base('ESG-1'));
+    const { body: b } = await criarProduto(base('ESG-2'));
+    await definirStatus(a.id, 'ESGOTADO');
+    await definirStatus(b.id, 'CONDICIONAL');
+
+    const r = await api('POST', '/api/admin/acerto', { body: { devolvidos: [a.id, b.id] } });
+    assert.equal(r.status, 200);
+    assert.deepEqual(r.body.ignorados, [a.id]);
+    const { rows } = await h.pool.query('SELECT id, status FROM produtos ORDER BY id');
+    assert.deepEqual(rows, [
+      { id: a.id, status: 'ESGOTADO' },
+      { id: b.id, status: 'DISPONIVEL' },
+    ]);
+
+    const s = await api('POST', '/api/admin/acerto', { body: { devolvidos: [a.id] } });
+    assert.equal(s.status, 409);
+  });
+
+  it('grava o histórico com as observações', async () => {
+    const { body: a } = await criarProduto(base('HI-1'));
+    const { body: b } = await criarProduto(base('HI-2'));
+    await definirStatus(a.id, 'CONDICIONAL');
+    await definirStatus(b.id, 'CONDICIONAL');
+
+    await api('POST', '/api/admin/acerto', { body: { comprados: [a.id], devolvidos: [b.id], observacoes: '  cliente Ana  ' } });
+    const r = await api('GET', '/api/admin/acertos');
+    assert.equal(r.status, 200);
+    assert.equal(r.body.length, 1);
+    assert.deepEqual(r.body[0].comprados, [a.id]);
+    assert.deepEqual(r.body[0].devolvidos, [b.id]);
+    assert.equal(r.body[0].observacoes, 'cliente Ana');
+    assert.equal((await api('GET', '/api/admin/acertos', { auth: false })).status, 401);
   });
 
   it('recusa corpo sem comprados/devolvidos e exige login', async () => {

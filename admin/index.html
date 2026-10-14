@@ -612,30 +612,36 @@
     };
 
     // Acerto
+    function escapeHtml(v) {
+      return String(v ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+    }
+
+    // As duas listas mostram os mesmos produtos em CONDICIONAL: o cliente
+    // ou comprou ou devolveu cada um. Marcar em uma lista desmarca na outra.
     function renderizarListasAcerto() {
       const condicionais = todosProdutos.filter(p => p.status === 'CONDICIONAL');
-      const esgotados = todosProdutos.filter(p => p.status === 'ESGOTADO');
-
-      compradosList.innerHTML = condicionais.map(p => `
+      const item = (p, nome) => `
         <label class="flex items-center p-3 bg-gray-50 rounded-lg hover:bg-gray-100 cursor-pointer">
-          <input type="checkbox" name="comprados" value="${p.id}" class="w-4 h-4 text-orange-500 border-gray-300 rounded focus:ring-orange-500">
+          <input type="checkbox" name="${nome}" value="${Number(p.id)}" class="w-4 h-4 text-orange-500 border-gray-300 rounded focus:ring-orange-500">
           <div class="ml-3 flex-1">
-            <p class="font-medium text-gray-900">${p.nome}</p>
-            <p class="text-sm text-gray-500">${p.codigo_sku} • ${formatarMoeda(p.preco_venda)}</p>
+            <p class="font-medium text-gray-900">${escapeHtml(p.nome)}</p>
+            <p class="text-sm text-gray-500">${escapeHtml(p.codigo_sku)} • ${formatarMoeda(p.preco_venda)}</p>
           </div>
         </label>
-      `).join('') || '<p class="text-gray-500 text-center py-4">Nenhum item em condicional</p>';
+      `;
+      const vazio = '<p class="text-gray-500 text-center py-4">Nenhum item em condicional</p>';
 
-      devolvidosList.innerHTML = esgotados.map(p => `
-        <label class="flex items-center p-3 bg-gray-50 rounded-lg hover:bg-gray-100 cursor-pointer">
-          <input type="checkbox" name="devolvidos" value="${p.id}" class="w-4 h-4 text-orange-500 border-gray-300 rounded focus:ring-orange-500">
-          <div class="ml-3 flex-1">
-            <p class="font-medium text-gray-900">${p.nome}</p>
-            <p class="text-sm text-gray-500">${p.codigo_sku} • ${formatarMoeda(p.preco_venda)}</p>
-          </div>
-        </label>
-      `).join('') || '<p class="text-gray-500 text-center py-4">Nenhum item esgotado</p>';
+      compradosList.innerHTML = condicionais.map(p => item(p, 'comprados')).join('') || vazio;
+      devolvidosList.innerHTML = condicionais.map(p => item(p, 'devolvidos')).join('') || vazio;
     }
+
+    document.getElementById('tab-acerto').addEventListener('change', (e) => {
+      const cb = e.target;
+      if (!cb.checked || (cb.name !== 'comprados' && cb.name !== 'devolvidos')) return;
+      const outro = cb.name === 'comprados' ? 'devolvidos' : 'comprados';
+      const par = document.querySelector(`input[name="${outro}"][value="${cb.value}"]`);
+      if (par) par.checked = false;
+    });
 
     async function carregarAcerto() {
       await carregarProdutos();
@@ -656,8 +662,10 @@
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ comprados, devolvidos })
         });
-        if (!res.ok) throw new Error('Erro ao salvar acerto');
-        mostrarToast('Acerto salvo com sucesso!');
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.error || 'Erro ao salvar acerto');
+        const ignorados = (data.ignorados || []).length;
+        mostrarToast(ignorados ? `Acerto salvo (${ignorados} item(ns) já não estavam em condicional)` : 'Acerto salvo com sucesso!');
         carregarProdutos();
       } catch (err) {
         console.error(err);
