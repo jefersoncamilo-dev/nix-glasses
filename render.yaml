@@ -15,3 +15,11 @@ services:
         value: production
       - key: DATABASE_URL
         sync: false
+      # Admin: sem estas variáveis as rotas admin respondem 503 (fail closed).
+      # Gere o hash com: node scripts/generate-admin-hash.js "sua-senha-forte"
+      - key: ADMIN_USER
+        sync: false
+      - key: ADMIN_PASS_HASH
+        sync: false
+      - key: JWT_SECRET
+        generateValue: true
