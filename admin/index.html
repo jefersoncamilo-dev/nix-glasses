@@ -418,6 +418,11 @@
       });
     }
 
+    // Escapa texto vindo do banco antes de ir para innerHTML
+    function escapeHtml(v) {
+      return String(v ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+    }
+
     function renderizarTabela() {
       const statusFiltro = filtroStatusAdmin.value;
       const formatoFiltro = filtroFormatoAdmin.value;
@@ -440,27 +445,27 @@
       tabelaProdutos.innerHTML = filtrados.map(p => `
         <tr class="hover:bg-gray-50">
           <td class="px-4 sm:px-6 py-4">
-            ${p.imagem_url ? `<img src="${p.imagem_url}" alt="${p.nome}" class="w-12 h-12 sm:w-16 sm:h-16 object-cover rounded" onerror="imgFallback(this)">` : '<div class="w-12 h-12 sm:w-16 sm:h-16 bg-gray-100 rounded flex items-center justify-center"><svg class="w-6 h-6 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg></div>'}
+            ${p.imagem_url ? `<img src="${escapeHtml(p.imagem_url)}" alt="${escapeHtml(p.nome)}" class="w-12 h-12 sm:w-16 sm:h-16 object-cover rounded" onerror="imgFallback(this)">` : '<div class="w-12 h-12 sm:w-16 sm:h-16 bg-gray-100 rounded flex items-center justify-center"><svg class="w-6 h-6 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg></div>'}
           </td>
           <td class="px-4 sm:px-6 py-4">
-            <p class="font-medium text-gray-900 text-sm sm:text-base">${p.nome}</p>
-            <p class="text-xs sm:text-sm text-gray-500">${p.codigo_sku}</p>
+            <p class="font-medium text-gray-900 text-sm sm:text-base">${escapeHtml(p.nome)}</p>
+            <p class="text-xs sm:text-sm text-gray-500">${escapeHtml(p.codigo_sku)}</p>
           </td>
           <td class="hidden md:table-cell px-4 sm:px-6 py-4 text-sm text-gray-500">
-            ${p.formato || '-'} ${p.estilo ? '• ' + p.estilo : ''} ${p.cor_armacao ? '• ' + p.cor_armacao : ''}
+            ${escapeHtml(p.formato || '-')} ${p.estilo ? '• ' + escapeHtml(p.estilo) : ''} ${p.cor_armacao ? '• ' + escapeHtml(p.cor_armacao) : ''}
           </td>
           <td class="px-4 sm:px-6 py-4">
             <p class="text-gray-900 font-medium text-sm sm:text-base">${formatarMoeda(p.preco_venda)}</p>
             <p class="text-xs sm:text-sm text-gray-500">Custo: ${formatarMoeda(p.preco_custo)}</p>
           </td>
           <td class="px-4 sm:px-6 py-4">
-            <span class="px-2 py-1 text-xs font-medium rounded-full ${statusClass(p.status)}">${p.status}</span>
+            <span class="px-2 py-1 text-xs font-medium rounded-full ${statusClass(p.status)}">${escapeHtml(p.status)}</span>
           </td>
-          <td class="hidden sm:table-cell px-4 sm:px-6 py-4 text-gray-900 font-medium">${p.vezes_em_maleta || 0}</td>
+          <td class="hidden sm:table-cell px-4 sm:px-6 py-4 text-gray-900 font-medium">${Number(p.vezes_em_maleta) || 0}</td>
           <td class="px-4 sm:px-6 py-4">
             <div class="flex items-center space-x-2">
-              <button onclick="editarProduto(${p.id})" class="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors" title="Editar"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg></button>
-              <button onclick="excluirProduto(${p.id})" class="p-2 text-red-500 hover:text-red-700 hover:bg-red-50 rounded-lg transition-colors" title="Excluir"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg></button>
+              <button onclick="editarProduto(${Number(p.id)})" class="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors" title="Editar"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg></button>
+              <button onclick="excluirProduto(${Number(p.id)})" class="p-2 text-red-500 hover:text-red-700 hover:bg-red-50 rounded-lg transition-colors" title="Excluir"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg></button>
             </div>
           </td>
         </tr>
@@ -612,9 +617,6 @@
     };
 
     // Acerto
-    function escapeHtml(v) {
-      return String(v ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-    }
 
     // As duas listas mostram os mesmos produtos em CONDICIONAL: o cliente
     // ou comprou ou devolveu cada um. Marcar em uma lista desmarca na outra.
@@ -691,12 +693,12 @@
             <td class="px-6 py-4 text-gray-900 font-medium">${i + 1}</td>
             <td class="px-6 py-4">
               <div class="flex items-center">
-                ${p.imagem_url ? `<img src="${p.imagem_url}" alt="${p.nome}" class="w-10 h-10 object-cover rounded mr-3" onerror="imgFallback(this)">` : '<div class="w-10 h-10 bg-gray-100 rounded mr-3"></div>'}
-                <span>${p.nome}</span>
+                ${p.imagem_url ? `<img src="${escapeHtml(p.imagem_url)}" alt="${escapeHtml(p.nome)}" class="w-10 h-10 object-cover rounded mr-3" onerror="imgFallback(this)">` : '<div class="w-10 h-10 bg-gray-100 rounded mr-3"></div>'}
+                <span>${escapeHtml(p.nome)}</span>
               </div>
             </td>
-            <td class="px-6 py-4 text-gray-500">${p.codigo_sku}</td>
-            <td class="px-6 py-4 text-gray-900 font-medium">${p.vezes_em_maleta}</td>
+            <td class="px-6 py-4 text-gray-500">${escapeHtml(p.codigo_sku)}</td>
+            <td class="px-6 py-4 text-gray-900 font-medium">${Number(p.vezes_em_maleta) || 0}</td>
           </tr>
         `).join('') || '<tr><td colspan="4" class="px-6 py-4 text-center text-gray-500">Nenhum dado</td></tr>';
       } catch (err) {
