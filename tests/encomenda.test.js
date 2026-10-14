@@ -100,46 +100,59 @@ function extrairFuncao(html, nome) {
 }
 
 const FUNCOES = ['escapeHtml', 'fotosDoProduto', 'indiceCircular', 'ehSobEncomenda', 'calcularSinal', 'passaFiltroStatus', 'etiquetaProduto',
-  'montarTextoEncomenda', 'encomendarProduto', 'renderizarCatalogo'];
+  'itemEhEncomenda', 'resumoMaleta', 'renderizarCatalogo', 'toggleMaleta', 'salvarMaleta', 'atualizarMaletaUI', 'montarTextoWhatsapp'];
 
 function elemento() {
   return {
-    innerHTML: '', value: '', filhos: [], dataset: {},
-    classList: { add() {}, remove() {} },
+    innerHTML: '', value: '', textContent: '', filhos: [], dataset: {}, escondido: false,
+    classList: {
+      add(c) { if (c === 'hidden') this.dono.escondido = true; },
+      remove(c) { if (c === 'hidden') this.dono.escondido = false; },
+    },
     appendChild(f) { this.filhos.push(f); },
   };
 }
+function novoElemento() {
+  const e = elemento();
+  e.classList.dono = e;
+  return e;
+}
 
-function vitrine(produtos, filtro = '') {
+const formatarMoeda = (v) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v).replace(/ /g, ' ');
+
+function vitrine(produtos, filtro = '', itens = []) {
   const html = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
-  const abertos = [];
   const toasts = [];
-  const catalogoGrid = elemento();
+  const guardado = {};
+  const catalogoGrid = novoElemento();
+  const els = {
+    maletaVazia: novoElemento(), maletaItens: novoElemento(), maletaFormulario: novoElemento(),
+    maletaFooter: novoElemento(), maletaTotal: novoElemento(), maletaSinal: novoElemento(),
+  };
   const ctx = vm.createContext({
     produtos,
-    maleta: { itens: [] },
-    fotoCard: {},
-    whatsappNumero: '5511999990000',
+    maleta: { itens },
     filtroStatus: { value: filtro },
     filtroFormato: { value: '' },
     catalogoGrid,
-    emptyState: elemento(),
-    document: { createElement: elemento },
-    window: { open: (url) => abertos.push(url) },
-    formatarMoeda: (v) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v),
-    sanitizeWhatsapp: (n) => String(n).replace(/\D/g, ''),
+    emptyState: novoElemento(),
+    ...els,
+    document: { createElement: novoElemento, getElementById: novoElemento },
+    localStorage: { setItem: (k, v) => { guardado[k] = v; } },
+    formatarMoeda,
     mostrarToast: (m) => toasts.push(m),
-    encodeURIComponent, Intl, Number, String, Math,
+    Intl, Number, String, Math,
   });
   vm.runInContext(`${FUNCOES.map((f) => extrairFuncao(html, f)).join('\n')}\n${FUNCOES.map((f) => `this.${f} = ${f};`).join('\n')}`, ctx);
   ctx.renderizarCatalogo();
-  const cards = catalogoGrid.filhos.map((c) => c.innerHTML.replace(/ /g, ' '));
-  return { ctx, cards, abertos, toasts };
+  const cards = catalogoGrid.filhos.map((c) => c.innerHTML);
+  return { ctx, cards, toasts, guardado, els };
 }
 
 const pronta = { id: 1, nome: 'Aviador', codigo_sku: 'AV-01', preco_venda: '199.99', status: 'DISPONIVEL', disponibilidade: 'PRONTA_ENTREGA' };
 const condicional = { ...pronta, id: 2, codigo_sku: 'AV-02', status: 'CONDICIONAL' };
 const encomenda = { id: 3, nome: 'Cat Eye', codigo_sku: 'CE-09', preco_venda: '350.25', status: 'DISPONIVEL', disponibilidade: 'SOB_ENCOMENDA' };
+const encomenda2 = { ...encomenda, id: 4, nome: 'Redondo', codigo_sku: 'RD-01', preco_venda: '99.99' };
 
 describe('vitrine: produtos Sob Encomenda', () => {
   it('calcula o sinal como 50% arredondado para centavos', () => {
@@ -149,7 +162,7 @@ describe('vitrine: produtos Sob Encomenda', () => {
     assert.equal(ctx.calcularSinal(120), 60);
   });
 
-  it('mostra etiqueta verde DISPONÍVEL e azul SOB ENCOMENDA com o texto do sinal', () => {
+  it('mostra etiqueta verde DISPONÍVEL e azul SOB ENCOMENDA, e os dois vão para a maleta', () => {
     const { cards } = vitrine([pronta, encomenda]);
     assert.match(cards[0], /bg-green-100 text-green-700">DISPONÍVEL</);
     assert.doesNotMatch(cards[0], /50% sinal/);
@@ -157,8 +170,9 @@ describe('vitrine: produtos Sob Encomenda', () => {
 
     assert.match(cards[1], /bg-blue-100 text-blue-700">SOB ENCOMENDA</);
     assert.match(cards[1], /50% sinal \+ 50% na entrega/);
-    assert.match(cards[1], /encomendarProduto\(3\)/);
-    assert.doesNotMatch(cards[1], /toggleMaleta/);
+    assert.match(cards[1], /toggleMaleta\(3\)/);
+    assert.match(cards[1], /bg-blue-600/);
+    assert.doesNotMatch(cards[1], /encomendarProduto/);
   });
 
   it('filtra Sob Encomenda e tira as encomendas de "Disponíveis"', () => {
@@ -170,24 +184,96 @@ describe('vitrine: produtos Sob Encomenda', () => {
     assert.match(disp[0], /AV-01/);
     assert.equal(vitrine([pronta, condicional, encomenda], '').cards.length, 3);
   });
+});
 
-  it('abre o WhatsApp com a mensagem de encomenda, preço e sinal', () => {
-    const v = vitrine([encomenda]);
-    v.ctx.encomendarProduto(3);
-    assert.equal(v.abertos.length, 1);
-    const url = new URL(v.abertos[0]);
-    assert.equal(url.origin + url.pathname, 'https://wa.me/5511999990000');
-    assert.equal(
-      url.searchParams.get('text').replace(/ /g, ' '),
-      'Olá! Gostaria de encomendar o modelo Cat Eye (Ref: CE-09). O valor é R$ 350,25 (com sinal de 50% de R$ 175,13). Como procedemos?'
-    );
+describe('maleta com itens Sob Encomenda', () => {
+  it('adiciona a encomenda na maleta marcada como encomenda e com preço numérico', () => {
+    const v = vitrine([pronta, encomenda]);
+    v.ctx.toggleMaleta(1);
+    v.ctx.toggleMaleta(3);
+    assert.deepEqual(v.ctx.maleta.itens.map((i) => [i.id, i.preco, i.encomenda]), [[1, 199.99, false], [3, 350.25, true]]);
+    assert.match(v.toasts[1], /Cat Eye adicionado à maleta \(sob encomenda\)/);
+    assert.equal(JSON.parse(v.guardado.nix_maleta).itens.length, 2);
+    v.ctx.toggleMaleta(3);
+    assert.deepEqual(v.ctx.maleta.itens.map((i) => i.id), [1]);
   });
 
-  it('avisa quando o WhatsApp não está configurado', () => {
-    const v = vitrine([encomenda]);
-    v.ctx.whatsappNumero = '';
-    v.ctx.encomendarProduto(3);
-    assert.equal(v.abertos.length, 0);
-    assert.equal(v.toasts.length, 1);
+  it('destaca a encomenda na lista com a etiqueta e o sinal de 50%', () => {
+    const v = vitrine([pronta, encomenda]);
+    v.ctx.toggleMaleta(1);
+    v.ctx.toggleMaleta(3);
+    const lista = v.els.maletaItens.innerHTML;
+    assert.equal((lista.match(/SOB ENCOMENDA/g) || []).length, 1);
+    assert.match(lista, /50% de sinal: R\$ 175,13/);
+    assert.equal(v.els.maletaTotal.textContent, 'R$ 550,24');
+    assert.equal(v.els.maletaSinal.textContent, 'Sinal das encomendas (50%): R$ 175,13');
+    assert.equal(v.els.maletaSinal.escondido, false);
+  });
+
+  it('esconde o sinal quando só há itens para prova e soma preços que vêm como texto', () => {
+    // maleta antiga do navegador: preço guardado como texto, sem o campo encomenda
+    const v = vitrine([pronta], '', [{ id: 1, nome: 'Aviador', preco: '199.99' }, { id: 2, nome: 'Outro', preco: '10.01' }]);
+    v.ctx.atualizarMaletaUI();
+    assert.doesNotMatch(v.els.maletaItens.innerHTML, /SOB ENCOMENDA/);
+    assert.equal(v.els.maletaTotal.textContent, 'R$ 210,00');
+    assert.equal(v.els.maletaSinal.escondido, true);
+  });
+
+  const cliente = { nome: 'Ana', telefone: '11 99999-0000', rua: 'Rua A', numero: '10', bairro: 'Centro', cidade: 'São Paulo/SP' };
+
+  it('separa a mensagem do WhatsApp em itens para prova e encomendas com sinal', () => {
+    const v = vitrine([pronta, condicional, encomenda, encomenda2]);
+    for (const id of [1, 3, 2, 4]) v.ctx.toggleMaleta(id);
+    assert.equal(v.ctx.montarTextoWhatsapp(v.ctx.maleta, cliente), [
+      '*Nix Glasses - Novo Pedido*',
+      '',
+      '*Cliente:* Ana',
+      '*Telefone:* 11 99999-0000',
+      '*Endereço:* Rua A, 10 - Centro, São Paulo/SP',
+      '',
+      '*Para provar (pronta entrega):*',
+      '1. Aviador - R$ 199,99',
+      '2. Aviador - R$ 199,99',
+      '*Subtotal para prova:* R$ 399,98',
+      '',
+      '*Sob encomenda (sinal de 50%):*',
+      '1. Cat Eye - R$ 350,25 | Sinal 50%: R$ 175,13',
+      '2. Redondo - R$ 99,99 | Sinal 50%: R$ 50,00',
+      '*Total das encomendas:* R$ 450,24',
+      '*Sinal a pagar (50%):* R$ 225,13',
+      '',
+      '*Total geral:* R$ 850,22',
+      '',
+      'Aguardamos sua confirmação!',
+    ].join('\n'));
+  });
+
+  it('omite a seção vazia quando a maleta só tem um tipo de item', () => {
+    const v = vitrine([pronta, encomenda]);
+    v.ctx.toggleMaleta(3);
+    const soEncomenda = v.ctx.montarTextoWhatsapp(v.ctx.maleta, cliente);
+    assert.doesNotMatch(soEncomenda, /Para provar/);
+    assert.match(soEncomenda, /\*Sinal a pagar \(50%\):\* R\$ 175,13/);
+
+    v.ctx.toggleMaleta(3);
+    v.ctx.toggleMaleta(1);
+    const soProva = v.ctx.montarTextoWhatsapp(v.ctx.maleta, cliente);
+    assert.match(soProva, /\*Para provar \(pronta entrega\):\*\n1\. Aviador - R\$ 199,99/);
+    assert.doesNotMatch(soProva, /encomenda|Sinal/i);
+  });
+});
+
+describe('checkout da maleta com encomendas', () => {
+  it('conta a encomenda como adicionada à maleta sem mudar status nem disponibilidade', async () => {
+    const { body: a } = await criarProduto(base('CK-1'));
+    const { body: e } = await criarProduto(base('CK-2', { disponibilidade: 'SOB_ENCOMENDA' }));
+    const r = await api('POST', '/api/maleta/checkout', { auth: false, body: { produtoIds: [a.id, e.id] } });
+    assert.equal(r.status, 200);
+    assert.equal(r.body.atualizados.length, 2);
+    const { rows } = await h.pool.query('SELECT codigo_sku, status, disponibilidade, vezes_em_maleta FROM produtos ORDER BY id');
+    assert.deepEqual(rows, [
+      { codigo_sku: 'CK-1', status: 'DISPONIVEL', disponibilidade: 'PRONTA_ENTREGA', vezes_em_maleta: 1 },
+      { codigo_sku: 'CK-2', status: 'DISPONIVEL', disponibilidade: 'SOB_ENCOMENDA', vezes_em_maleta: 1 },
+    ]);
   });
 });

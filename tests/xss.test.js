@@ -107,13 +107,17 @@ describe('vitrine (index.html) escapa dados de produto', () => {
 
   it('na maleta guardada no navegador', () => {
     const maletaItens = elemento();
-    const ctx = carregar('index.html', ['escapeHtml', 'atualizarMaletaUI'], {
-      maleta: { itens: [{ id: 7, nome: PAYLOAD, preco: 100, imagem: `x" onerror="alert(1)` }] },
+    const ctx = carregar('index.html', ['escapeHtml', 'calcularSinal', 'itemEhEncomenda', 'resumoMaleta', 'atualizarMaletaUI'], {
+      maleta: { itens: [
+        { id: 7, nome: PAYLOAD, preco: 100, imagem: `x" onerror="alert(1)` },
+        { id: 8, nome: PAYLOAD, preco: 100, imagem: `x" onerror="alert(1)`, encomenda: true },
+      ] },
       maletaVazia: elemento(),
       maletaItens,
       maletaFormulario: elemento(),
       maletaFooter: elemento(),
       maletaTotal: elemento(),
+      maletaSinal: elemento(),
       formatarMoeda: v => `R$ ${v}`,
       document: { getElementById: elemento },
     });

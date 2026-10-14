@@ -234,12 +234,13 @@ describe('vitrine: carrossel de fotos', () => {
     assert.match(ctx.detalhesConteudo.innerHTML, new RegExp(`<img src="${fotos[0]}"`));
   });
 
-  it('detalhes de encomenda mostram o sinal e o botão de encomendar', () => {
+  it('detalhes de encomenda mostram o sinal e o botão de encomendar pela maleta', () => {
     const { ctx } = vitrine([{ ...produto, disponibilidade: 'SOB_ENCOMENDA' }]);
     ctx.detalhes = { id: 1, indice: 0 };
     ctx.renderizarDetalhes();
     assert.match(ctx.detalhesConteudo.innerHTML, /50% sinal \+ 50% na entrega/);
-    assert.match(ctx.detalhesConteudo.innerHTML, /encomendarProduto\(1\)/);
-    assert.doesNotMatch(ctx.detalhesConteudo.innerHTML, /toggleMaleta/);
+    assert.match(ctx.detalhesConteudo.innerHTML, /toggleMaleta\(1\)/);
+    assert.match(ctx.detalhesConteudo.innerHTML, /Encomendar \(adicionar à Maleta\)/);
+    assert.doesNotMatch(ctx.detalhesConteudo.innerHTML, /encomendarProduto/);
   });
 });
