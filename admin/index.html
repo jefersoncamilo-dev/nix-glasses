@@ -35,6 +35,10 @@
         <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/></svg>
         Produtos
       </a>
+      <a href="#" data-tab="lote" class="tab-btn flex items-center px-4 py-3 text-gray-700 rounded-lg hover:bg-gray-100 font-medium">
+        <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h18M3 14h18M10 3v18M5 3h14a2 2 0 012 2v14a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2z"/></svg>
+        Cadastro em Lote
+      </a>
       <a href="#" data-tab="clientes" class="tab-btn flex items-center px-4 py-3 text-gray-700 rounded-lg hover:bg-gray-100 font-medium">
         <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"/></svg>
         Clientes
@@ -83,10 +87,13 @@
       <div id="tab-produtos" class="tab-content">
         <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-6">
           <h3 class="text-lg font-semibold text-gray-900">Gerenciar Produtos</h3>
+          <div class="flex flex-col sm:flex-row gap-2">
+          <button id="btnAbrirLote" type="button" class="w-full sm:w-auto justify-center bg-gray-100 hover:bg-gray-200 text-gray-700 px-4 py-2 rounded-lg font-medium transition-colors">Cadastro em Lote</button>
           <button id="btnNovoProduto" class="w-full sm:w-auto justify-center bg-orange-500 hover:bg-orange-600 text-white px-4 py-2 rounded-lg font-medium transition-colors flex items-center">
             <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
             Novo Produto
           </button>
+          </div>
         </div>
 
         <!-- Filtros -->
@@ -105,7 +112,10 @@
           <select id="filtroFormatoAdmin" class="w-full sm:w-auto px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500">
             <option value="">Todos os Formatos</option>
           </select>
-          <input type="text" id="buscaAdmin" placeholder="Buscar por nome ou SKU..." class="w-full sm:flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 sm:min-w-[200px]">
+          <select id="filtroFornecedorAdmin" class="w-full sm:w-auto px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500">
+            <option value="">Todos os Fornecedores</option>
+          </select>
+          <input type="text" id="buscaAdmin" placeholder="Buscar por nome, SKU, fornecedor ou código..." class="w-full sm:flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 sm:min-w-[200px]">
         </div>
 
         <!-- Tabela -->
@@ -132,6 +142,54 @@
             <svg class="mx-auto h-12 w-12 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/></svg>
             <p class="mt-4 text-gray-500">Nenhum produto cadastrado</p>
           </div>
+        </div>
+      </div>
+
+      <!-- Aba Cadastro em Lote -->
+      <div id="tab-lote" class="tab-content hidden">
+        <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
+          <div>
+            <h3 class="text-lg font-semibold text-gray-900">Cadastro em Lote</h3>
+            <p class="text-sm text-gray-500">Uma linha por produto. Linhas vazias são ignoradas. As fotos você adiciona depois, editando cada produto.</p>
+          </div>
+          <div class="flex flex-col sm:flex-row gap-2">
+            <button id="btnLoteAdicionar" class="bg-gray-100 hover:bg-gray-200 text-gray-700 px-4 py-2 rounded-lg font-medium transition-colors">+ Linha</button>
+            <button id="btnLoteLimpar" class="bg-gray-100 hover:bg-gray-200 text-gray-700 px-4 py-2 rounded-lg font-medium transition-colors">Limpar</button>
+            <button id="btnLoteSalvar" class="bg-orange-500 hover:bg-orange-600 text-white px-6 py-2 rounded-lg font-medium transition-colors">Salvar todos</button>
+          </div>
+        </div>
+
+        <div class="grid lg:grid-cols-2 gap-4 mb-4">
+          <details class="bg-white rounded-xl border border-gray-200 p-4">
+            <summary class="cursor-pointer font-medium text-gray-900">Colar da planilha (Excel / Google Sheets)</summary>
+            <p class="text-xs text-gray-500 mt-2 mb-2">Copie as linhas na planilha e cole abaixo. Ordem das colunas: <span id="loteOrdemColunas" class="font-medium"></span>. A linha de cabeçalho é ignorada. Preços aceitam 199,90 ou R$ 1.234,56.</p>
+            <textarea id="loteColar" rows="4" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm font-mono focus:outline-none focus:ring-2 focus:ring-orange-500" placeholder="Cole aqui..."></textarea>
+            <button id="btnLoteColar" class="mt-2 bg-gray-100 hover:bg-gray-200 text-gray-700 px-4 py-2 rounded-lg text-sm font-medium transition-colors">Adicionar linhas coladas</button>
+          </details>
+          <div class="bg-white rounded-xl border border-gray-200 p-4">
+            <p class="font-medium text-gray-900 mb-2">Mesmo fornecedor para todas as linhas</p>
+            <div class="flex flex-col sm:flex-row gap-2">
+              <input type="text" id="loteFornecedorTodos" maxlength="120" list="listaFornecedores" class="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-orange-500" placeholder="Nome do fornecedor">
+              <button id="btnLoteFornecedorTodos" class="bg-gray-100 hover:bg-gray-200 text-gray-700 px-4 py-2 rounded-lg text-sm font-medium transition-colors">Aplicar a todas</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="bg-white rounded-xl border border-gray-200 overflow-hidden">
+          <div class="overflow-x-auto">
+            <table class="w-full min-w-[1500px] text-sm">
+              <thead class="bg-gray-50 border-b border-gray-200">
+                <tr id="loteCabecalho"></tr>
+              </thead>
+              <tbody id="tabelaLote" class="divide-y divide-gray-200"></tbody>
+            </table>
+          </div>
+        </div>
+        <p id="loteResumo" class="text-sm text-gray-500 mt-2"></p>
+
+        <div id="loteCriados" class="hidden mt-6 bg-white rounded-xl border border-green-200 p-4">
+          <p class="font-medium text-green-700 mb-3" id="loteCriadosTitulo"></p>
+          <ul id="loteCriadosLista" class="divide-y divide-gray-100"></ul>
         </div>
       </div>
 
@@ -294,6 +352,14 @@
             <input type="number" step="0.01" id="preco_venda" name="preco_venda" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500" required min="0">
           </div>
           <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Fornecedor</label>
+            <input type="text" id="fornecedor" name="fornecedor" maxlength="120" list="listaFornecedores" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500" placeholder="Ex: Ótica Atacado SP">
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Código do Fornecedor</label>
+            <input type="text" id="codigo_fornecedor" name="codigo_fornecedor" maxlength="100" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500" placeholder="Código do produto no fornecedor">
+          </div>
+          <div>
             <label class="block text-sm font-medium text-gray-700 mb-1">Formato</label>
             <input type="text" id="formato" name="formato" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500" placeholder="Ex: Redondo, Quadrado, Aviador">
           </div>
@@ -336,6 +402,8 @@
     </div>
   </div>
 
+  <datalist id="listaFornecedores"></datalist>
+
   <!-- Toast -->
   <div id="toastContainer" class="fixed top-6 right-6 z-50 space-y-2"></div>
 
@@ -353,6 +421,7 @@
     const filtroFormatoAdmin = document.getElementById('filtroFormatoAdmin');
     const filtroDisponibilidadeAdmin = document.getElementById('filtroDisponibilidadeAdmin');
     const buscaAdmin = document.getElementById('buscaAdmin');
+    const filtroFornecedorAdmin = document.getElementById('filtroFornecedorAdmin');
     const modalProduto = document.getElementById('modalProduto');
     const formProduto = document.getElementById('formProduto');
     const btnNovoProduto = document.getElementById('btnNovoProduto');
@@ -427,6 +496,7 @@
         tab.classList.add('bg-orange-50', 'text-orange-600');
         document.getElementById(`tab-${target}`).classList.remove('hidden');
         if (target === 'acerto') carregarAcerto();
+        if (target === 'lote') iniciarLote();
         if (target === 'clientes') carregarClientes();
         if (target === 'metricas') carregarMetricas();
         if (target === 'config') carregarWhatsApp();
@@ -440,6 +510,247 @@
     closeSidebar.addEventListener('click', () => { sidebar.classList.remove('open'); sidebarOverlay.classList.add('hidden'); });
     sidebarOverlay.addEventListener('click', () => { sidebar.classList.remove('open'); sidebarOverlay.classList.add('hidden'); });
 
+    // ---------- Cadastro em lote ----------
+    // Ordem das colunas da tabela e da colagem da planilha
+    const COLUNAS_LOTE = [
+      { campo: 'nome', titulo: 'Nome *', largura: 'w-56' },
+      { campo: 'codigo_sku', titulo: 'SKU *', largura: 'w-32' },
+      { campo: 'fornecedor', titulo: 'Fornecedor', largura: 'w-40' },
+      { campo: 'codigo_fornecedor', titulo: 'Cód. fornecedor', largura: 'w-32' },
+      { campo: 'preco_custo', titulo: 'Custo *', largura: 'w-24' },
+      { campo: 'preco_venda', titulo: 'Venda *', largura: 'w-24' },
+      { campo: 'disponibilidade', titulo: 'Disponibilidade', largura: 'w-36', opcoes: [['PRONTA_ENTREGA', 'Pronta Entrega'], ['SOB_ENCOMENDA', 'Sob Encomenda']] },
+      { campo: 'status', titulo: 'Status', largura: 'w-32', opcoes: [['DISPONIVEL', 'Disponível'], ['CONDICIONAL', 'Condicional'], ['ESGOTADO', 'Esgotado']] },
+      { campo: 'formato', titulo: 'Formato', largura: 'w-28' },
+      { campo: 'estilo', titulo: 'Estilo', largura: 'w-28' },
+      { campo: 'cor_armacao', titulo: 'Cor', largura: 'w-28' },
+    ];
+    const MAX_LOTE = 100;
+    let linhasLote = [];
+    let errosLote = [];
+    const tabelaLote = document.getElementById('tabelaLote');
+
+    function linhaLoteVazia() {
+      return { nome: '', codigo_sku: '', fornecedor: '', codigo_fornecedor: '', preco_custo: '', preco_venda: '', disponibilidade: 'PRONTA_ENTREGA', status: 'DISPONIVEL', formato: '', estilo: '', cor_armacao: '' };
+    }
+
+    function linhaLoteEstaVazia(l) {
+      return ['nome', 'codigo_sku', 'fornecedor', 'codigo_fornecedor', 'preco_custo', 'preco_venda', 'formato', 'estilo', 'cor_armacao'].every(c => !String(l[c] || '').trim());
+    }
+
+    // "R$ 1.234,56", "199,90" ou "199.90" -> 1234.56 / 199.9. Vazio ou inválido -> NaN.
+    function lerPreco(v) {
+      let t = String(v ?? '').replace(/R\$/i, '').replace(/\s/g, '');
+      if (!t) return NaN;
+      if (t.includes(',')) t = t.replace(/\./g, '').replace(',', '.');
+      else if (/^\d{1,3}(\.\d{3})+$/.test(t)) t = t.replace(/\./g, ''); // 1.234 = 1234 (ponto de milhar)
+      if (!/^\d+(\.\d+)?$/.test(t)) return NaN;
+      return Math.round(Number(t) * 100) / 100;
+    }
+
+    function lerDisponibilidade(v) {
+      const t = String(v || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+      return t.includes('encomenda') ? 'SOB_ENCOMENDA' : 'PRONTA_ENTREGA';
+    }
+
+    function lerStatus(v) {
+      const t = String(v || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+      if (t.startsWith('condic')) return 'CONDICIONAL';
+      if (t.startsWith('esgot')) return 'ESGOTADO';
+      return 'DISPONIVEL';
+    }
+
+    // Texto copiado de uma planilha (colunas separadas por TAB, ou ; num CSV) -> linhas do lote
+    function linhasDaPlanilha(texto) {
+      const linhas = String(texto || '').split(/\r?\n/).filter(l => l.trim());
+      const resultado = [];
+      linhas.forEach((bruta, i) => {
+        const cel = (bruta.includes('\t') ? bruta.split('\t') : bruta.split(';')).map(c => c.trim());
+        if (i === 0 && /^nome/i.test(cel[0] || '')) return; // cabeçalho
+        const l = linhaLoteVazia();
+        COLUNAS_LOTE.forEach((col, j) => {
+          const v = cel[j] || '';
+          if (col.campo === 'disponibilidade') l[col.campo] = lerDisponibilidade(v);
+          else if (col.campo === 'status') l[col.campo] = lerStatus(v);
+          else l[col.campo] = v;
+        });
+        resultado.push(l);
+      });
+      return resultado;
+    }
+
+    // Erros de cada linha preenchida: { campo: mensagem }. skusExistentes em minúsculas.
+    function validarLote(linhas, skusExistentes) {
+      const vistos = new Map();
+      return linhas.map((l, i) => {
+        const erros = {};
+        if (linhaLoteEstaVazia(l)) return erros;
+        if (!String(l.nome || '').trim()) erros.nome = 'Informe o nome';
+        const sku = String(l.codigo_sku || '').trim().toLowerCase();
+        if (!sku) erros.codigo_sku = 'Informe o SKU';
+        else if (skusExistentes.has(sku)) erros.codigo_sku = 'SKU já cadastrado';
+        else if (vistos.has(sku)) erros.codigo_sku = `SKU repetido na linha ${vistos.get(sku) + 1}`;
+        else vistos.set(sku, i);
+        ['preco_custo', 'preco_venda'].forEach(c => {
+          if (Number.isNaN(lerPreco(l[c]))) erros[c] = 'Preço inválido';
+        });
+        return erros;
+      });
+    }
+
+    function renderizarLote() {
+      tabelaLote.innerHTML = linhasLote.map((l, i) => {
+        const erros = errosLote[i] || {};
+        const celulas = COLUNAS_LOTE.map(col => {
+          const erro = erros[col.campo];
+          const borda = erro ? 'border-red-500 bg-red-50' : 'border-gray-300';
+          const attrs = `data-linha="${i}" data-campo="${col.campo}" class="lote-campo ${col.largura} px-2 py-1.5 border ${borda} rounded focus:outline-none focus:ring-2 focus:ring-orange-500" title="${escapeHtml(erro || '')}"`;
+          const campo = col.opcoes
+            ? `<select ${attrs}>${col.opcoes.map(([v, t]) => `<option value="${v}"${l[col.campo] === v ? ' selected' : ''}>${t}</option>`).join('')}</select>`
+            : `<input type="text" ${attrs} value="${escapeHtml(l[col.campo])}"${col.campo.startsWith('preco') ? ' inputmode="decimal"' : ''}>`;
+          return `<td class="px-2 py-2 align-top">${campo}</td>`;
+        }).join('');
+        const mensagens = Object.values(erros);
+        return `
+        <tr>
+          <td class="px-3 py-2 align-top text-gray-400 font-medium">${i + 1}</td>
+          ${celulas}
+          <td class="px-2 py-2 align-top whitespace-nowrap">
+            <button type="button" data-acao="duplicar" data-linha="${i}" class="px-2 py-1.5 text-gray-600 hover:bg-gray-100 rounded" title="Duplicar linha (sem o SKU)">⧉</button>
+            <button type="button" data-acao="remover" data-linha="${i}" class="px-2 py-1.5 text-red-500 hover:bg-red-50 rounded" title="Remover linha">✕</button>
+          </td>
+        </tr>${mensagens.length ? `
+        <tr class="lote-erro"><td></td><td colspan="${COLUNAS_LOTE.length + 1}" class="px-2 pb-2 text-xs text-red-600">${mensagens.map(escapeHtml).join(' • ')}</td></tr>` : ''}`;
+      }).join('');
+      const preenchidas = linhasLote.filter(l => !linhaLoteEstaVazia(l)).length;
+      document.getElementById('loteResumo').textContent = `${preenchidas} produto(s) preenchido(s) de ${linhasLote.length} linha(s). Máximo de ${MAX_LOTE} por vez.`;
+    }
+
+    function iniciarLote() {
+      if (!document.getElementById('loteCabecalho').innerHTML) {
+        document.getElementById('loteCabecalho').innerHTML = '<th class="px-3 py-3 text-left text-xs font-semibold text-gray-500 uppercase">#</th>'
+          + COLUNAS_LOTE.map(c => `<th class="px-2 py-3 text-left text-xs font-semibold text-gray-500 uppercase whitespace-nowrap">${c.titulo}</th>`).join('')
+          + '<th class="px-2 py-3"></th>';
+        document.getElementById('loteOrdemColunas').textContent = COLUNAS_LOTE.map(c => c.titulo.replace(' *', '')).join(', ');
+      }
+      if (!linhasLote.length) linhasLote = [linhaLoteVazia(), linhaLoteVazia(), linhaLoteVazia()];
+      renderizarLote();
+      if (!todosProdutos.length) carregarProdutos();
+    }
+
+    function adicionarLinhasLote(novas) {
+      // Troca as linhas vazias do fim pelas novas
+      while (linhasLote.length && linhaLoteEstaVazia(linhasLote[linhasLote.length - 1])) linhasLote.pop();
+      linhasLote.push(...novas);
+      errosLote = [];
+      renderizarLote();
+    }
+
+    tabelaLote.addEventListener('input', (e) => {
+      const el = e.target.closest('.lote-campo');
+      if (!el) return;
+      const i = Number(el.dataset.linha);
+      linhasLote[i][el.dataset.campo] = el.value;
+      if (errosLote[i]?.[el.dataset.campo]) {
+        delete errosLote[i][el.dataset.campo];
+        el.classList.remove('border-red-500', 'bg-red-50');
+        el.classList.add('border-gray-300');
+      }
+    });
+    tabelaLote.addEventListener('click', (e) => {
+      const btn = e.target.closest('button[data-acao]');
+      if (!btn) return;
+      const i = Number(btn.dataset.linha);
+      if (btn.dataset.acao === 'duplicar') linhasLote.splice(i + 1, 0, { ...linhasLote[i], codigo_sku: '' });
+      else linhasLote.splice(i, 1);
+      if (!linhasLote.length) linhasLote.push(linhaLoteVazia());
+      errosLote = [];
+      renderizarLote();
+    });
+    document.getElementById('btnLoteAdicionar').addEventListener('click', () => {
+      linhasLote.push(linhaLoteVazia());
+      renderizarLote();
+    });
+    document.getElementById('btnLoteLimpar').addEventListener('click', () => {
+      if (linhasLote.some(l => !linhaLoteEstaVazia(l)) && !confirm('Apagar todas as linhas do lote?')) return;
+      linhasLote = [linhaLoteVazia(), linhaLoteVazia(), linhaLoteVazia()];
+      errosLote = [];
+      renderizarLote();
+    });
+    document.getElementById('btnLoteColar').addEventListener('click', () => {
+      const campo = document.getElementById('loteColar');
+      const novas = linhasDaPlanilha(campo.value);
+      if (!novas.length) return mostrarToast('Nada para adicionar', 'error');
+      adicionarLinhasLote(novas);
+      campo.value = '';
+      mostrarToast(`${novas.length} linha(s) adicionada(s)`);
+    });
+    document.getElementById('btnLoteFornecedorTodos').addEventListener('click', () => {
+      const f = document.getElementById('loteFornecedorTodos').value.trim();
+      linhasLote.forEach(l => { if (!linhaLoteEstaVazia(l)) l.fornecedor = f; });
+      renderizarLote();
+    });
+
+    document.getElementById('btnLoteSalvar').addEventListener('click', async () => {
+      const btn = document.getElementById('btnLoteSalvar');
+      const indices = linhasLote.map((l, i) => i).filter(i => !linhaLoteEstaVazia(linhasLote[i]));
+      if (!indices.length) return mostrarToast('Preencha ao menos um produto', 'error');
+      if (indices.length > MAX_LOTE) return mostrarToast(`Máximo de ${MAX_LOTE} produtos por vez`, 'error');
+
+      const skusExistentes = new Set(todosProdutos.map(p => String(p.codigo_sku).toLowerCase()));
+      errosLote = validarLote(linhasLote, skusExistentes);
+      if (errosLote.some(e => Object.keys(e).length)) {
+        renderizarLote();
+        return mostrarToast('Corrija as linhas marcadas em vermelho', 'error');
+      }
+
+      const produtos = indices.map(i => {
+        const l = linhasLote[i];
+        return { ...l, preco_custo: lerPreco(l.preco_custo), preco_venda: lerPreco(l.preco_venda) };
+      });
+      btn.disabled = true;
+      try {
+        const res = await fetchAdmin('/api/admin/produtos/lote', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ produtos }),
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          // Erros do servidor vêm pelo índice dentro de `produtos`: volta para a linha da tabela
+          errosLote = [];
+          (data.erros || []).forEach(e => {
+            const i = indices[e.linha];
+            errosLote[i] = { ...(errosLote[i] || {}), [e.campo]: e.mensagem };
+          });
+          renderizarLote();
+          throw new Error(data.error || 'Erro ao salvar');
+        }
+        mostrarToast(`${data.produtos.length} produto(s) cadastrado(s)!`);
+        linhasLote = [linhaLoteVazia(), linhaLoteVazia(), linhaLoteVazia()];
+        errosLote = [];
+        renderizarLote();
+        await carregarProdutos();
+        renderizarCriadosLote(data.produtos);
+      } catch (err) {
+        console.error(err);
+        mostrarToast(err.message, 'error');
+      } finally {
+        btn.disabled = false;
+      }
+    });
+
+    // Lista do que acabou de ser cadastrado, com atalho para adicionar as fotos
+    function renderizarCriadosLote(produtos) {
+      document.getElementById('loteCriadosTitulo').textContent = `${produtos.length} produto(s) cadastrado(s). Adicione as fotos de cada um:`;
+      document.getElementById('loteCriadosLista').innerHTML = produtos.map(p => `
+        <li class="py-2 flex items-center justify-between gap-3">
+          <span class="text-sm text-gray-900">${escapeHtml(p.nome)} <span class="text-gray-500">(${escapeHtml(p.codigo_sku)})</span></span>
+          <button type="button" onclick="editarProduto(${Number(p.id)})" class="shrink-0 px-3 py-1.5 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 text-xs font-medium">Adicionar fotos</button>
+        </li>`).join('');
+      document.getElementById('loteCriados').classList.remove('hidden');
+    }
+
     // Carregar produtos
     async function carregarProdutos() {
       try {
@@ -447,6 +758,7 @@
         if (!res.ok) throw new Error('Erro ao carregar');
         todosProdutos = await res.json();
         preencherFiltroFormato();
+        preencherFornecedores();
         renderizarTabela();
         renderizarListasAcerto();
       } catch (err) {
@@ -466,6 +778,25 @@
       });
     }
 
+    // Filtro e sugestões (datalist) de fornecedor, a partir dos produtos já cadastrados
+    function preencherFornecedores() {
+      const fornecedores = [...new Set(todosProdutos.map(p => p.fornecedor).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'pt-BR'));
+      const atual = filtroFornecedorAdmin.value;
+      filtroFornecedorAdmin.innerHTML = '<option value="">Todos os Fornecedores</option>';
+      const lista = document.getElementById('listaFornecedores');
+      lista.innerHTML = '';
+      fornecedores.forEach(f => {
+        const opt = document.createElement('option');
+        opt.value = f;
+        opt.textContent = f;
+        filtroFornecedorAdmin.appendChild(opt);
+        const sug = document.createElement('option');
+        sug.value = f;
+        lista.appendChild(sug);
+      });
+      if (fornecedores.includes(atual)) filtroFornecedorAdmin.value = atual;
+    }
+
     // Escapa texto vindo do banco antes de ir para innerHTML
     function escapeHtml(v) {
       return String(v ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -475,13 +806,15 @@
       const statusFiltro = filtroStatusAdmin.value;
       const disponibilidadeFiltro = filtroDisponibilidadeAdmin.value;
       const formatoFiltro = filtroFormatoAdmin.value;
+      const fornecedorFiltro = filtroFornecedorAdmin.value;
       const busca = buscaAdmin.value.toLowerCase();
 
       const filtrados = todosProdutos.filter(p => {
+        if (fornecedorFiltro && p.fornecedor !== fornecedorFiltro) return false;
         if (statusFiltro && p.status !== statusFiltro) return false;
         if (disponibilidadeFiltro && (p.disponibilidade || 'PRONTA_ENTREGA') !== disponibilidadeFiltro) return false;
         if (formatoFiltro && p.formato !== formatoFiltro) return false;
-        if (busca && !p.nome.toLowerCase().includes(busca) && !p.codigo_sku.toLowerCase().includes(busca)) return false;
+        if (busca && ![p.nome, p.codigo_sku, p.fornecedor, p.codigo_fornecedor].some(v => String(v || '').toLowerCase().includes(busca))) return false;
         return true;
       });
 
@@ -501,6 +834,7 @@
           <td class="px-4 sm:px-6 py-4">
             <p class="font-medium text-gray-900 text-sm sm:text-base">${escapeHtml(p.nome)}</p>
             <p class="text-xs sm:text-sm text-gray-500">${escapeHtml(p.codigo_sku)}</p>
+            ${p.fornecedor || p.codigo_fornecedor ? `<p class="text-xs text-gray-400">Forn.: ${escapeHtml(p.fornecedor || '-')}${p.codigo_fornecedor ? ' • Cód. ' + escapeHtml(p.codigo_fornecedor) : ''}</p>` : ''}
           </td>
           <td class="hidden md:table-cell px-4 sm:px-6 py-4 text-sm text-gray-500">
             ${escapeHtml(p.formato || '-')} ${p.estilo ? '• ' + escapeHtml(p.estilo) : ''} ${p.cor_armacao ? '• ' + escapeHtml(p.cor_armacao) : ''}
@@ -525,7 +859,7 @@
     }
 
     // Filtros
-    [filtroStatusAdmin, filtroDisponibilidadeAdmin, filtroFormatoAdmin, buscaAdmin].forEach(el => el.addEventListener('input', renderizarTabela));
+    [filtroStatusAdmin, filtroDisponibilidadeAdmin, filtroFormatoAdmin, filtroFornecedorAdmin, buscaAdmin].forEach(el => el.addEventListener('input', renderizarTabela));
 
     // Até 4 fotos por produto. Cada posição guarda a URL que já está salva (url)
     // ou o arquivo novo escolhido (file), que substitui a foto daquela posição.
@@ -637,6 +971,8 @@
         document.getElementById('formato').value = produto.formato || '';
         document.getElementById('estilo').value = produto.estilo || '';
         document.getElementById('cor_armacao').value = produto.cor_armacao || '';
+        document.getElementById('fornecedor').value = produto.fornecedor || '';
+        document.getElementById('codigo_fornecedor').value = produto.codigo_fornecedor || '';
         document.getElementById('status').value = produto.status;
         document.getElementById('disponibilidade').value = produto.disponibilidade || 'PRONTA_ENTREGA';
       } else {
@@ -665,6 +1001,7 @@
     }
 
     btnNovoProduto.addEventListener('click', () => abrirModal());
+    document.getElementById('btnAbrirLote').addEventListener('click', () => document.querySelector('.tab-btn[data-tab="lote"]').click());
     fecharModalProduto.addEventListener('click', fecharModal);
     cancelarModal.addEventListener('click', fecharModal);
     modalProduto.addEventListener('click', (e) => { if (e.target === modalProduto) fecharModal(); });
@@ -677,6 +1014,8 @@
         const val = document.getElementById(field).value;
         if (val) formData.append(field, val);
       });
+      // Sempre enviados, para que apagar o fornecedor na edição também valha
+      ['fornecedor', 'codigo_fornecedor'].forEach(field => formData.append(field, document.getElementById(field).value.trim()));
       for (let i = 0; i < MAX_FOTOS; i++) {
         const file = slotsFotos[i]?.file;
         if (file) formData.append(`foto${i + 1}`, await prepararImagem(file));

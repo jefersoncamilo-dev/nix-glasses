@@ -393,6 +393,45 @@ function textoCurto(v, max) {
   return typeof v === 'string' || typeof v === 'number' ? String(v).trim().replace(/\s+/g, ' ').slice(0, max) : '';
 }
 
+// Cadastro em lote: confere uma linha e devolve o produto já normalizado.
+// Mesmas regras do formulário do painel (nome, SKU e preços obrigatórios).
+const STATUS_PRODUTO = ['DISPONIVEL', 'CONDICIONAL', 'ESGOTADO'];
+const DISPONIBILIDADES_PRODUTO = ['PRONTA_ENTREGA', 'SOB_ENCOMENDA'];
+const MAX_LOTE = 100;
+
+function lerPrecoLote(v) {
+  if (typeof v === 'number') return Number.isFinite(v) ? v : NaN;
+  if (typeof v !== 'string' || !/^\s*\d+(\.\d{1,2})?\s*$/.test(v)) return NaN;
+  return Number(v);
+}
+
+function validarProdutoLote(linha) {
+  const l = linha && typeof linha === 'object' ? linha : {};
+  const erros = [];
+  const produto = {
+    nome: textoCurto(l.nome, 255),
+    codigo_sku: textoCurto(l.codigo_sku, 100),
+    fornecedor: textoCurto(l.fornecedor, 120),
+    codigo_fornecedor: textoCurto(l.codigo_fornecedor, 100),
+    preco_custo: lerPrecoLote(l.preco_custo),
+    preco_venda: lerPrecoLote(l.preco_venda),
+    status: l.status || 'DISPONIVEL',
+    disponibilidade: l.disponibilidade || 'PRONTA_ENTREGA',
+    formato: textoCurto(l.formato, 100) || null,
+    estilo: textoCurto(l.estilo, 100) || null,
+    cor_armacao: textoCurto(l.cor_armacao, 100) || null,
+  };
+  if (!produto.nome) erros.push({ campo: 'nome', mensagem: 'Informe o nome' });
+  if (!produto.codigo_sku) erros.push({ campo: 'codigo_sku', mensagem: 'Informe o SKU' });
+  for (const campo of ['preco_custo', 'preco_venda']) {
+    const v = produto[campo];
+    if (!Number.isFinite(v) || v < 0 || v >= 1e8) erros.push({ campo, mensagem: 'Preço inválido' });
+  }
+  if (!STATUS_PRODUTO.includes(produto.status)) erros.push({ campo: 'status', mensagem: 'Status inválido' });
+  if (!DISPONIBILIDADES_PRODUTO.includes(produto.disponibilidade)) erros.push({ campo: 'disponibilidade', mensagem: 'Disponibilidade inválida' });
+  return { produto, erros };
+}
+
 // Monta o pedido a partir das linhas de produtos do banco (preço e encomenda
 // nunca vêm do navegador). Sinal = 50% por item, arredondado como na vitrine.
 function montarPedido(produtos, contato) {
@@ -455,7 +494,7 @@ async function startServer() {
   async function handleListAdmin(req, res) {
     try {
       const result = await pool.query(
-        `SELECT id, nome, codigo_sku, preco_custo, preco_venda, imagem_url, fotos, status, disponibilidade, formato, estilo, cor_armacao, vezes_em_maleta
+        `SELECT id, nome, codigo_sku, preco_custo, preco_venda, imagem_url, fotos, status, disponibilidade, formato, estilo, cor_armacao, fornecedor, codigo_fornecedor, vezes_em_maleta
          FROM produtos
          ORDER BY created_at DESC`
       );
@@ -469,7 +508,7 @@ async function startServer() {
   async function handleListConditional(req, res) {
     try {
       const result = await pool.query(
-        `SELECT id, nome, codigo_sku, preco_custo, preco_venda, imagem_url, fotos, status, disponibilidade, formato, estilo, cor_armacao, vezes_em_maleta
+        `SELECT id, nome, codigo_sku, preco_custo, preco_venda, imagem_url, fotos, status, disponibilidade, formato, estilo, cor_armacao, fornecedor, codigo_fornecedor, vezes_em_maleta
          FROM produtos
          WHERE status = 'CONDICIONAL'
          ORDER BY created_at DESC`
@@ -494,6 +533,8 @@ async function startServer() {
   async function handleCreateProduto(req, res) {
     const { nome, codigo_sku, sku, preco_custo, preco_venda, formato, estilo, cor_armacao } = req.body;
     const codigoFinal = codigo_sku || sku;
+    const fornecedor = textoCurto(req.body.fornecedor, 120);
+    const codigoFornecedor = textoCurto(req.body.codigo_fornecedor, 100);
     const disponibilidade = req.body.disponibilidade || 'PRONTA_ENTREGA';
     if (!DISPONIBILIDADES.includes(disponibilidade)) {
       return res.status(400).json({ error: 'Disponibilidade inválida' });
@@ -508,10 +549,10 @@ async function startServer() {
         if (file) fotos.push(await salvarImagem(client, file));
       }
       const result = await client.query(
-        `INSERT INTO produtos (nome, codigo_sku, preco_custo, preco_venda, imagem_url, fotos, disponibilidade, formato, estilo, cor_armacao)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+        `INSERT INTO produtos (nome, codigo_sku, preco_custo, preco_venda, imagem_url, fotos, disponibilidade, formato, estilo, cor_armacao, fornecedor, codigo_fornecedor)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
          RETURNING *`,
-        [nome, codigoFinal, preco_custo, preco_venda, fotos[0] || null, fotos, disponibilidade, formato, estilo, cor_armacao]
+        [nome, codigoFinal, preco_custo, preco_venda, fotos[0] || null, fotos, disponibilidade, formato, estilo, cor_armacao, fornecedor, codigoFornecedor]
       );
       await client.query('COMMIT');
       res.status(201).json(result.rows[0]);
@@ -567,6 +608,8 @@ async function startServer() {
       addField('formato', formato);
       addField('estilo', estilo);
       addField('cor_armacao', cor_armacao);
+      if (req.body.fornecedor !== undefined) addField('fornecedor', textoCurto(req.body.fornecedor, 120));
+      if (req.body.codigo_fornecedor !== undefined) addField('codigo_fornecedor', textoCurto(req.body.codigo_fornecedor, 100));
 
       if (fields.length === 0 && !mexeNasFotos) {
         await client.query('ROLLBACK');
@@ -616,6 +659,73 @@ async function startServer() {
         return res.status(400).json({ error: 'SKU já cadastrado' });
       }
       res.status(500).json({ error: 'Erro ao atualizar produto' });
+    } finally {
+      if (client) client.release();
+    }
+  }
+
+  // Cadastro em lote (JSON, sem fotos: elas entram depois, editando cada produto).
+  // Tudo ou nada: se alguma linha tiver erro, nada é gravado e a resposta diz
+  // qual linha (índice a partir de 0) e qual campo corrigir.
+  async function handleCreateLote(req, res) {
+    const linhas = req.body && req.body.produtos;
+    if (!Array.isArray(linhas) || linhas.length === 0) {
+      return res.status(400).json({ error: 'Envie ao menos um produto' });
+    }
+    if (linhas.length > MAX_LOTE) {
+      return res.status(400).json({ error: `Máximo de ${MAX_LOTE} produtos por lote` });
+    }
+
+    const erros = [];
+    const produtos = linhas.map((linha, i) => {
+      const r = validarProdutoLote(linha);
+      r.erros.forEach((e) => erros.push({ linha: i, ...e }));
+      return r.produto;
+    });
+
+    const vistos = new Map();
+    produtos.forEach((p, i) => {
+      if (!p.codigo_sku) return;
+      const chave = p.codigo_sku.toLowerCase();
+      if (vistos.has(chave)) erros.push({ linha: i, campo: 'codigo_sku', mensagem: `SKU repetido na linha ${vistos.get(chave) + 1}` });
+      else vistos.set(chave, i);
+    });
+
+    let client;
+    try {
+      client = await pool.connect();
+      const skus = produtos.map((p) => p.codigo_sku).filter(Boolean);
+      const existentes = await client.query('SELECT codigo_sku FROM produtos WHERE codigo_sku = ANY($1)', [skus]);
+      const jaCadastrados = new Set(existentes.rows.map((r) => r.codigo_sku));
+      produtos.forEach((p, i) => {
+        if (jaCadastrados.has(p.codigo_sku)) erros.push({ linha: i, campo: 'codigo_sku', mensagem: 'SKU já cadastrado' });
+      });
+
+      if (erros.length) {
+        erros.sort((a, b) => a.linha - b.linha);
+        return res.status(400).json({ error: 'Corrija as linhas marcadas', erros });
+      }
+
+      await client.query('BEGIN');
+      const criados = [];
+      for (const p of produtos) {
+        const r = await client.query(
+          `INSERT INTO produtos (nome, codigo_sku, preco_custo, preco_venda, status, disponibilidade, formato, estilo, cor_armacao, fornecedor, codigo_fornecedor)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+           RETURNING *`,
+          [p.nome, p.codigo_sku, p.preco_custo, p.preco_venda, p.status, p.disponibilidade, p.formato, p.estilo, p.cor_armacao, p.fornecedor, p.codigo_fornecedor]
+        );
+        criados.push(r.rows[0]);
+      }
+      await client.query('COMMIT');
+      res.status(201).json({ produtos: criados });
+    } catch (err) {
+      if (client) await client.query('ROLLBACK').catch(() => {});
+      console.error(err);
+      if (err.code === '23505') {
+        return res.status(400).json({ error: 'SKU já cadastrado' });
+      }
+      res.status(500).json({ error: 'Erro ao cadastrar produtos' });
     } finally {
       if (client) client.release();
     }
@@ -965,6 +1075,7 @@ async function startServer() {
 
   // ---------- Rotas admin (sempre exigem token; sem ADMIN_USER/ADMIN_PASS_HASH respondem 503) ----------
   app.get('/api/admin/produtos', requireAdmin, handleListAdmin);
+  app.post('/api/admin/produtos/lote', requireAdmin, handleCreateLote);
   app.post('/api/produtos', requireAdmin, uploadImagem, handleCreateProduto);
   app.put('/api/produtos/:id', requireAdmin, uploadImagem, handleUpdateProduto);
   app.post('/api/admin/acerto', requireAdmin, handleAcerto);

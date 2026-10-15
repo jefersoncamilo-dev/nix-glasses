@@ -53,6 +53,13 @@ async function initTables() {
       ADD COLUMN IF NOT EXISTS disponibilidade VARCHAR(20) NOT NULL DEFAULT 'PRONTA_ENTREGA'
     `);
 
+    // Controle de estoque: de qual fornecedor o produto veio e o código dele lá.
+    await client.query(`
+      ALTER TABLE produtos
+      ADD COLUMN IF NOT EXISTS fornecedor VARCHAR(120) NOT NULL DEFAULT '',
+      ADD COLUMN IF NOT EXISTS codigo_fornecedor VARCHAR(100) NOT NULL DEFAULT ''
+    `);
+
     // Até 4 fotos por produto (URLs /imagens/<id>, na ordem de exibição).
     // imagem_url continua sendo a 1ª foto, para quem só lê uma (métricas, acerto, maleta).
     // Produtos antigos: a foto única vira a foto 1.
