@@ -39,6 +39,11 @@
     .foto-nav { opacity: 0; transition: opacity 0.2s ease; }
     .glass-card:hover .foto-nav, .foto-nav:focus-visible { opacity: 1; }
     .miniaturas { scrollbar-width: thin; }
+    /* Provador virtual: vídeo e canvas ocupam o mesmo quadro e são espelhados juntos (efeito espelho) */
+    .provador-palco { position: relative; aspect-ratio: 4 / 3; background: #0b0b0b; overflow: hidden; }
+    .provador-espelho { position: absolute; inset: 0; transform: scaleX(-1); }
+    .provador-espelho video, .provador-espelho canvas { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+    #modalProvador input[type=range] { accent-color: #f97316; }
   </style>
 </head>
 <body class="min-h-screen" style="background:var(--nix-bg);color:var(--nix-text)">
@@ -274,6 +279,36 @@
         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
       </button>
       <div id="detalhesConteudo"></div>
+    </div>
+  </div>
+
+  <!-- Modal Provador Virtual: câmera (<video>) com o óculos desenhado num <canvas> por cima -->
+  <div id="modalProvador" class="fixed inset-0 modal-overlay bg-black/80 hidden z-[60] flex items-center justify-center p-2 sm:p-4" role="dialog" aria-modal="true" aria-labelledby="provadorTitulo">
+    <div class="rounded-2xl max-w-2xl w-full max-h-[95vh] overflow-y-auto" style="background:var(--nix-surface);color:var(--nix-text)">
+      <div class="flex items-center justify-between gap-3 px-4 py-3 border-b" style="border-color:var(--nix-border)">
+        <h3 id="provadorTitulo" class="font-semibold truncate">Provador Virtual</h3>
+        <button type="button" id="fecharProvador" class="p-2 rounded-full hover:bg-white/10" aria-label="Fechar provador">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+        </button>
+      </div>
+      <div class="provador-palco">
+        <div class="provador-espelho">
+          <video id="videoProvador" autoplay playsinline muted></video>
+          <canvas id="canvasProvador"></canvas>
+        </div>
+        <p id="statusProvador" class="absolute inset-x-0 bottom-0 m-3 text-center text-sm bg-black/60 text-white rounded-lg px-3 py-2" role="status" aria-live="polite"></p>
+      </div>
+      <div class="px-4 py-3 grid sm:grid-cols-2 gap-3 text-sm">
+        <label class="flex items-center gap-3">
+          <span class="w-14 shrink-0" style="color:var(--nix-muted)">Tamanho</span>
+          <input type="range" id="ajusteEscalaProvador" min="80" max="125" value="100" class="w-full">
+        </label>
+        <label class="flex items-center gap-3">
+          <span class="w-14 shrink-0" style="color:var(--nix-muted)">Altura</span>
+          <input type="range" id="ajusteAlturaProvador" min="-15" max="15" value="0" class="w-full">
+        </label>
+      </div>
+      <p class="px-4 pb-4 text-xs" style="color:var(--nix-muted)">Prévia aproximada. A imagem da câmera é processada só no seu aparelho e não é enviada para lugar nenhum.</p>
     </div>
   </div>
 
@@ -589,6 +624,7 @@
             </dl>` : ''}
             ${encomenda ? `<p class="text-sm text-blue-700 bg-blue-50 rounded-lg px-3 py-2 mb-4">50% sinal + 50% na entrega (sinal de ${formatarMoeda(calcularSinal(produto.preco_venda))})</p>` : ''}
             <div class="mt-auto">
+              ${fotos.length ? `<button type="button" onclick="abrirProvador(${id})" class="w-full mb-2 border border-gray-300 text-gray-800 hover:bg-gray-50 py-3 rounded-lg font-medium transition-colors">Provar virtualmente</button>` : ''}
               <button onclick="toggleMaleta(${id}); renderizarDetalhes()" class="w-full ${jaNaMaleta ? 'bg-gray-100 text-gray-600' : encomenda ? 'bg-blue-600 hover:bg-blue-700 text-white' : 'bg-orange-500 hover:bg-orange-600 text-white'} py-3 rounded-lg font-medium transition-colors">${jaNaMaleta ? 'Remover da Maleta' : encomenda ? 'Encomendar (adicionar à Maleta)' : 'Adicionar à Maleta'}</button>
             </div>
           </div>
@@ -599,7 +635,7 @@
     document.getElementById('fecharDetalhes').addEventListener('click', fecharDetalhes);
     modalDetalhes.addEventListener('click', (e) => { if (e.target === modalDetalhes) fecharDetalhes(); });
     document.addEventListener('keydown', (e) => {
-      if (!detalhes) return;
+      if (!detalhes || provador.aberto) return;
       if (e.key === 'Escape') fecharDetalhes();
       else if (e.key === 'ArrowLeft') mostrarFotoDetalhes(detalhes.indice - 1);
       else if (e.key === 'ArrowRight') mostrarFotoDetalhes(detalhes.indice + 1);
@@ -615,6 +651,268 @@
       toqueInicioX = null;
       if (Math.abs(dx) > 40) mostrarFotoDetalhes(detalhes.indice + (dx < 0 ? 1 : -1));
     });
+
+    // ---------- Provador Virtual (MediaPipe Face Landmarker, 100% no navegador) ----------
+    // Fluxo: câmera -> Face Landmarker (WebAssembly) acha 478 pontos do rosto a cada quadro ->
+    // calcularPoseOculos transforma alguns pontos em centro/largura/inclinação ->
+    // suavizarPose tira o tremido -> desenharOculos pinta o PNG no <canvas> por cima do <video>.
+    // A biblioteca e o modelo só são baixados quando alguém abre o provador.
+    const MEDIAPIPE_URL = 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.21';
+    const MODELO_ROSTO_URL = 'https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task';
+
+    const modalProvador = document.getElementById('modalProvador');
+    const videoProvador = document.getElementById('videoProvador');
+    const canvasProvador = document.getElementById('canvasProvador');
+    const statusProvador = document.getElementById('statusProvador');
+    const ajusteEscalaProvador = document.getElementById('ajusteEscalaProvador');
+    const ajusteAlturaProvador = document.getElementById('ajusteAlturaProvador');
+
+    // sessao muda a cada abrir/fechar: o que terminar de carregar depois de fechado é descartado
+    const provador = { aberto: false, sessao: 0, stream: null, landmarker: null, oculos: null, pose: null, raf: 0, ultimoTempo: -1, ajuste: { escala: 1, deslocamentoY: 0 } };
+    let faceLandmarkerPromessa = null;
+
+    // Pontos do rosto (coordenadas normalizadas 0..1 do vídeo) -> onde e como desenhar o óculos.
+    // Índices da malha do Face Landmarker:
+    //   33 / 263  cantos externos dos olhos  -> inclinação da cabeça (roll)
+    //   127 / 356 têmporas                   -> largura do rosto = largura da armação
+    //   168       dorso do nariz entre os olhos -> centro da armação (a ponte)
+    // A largura sai das têmporas porque uma armação de sol cobre o rosto de lado a lado;
+    // sem elas, usa a distância entre os olhos x 1,45 (proporção média de um rosto adulto).
+    // ajuste.escala multiplica a largura; ajuste.deslocamentoY desce (+) ou sobe (-) a armação,
+    // em fração da largura, sempre na direção "para baixo" do rosto (acompanha a inclinação).
+    function calcularPoseOculos(pontos, larguraVideo, alturaVideo, ajuste) {
+      if (!pontos || !larguraVideo || !alturaVideo) return null;
+      const ponto = (i) => (pontos[i] ? { x: pontos[i].x * larguraVideo, y: pontos[i].y * alturaVideo } : null);
+      const olhoA = ponto(33), olhoB = ponto(263), nariz = ponto(168);
+      const temporaA = ponto(127), temporaB = ponto(356);
+      if (!olhoA || !olhoB || !nariz) return null;
+
+      const angulo = Math.atan2(olhoB.y - olhoA.y, olhoB.x - olhoA.x);
+      const larguraRosto = temporaA && temporaB
+        ? Math.hypot(temporaB.x - temporaA.x, temporaB.y - temporaA.y)
+        : Math.hypot(olhoB.x - olhoA.x, olhoB.y - olhoA.y) * 1.45;
+      if (!(larguraRosto > 0)) return null;
+
+      const escala = ajuste && Number.isFinite(ajuste.escala) ? ajuste.escala : 1;
+      const deslocamentoY = ajuste && Number.isFinite(ajuste.deslocamentoY) ? ajuste.deslocamentoY : 0;
+      const largura = larguraRosto * escala;
+      // "Para baixo" no referencial do rosto é o vetor (-sen, cos) do ângulo dos olhos
+      return {
+        x: nariz.x - Math.sin(angulo) * deslocamentoY * largura,
+        y: nariz.y + Math.cos(angulo) * deslocamentoY * largura,
+        largura,
+        angulo,
+      };
+    }
+
+    // Média móvel exponencial entre o quadro anterior e o novo: fator 1 = sem suavização,
+    // perto de 0 = bem estável porém com atraso. O ângulo é misturado pelo menor caminho.
+    function suavizarPose(anterior, nova, fator) {
+      if (!anterior || !nova) return nova;
+      const mix = (a, b) => a + (b - a) * fator;
+      const dAngulo = Math.atan2(Math.sin(nova.angulo - anterior.angulo), Math.cos(nova.angulo - anterior.angulo));
+      return { x: mix(anterior.x, nova.x), y: mix(anterior.y, nova.y), largura: mix(anterior.largura, nova.largura), angulo: anterior.angulo + dAngulo * fator };
+    }
+
+    // Prepara os pixels da foto (RGBA, alterados no lugar) para virar a armação no rosto:
+    // se a foto já tem transparência, só mede; se não, apaga o fundo claro que encosta nas
+    // bordas (preenchimento a partir das bordas, para não furar armação branca no meio).
+    // Devolve o retângulo que contém a armação, para a largura da imagem ser a da armação.
+    function prepararPixelsOculos(rgba, largura, altura, limiar) {
+      const corte = limiar || 235;
+      const total = largura * altura;
+      let jaTransparente = false;
+      for (let x = 0; x < largura && !jaTransparente; x++) {
+        if (rgba[x * 4 + 3] < 250 || rgba[((altura - 1) * largura + x) * 4 + 3] < 250) jaTransparente = true;
+      }
+      for (let y = 0; y < altura && !jaTransparente; y++) {
+        if (rgba[y * largura * 4 + 3] < 250 || rgba[(y * largura + largura - 1) * 4 + 3] < 250) jaTransparente = true;
+      }
+
+      if (!jaTransparente) {
+        const claro = (i) => rgba[i * 4] >= corte && rgba[i * 4 + 1] >= corte && rgba[i * 4 + 2] >= corte;
+        const visitado = new Uint8Array(total);
+        const fila = [];
+        const empilhar = (i) => { if (!visitado[i] && claro(i)) { visitado[i] = 1; fila.push(i); } };
+        for (let x = 0; x < largura; x++) { empilhar(x); empilhar((altura - 1) * largura + x); }
+        for (let y = 0; y < altura; y++) { empilhar(y * largura); empilhar(y * largura + largura - 1); }
+        while (fila.length) {
+          const i = fila.pop();
+          rgba[i * 4 + 3] = 0;
+          const x = i % largura;
+          if (x > 0) empilhar(i - 1);
+          if (x < largura - 1) empilhar(i + 1);
+          if (i >= largura) empilhar(i - largura);
+          if (i < total - largura) empilhar(i + largura);
+        }
+      }
+
+      let x0 = largura, y0 = altura, x1 = -1, y1 = -1;
+      for (let i = 0; i < total; i++) {
+        if (rgba[i * 4 + 3] <= 16) continue;
+        const x = i % largura, y = (i - x) / largura;
+        if (x < x0) x0 = x;
+        if (x > x1) x1 = x;
+        if (y < y0) y0 = y;
+        if (y > y1) y1 = y;
+      }
+      return x1 < 0 ? null : { x: x0, y: y0, largura: x1 - x0 + 1, altura: y1 - y0 + 1 };
+    }
+
+    // Limpa o canvas e desenha a armação: centro na pose, girada com a cabeça, com a linha
+    // dos olhos a 45% da altura da imagem (numa armação recortada rente, as lentes ficam ali).
+    function desenharOculos(ctx, oculos, pose) {
+      ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+      if (!oculos || !pose) return;
+      const altura = pose.largura * (oculos.altura / oculos.largura);
+      ctx.save();
+      ctx.translate(pose.x, pose.y);
+      ctx.rotate(pose.angulo);
+      ctx.drawImage(oculos.imagem, -pose.largura / 2, -altura * 0.45, pose.largura, altura);
+      ctx.restore();
+    }
+
+    // Carrega a biblioteca (WASM) e o modelo uma vez só; tenta GPU e cai para CPU.
+    function carregarFaceLandmarker() {
+      if (!faceLandmarkerPromessa) {
+        faceLandmarkerPromessa = (async () => {
+          const { FilesetResolver, FaceLandmarker } = await import(`${MEDIAPIPE_URL}/vision_bundle.mjs`);
+          const arquivos = await FilesetResolver.forVisionTasks(`${MEDIAPIPE_URL}/wasm`);
+          const opcoes = (delegate) => ({ baseOptions: { modelAssetPath: MODELO_ROSTO_URL, delegate }, runningMode: 'VIDEO', numFaces: 1 });
+          try {
+            return await FaceLandmarker.createFromOptions(arquivos, opcoes('GPU'));
+          } catch (err) {
+            return FaceLandmarker.createFromOptions(arquivos, opcoes('CPU'));
+          }
+        })().catch((err) => { faceLandmarkerPromessa = null; throw err; });
+      }
+      return faceLandmarkerPromessa;
+    }
+
+    // Foto do produto -> imagem pronta para o canvas (fundo removido e recortada na armação).
+    // Foto de outro domínio sem CORS não deixa ler os pixels: aí usa a foto como está.
+    async function carregarImagemOculos(url) {
+      const img = new Image();
+      img.decoding = 'async';
+      img.src = url;
+      await img.decode();
+      try {
+        const c = document.createElement('canvas');
+        c.width = img.naturalWidth;
+        c.height = img.naturalHeight;
+        const ctx = c.getContext('2d', { willReadFrequently: true });
+        ctx.drawImage(img, 0, 0);
+        const dados = ctx.getImageData(0, 0, c.width, c.height);
+        const caixa = prepararPixelsOculos(dados.data, c.width, c.height);
+        if (!caixa) throw new Error('foto sem armação visível');
+        ctx.putImageData(dados, 0, 0);
+        const recorte = document.createElement('canvas');
+        recorte.width = caixa.largura;
+        recorte.height = caixa.altura;
+        recorte.getContext('2d').drawImage(c, caixa.x, caixa.y, caixa.largura, caixa.altura, 0, 0, caixa.largura, caixa.altura);
+        return { imagem: recorte, largura: caixa.largura, altura: caixa.altura };
+      } catch (err) {
+        return { imagem: img, largura: img.naturalWidth, altura: img.naturalHeight };
+      }
+    }
+
+    function mensagemErroCamera(err) {
+      if (err && (err.name === 'NotAllowedError' || err.name === 'SecurityError')) return 'Permita o acesso à câmera no navegador para usar o provador.';
+      if (err && (err.name === 'NotFoundError' || err.name === 'OverconstrainedError')) return 'Nenhuma câmera encontrada neste aparelho.';
+      if (err && err.name === 'NotReadableError') return 'A câmera está em uso por outro aplicativo.';
+      return 'Não foi possível iniciar o provador. Verifique a conexão e tente de novo.';
+    }
+
+    async function abrirProvador(produtoId) {
+      const produto = produtos.find(p => p.id === produtoId);
+      const foto = produto ? fotosDoProduto(produto)[0] : null;
+      if (!foto) return;
+
+      const sessao = ++provador.sessao;
+      provador.aberto = true;
+      provador.pose = null;
+      provador.oculos = null;
+      provador.ultimoTempo = -1;
+      document.getElementById('provadorTitulo').textContent = `Provador Virtual · ${produto.nome}`;
+      modalProvador.classList.remove('hidden');
+      document.body.style.overflow = 'hidden';
+
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        statusProvador.textContent = 'Seu navegador não libera a câmera aqui. Use um navegador atualizado em uma página https.';
+        return;
+      }
+      statusProvador.textContent = 'Abrindo a câmera e carregando o provador...';
+
+      // Câmera, modelo e foto carregam em paralelo
+      const camera = navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user', width: { ideal: 1280 }, height: { ideal: 720 } }, audio: false });
+      camera.then((stream) => {
+        // Fechou enquanto pedia permissão: desliga na hora
+        if (sessao !== provador.sessao) stream.getTracks().forEach(t => t.stop());
+      }, () => {});
+      try {
+        const [stream, landmarker, oculos] = await Promise.all([camera, carregarFaceLandmarker(), carregarImagemOculos(foto)]);
+        if (sessao !== provador.sessao) return;
+        provador.stream = stream;
+        provador.landmarker = landmarker;
+        provador.oculos = oculos;
+        videoProvador.srcObject = stream;
+        await videoProvador.play();
+        if (sessao !== provador.sessao) return;
+        statusProvador.textContent = 'Posicione o rosto de frente para a câmera.';
+        provador.raf = requestAnimationFrame(quadroProvador);
+      } catch (err) {
+        if (sessao !== provador.sessao) return;
+        console.error('Provador virtual:', err);
+        camera.then(s => s.getTracks().forEach(t => t.stop()), () => {});
+        statusProvador.textContent = mensagemErroCamera(err);
+      }
+    }
+    window.abrirProvador = abrirProvador;
+
+    // Laço de animação: detecta o rosto só quando chega um quadro novo da câmera
+    function quadroProvador() {
+      if (!provador.aberto || !provador.landmarker) return;
+      const v = videoProvador;
+      if (v.readyState >= 2 && v.currentTime !== provador.ultimoTempo) {
+        provador.ultimoTempo = v.currentTime;
+        // O canvas usa a resolução real do vídeo: os pontos (0..1) viram pixels sem distorção
+        if (canvasProvador.width !== v.videoWidth || canvasProvador.height !== v.videoHeight) {
+          canvasProvador.width = v.videoWidth;
+          canvasProvador.height = v.videoHeight;
+        }
+        const resultado = provador.landmarker.detectForVideo(v, performance.now());
+        const pontos = resultado.faceLandmarks && resultado.faceLandmarks[0];
+        const pose = pontos ? calcularPoseOculos(pontos, v.videoWidth, v.videoHeight, provador.ajuste) : null;
+        provador.pose = pose ? suavizarPose(provador.pose, pose, 0.5) : null;
+        desenharOculos(canvasProvador.getContext('2d'), provador.oculos, provador.pose);
+        statusProvador.classList.toggle('hidden', !!pose);
+        if (!pose) statusProvador.textContent = 'Não encontramos seu rosto. Centralize-o e melhore a iluminação.';
+      }
+      provador.raf = requestAnimationFrame(quadroProvador);
+    }
+
+    function fecharProvador() {
+      if (!provador.aberto) return;
+      provador.aberto = false;
+      provador.sessao++;
+      cancelAnimationFrame(provador.raf);
+      if (provador.stream) provador.stream.getTracks().forEach(t => t.stop());
+      provador.stream = null;
+      videoProvador.srcObject = null;
+      canvasProvador.getContext('2d').clearRect(0, 0, canvasProvador.width, canvasProvador.height);
+      statusProvador.classList.remove('hidden');
+      modalProvador.classList.add('hidden');
+      // Os detalhes do produto continuam abertos por baixo
+      if (!detalhes) document.body.style.overflow = '';
+    }
+
+    document.getElementById('fecharProvador').addEventListener('click', fecharProvador);
+    modalProvador.addEventListener('click', (e) => { if (e.target === modalProvador) fecharProvador(); });
+    document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && provador.aberto) fecharProvador(); });
+    // Trocar de aba desliga a câmera (o navegador pausaria o vídeo de qualquer jeito)
+    document.addEventListener('visibilitychange', () => { if (document.hidden) fecharProvador(); });
+    ajusteEscalaProvador.addEventListener('input', () => { provador.ajuste.escala = Number(ajusteEscalaProvador.value) / 100; });
+    ajusteAlturaProvador.addEventListener('input', () => { provador.ajuste.deslocamentoY = Number(ajusteAlturaProvador.value) / 100; });
 
     // Toggle maleta
     function toggleMaleta(produtoId) {
