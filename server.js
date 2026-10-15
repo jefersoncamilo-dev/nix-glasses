@@ -15,7 +15,7 @@ app.use(express.json());
 // Serve front-end estático (site público + admin) — necessário no Render.
 // Só arquivos da lista abaixo saem da raiz: server.js, db.js, .env, package*.json,
 // node_modules/ e scripts/ NUNCA podem ser servidos.
-const PUBLIC_ROOT_FILES = new Set(['index.html', 'logo.png', 'favicon.ico', 'robots.txt']);
+const PUBLIC_ROOT_FILES = new Set(['index.html', 'logo.png', 'favicon.ico', 'apple-touch-icon.png', 'robots.txt']);
 app.get('/', (req, res) => res.sendFile(path.join(__dirname, 'index.html')));
 app.get('/:file', (req, res, next) => {
   if (!PUBLIC_ROOT_FILES.has(req.params.file)) return next();
