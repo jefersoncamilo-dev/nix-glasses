@@ -374,6 +374,59 @@ async function handleClienteAtual(req, res) {
   }
 }
 
+// ---------- Pedidos da maleta ----------
+const MAX_ITENS_PEDIDO = 100;
+
+// Id do cliente logado (token de cliente no Authorization), ou null. Token
+// inválido/expirado não impede o pedido: só não liga à conta.
+function clienteDoToken(req) {
+  const h = req.headers.authorization || '';
+  if (!h.startsWith('Bearer ')) return null;
+  try {
+    return verificarTokenCliente(h.slice(7)).c;
+  } catch {
+    return null;
+  }
+}
+
+function textoCurto(v, max) {
+  return typeof v === 'string' || typeof v === 'number' ? String(v).trim().replace(/\s+/g, ' ').slice(0, max) : '';
+}
+
+// Monta o pedido a partir das linhas de produtos do banco (preço e encomenda
+// nunca vêm do navegador). Sinal = 50% por item, arredondado como na vitrine.
+function montarPedido(produtos, contato) {
+  const c = contato && typeof contato === 'object' ? contato : {};
+  const centavos = v => Math.round(Number(v) * 100);
+  const itens = produtos.map(p => {
+    const encomenda = p.disponibilidade === 'SOB_ENCOMENDA';
+    const preco = centavos(p.preco_venda) / 100;
+    return { produto_id: p.id, nome: p.nome, codigo_sku: p.codigo_sku, preco, encomenda, sinal: encomenda ? Math.round(preco * 50) / 100 : 0 };
+  });
+  const soma = (lista, campo) => lista.reduce((t, i) => t + centavos(i[campo]), 0) / 100;
+  const prova = itens.filter(i => !i.encomenda);
+  const encomendas = itens.filter(i => i.encomenda);
+  const rua = textoCurto(c.rua, 150);
+  const numero = textoCurto(c.numero, 20);
+  const bairro = textoCurto(c.bairro, 100);
+  const cidade = textoCurto(c.cidade, 100);
+  const complemento = textoCurto(c.complemento, 100);
+  const cep = textoCurto(c.cep, 12);
+  let endereco = [rua && numero ? `${rua}, ${numero}` : rua || numero, bairro, cidade].filter(Boolean).join(' - ');
+  if (complemento) endereco += ` (${complemento})`;
+  if (cep) endereco += ` CEP ${cep}`;
+  return {
+    nome: textoCurto(c.nome, 100),
+    telefone: textoCurto(c.telefone, 30),
+    endereco: endereco.trim(),
+    itens,
+    totalProva: soma(prova, 'preco'),
+    totalEncomendas: soma(encomendas, 'preco'),
+    sinal: soma(encomendas, 'sinal'),
+    total: soma(itens, 'preco'),
+  };
+}
+
 async function startServer() {
   if (!isAdminAuthEnabled()) {
     console.warn('[auth] ADMIN_USER/ADMIN_PASS_HASH não definidos: rotas admin ficarão bloqueadas (503).');
@@ -569,12 +622,17 @@ async function startServer() {
   }
 
   async function handleMaletaCheckout(req, res) {
-    const { produtoIds, productIds, ids } = req.body;
+    const { produtoIds, productIds, ids, contato } = req.body || {};
     const list = produtoIds || productIds || ids;
 
-    if (!Array.isArray(list) || list.length === 0) {
+    if (!Array.isArray(list) || list.length === 0 || list.length > MAX_ITENS_PEDIDO) {
       return res.status(400).json({ error: 'Array de IDs de produtos é obrigatório' });
     }
+    if (!list.every(id => (Number.isInteger(id) && id > 0 && id < 2 ** 31) || (typeof id === 'string' && /^\d{1,9}$/.test(id) && Number(id) > 0))) {
+      return res.status(400).json({ error: 'IDs de produtos inválidos' });
+    }
+    const idsOk = [...new Set(list.map(Number))];
+    const clienteId = clienteDoToken(req);
 
     let client;
     try {
@@ -585,18 +643,86 @@ async function startServer() {
         `UPDATE produtos
          SET vezes_em_maleta = vezes_em_maleta + 1
          WHERE id = ANY($1)
-         RETURNING id, nome, vezes_em_maleta`,
-        [list]
+         RETURNING id, nome, codigo_sku, preco_venda, disponibilidade, vezes_em_maleta`,
+        [idsOk]
       );
 
+      let pedido = null;
+      if (result.rows.length) {
+        // Conta apagada no meio do caminho: o pedido fica sem cliente
+        const dono = clienteId === null ? [] :
+          (await client.query('SELECT id, email FROM clientes WHERE id = $1', [clienteId])).rows;
+        const ordem = new Map(idsOk.map((id, i) => [id, i]));
+        const linhas = [...result.rows].sort((a, b) => ordem.get(a.id) - ordem.get(b.id));
+        const p = montarPedido(linhas, contato);
+        const { rows } = await client.query(
+          `INSERT INTO pedidos (cliente_id, nome, telefone, email, endereco, itens, total_prova, total_encomendas, sinal, total)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING id`,
+          [dono[0] ? dono[0].id : null, p.nome, p.telefone, dono[0] ? dono[0].email : '', p.endereco,
+            JSON.stringify(p.itens), p.totalProva, p.totalEncomendas, p.sinal, p.total]
+        );
+        pedido = { id: rows[0].id };
+      }
+
       await client.query('COMMIT');
-      res.json({ atualizados: result.rows });
+      res.json({
+        atualizados: result.rows.map(r => ({ id: r.id, nome: r.nome, vezes_em_maleta: r.vezes_em_maleta })),
+        pedido,
+      });
     } catch (err) {
       if (client) await client.query('ROLLBACK').catch(() => {});
       console.error(err);
       res.status(500).json({ error: 'Erro ao processar checkout da maleta' });
     } finally {
       if (client) client.release();
+    }
+  }
+
+  // Admin: clientes com resumo dos pedidos (nunca devolve senha_hash)
+  async function handleListClientes(req, res) {
+    try {
+      const { rows } = await pool.query(
+        `SELECT c.id, c.email, c.nome, c.created_at,
+                COUNT(p.id)::int AS pedidos,
+                COALESCE(SUM(p.total), 0) AS total_pedidos,
+                MAX(p.created_at) AS ultimo_pedido
+         FROM clientes c
+         LEFT JOIN pedidos p ON p.cliente_id = c.id
+         GROUP BY c.id
+         ORDER BY MAX(p.created_at) DESC NULLS LAST, c.created_at DESC`
+      );
+      res.json(rows);
+    } catch (err) {
+      console.error(err);
+      res.status(500).json({ error: 'Erro ao buscar clientes' });
+    }
+  }
+
+  // Admin: pedidos (todos, de um cliente com ?cliente=<id> ou sem conta com ?cliente=sem-conta)
+  async function handleListPedidos(req, res) {
+    const filtro = req.query.cliente;
+    let where = '';
+    const params = [];
+    if (filtro === 'sem-conta') {
+      where = 'WHERE p.cliente_id IS NULL';
+    } else if (filtro !== undefined) {
+      if (typeof filtro !== 'string' || !/^\d{1,9}$/.test(filtro)) return res.status(400).json({ error: 'Cliente inválido' });
+      where = 'WHERE p.cliente_id = $1';
+      params.push(Number(filtro));
+    }
+    try {
+      const { rows } = await pool.query(
+        `SELECT p.id, p.cliente_id, p.nome, p.telefone, p.email, p.endereco, p.itens,
+                p.total_prova, p.total_encomendas, p.sinal, p.total, p.created_at
+         FROM pedidos p ${where}
+         ORDER BY p.created_at DESC, p.id DESC
+         LIMIT 200`,
+        params
+      );
+      res.json(rows);
+    } catch (err) {
+      console.error(err);
+      res.status(500).json({ error: 'Erro ao buscar pedidos' });
     }
   }
 
@@ -846,6 +972,8 @@ async function startServer() {
   app.post('/api/config/whatsapp', requireAdmin, handlePostWhatsapp);
   app.post('/api/admin/whatsapp', requireAdmin, handlePostWhatsapp);
   app.get('/api/admin/metrics', requireAdmin, handleMetrics);
+  app.get('/api/admin/clientes', requireAdmin, handleListClientes);
+  app.get('/api/admin/pedidos', requireAdmin, handleListPedidos);
 
   // ---------- Aliases EN (compatibilidade front-end em inglês) ----------
   app.get('/api/products', handleListPublicos);

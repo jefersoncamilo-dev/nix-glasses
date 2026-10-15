@@ -35,6 +35,10 @@
         <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/></svg>
         Produtos
       </a>
+      <a href="#" data-tab="clientes" class="tab-btn flex items-center px-4 py-3 text-gray-700 rounded-lg hover:bg-gray-100 font-medium">
+        <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"/></svg>
+        Clientes
+      </a>
       <a href="#" data-tab="acerto" class="tab-btn flex items-center px-4 py-3 text-gray-700 rounded-lg hover:bg-gray-100 font-medium">
         <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
         Acerto de Maleta
@@ -163,6 +167,39 @@
             <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
             Salvar Acerto
           </button>
+        </div>
+      </div>
+
+      <!-- Aba Clientes -->
+      <div id="tab-clientes" class="tab-content hidden">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6">
+          <h3 class="text-lg font-semibold text-gray-900">Clientes e Pedidos</h3>
+          <div class="flex flex-col sm:flex-row gap-2">
+            <input type="text" id="buscaClientes" placeholder="Buscar por nome ou e-mail..." class="w-full sm:w-64 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500">
+            <button id="btnPedidosSemConta" class="bg-gray-100 hover:bg-gray-200 text-gray-700 px-4 py-2 rounded-lg font-medium transition-colors">Pedidos sem conta</button>
+            <button id="btnAtualizarClientes" class="bg-gray-100 hover:bg-gray-200 text-gray-700 px-4 py-2 rounded-lg font-medium transition-colors">Atualizar</button>
+          </div>
+        </div>
+        <div class="bg-white rounded-xl border border-gray-200 overflow-hidden mb-6">
+          <div class="overflow-x-auto">
+            <table class="w-full min-w-[640px]">
+              <thead class="bg-gray-50 border-b border-gray-200">
+                <tr>
+                  <th class="px-4 sm:px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Cliente</th>
+                  <th class="px-4 sm:px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Cadastro</th>
+                  <th class="px-4 sm:px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Pedidos</th>
+                  <th class="px-4 sm:px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Total</th>
+                  <th class="px-4 sm:px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Último pedido</th>
+                  <th class="px-4 sm:px-6 py-3"></th>
+                </tr>
+              </thead>
+              <tbody id="tabelaClientes" class="divide-y divide-gray-200"></tbody>
+            </table>
+          </div>
+        </div>
+        <div id="painelPedidos" class="hidden">
+          <h4 id="tituloPedidos" class="text-lg font-semibold text-gray-900 mb-4"></h4>
+          <div id="listaPedidos" class="space-y-4"></div>
         </div>
       </div>
 
@@ -390,6 +427,7 @@
         tab.classList.add('bg-orange-50', 'text-orange-600');
         document.getElementById(`tab-${target}`).classList.remove('hidden');
         if (target === 'acerto') carregarAcerto();
+        if (target === 'clientes') carregarClientes();
         if (target === 'metricas') carregarMetricas();
         if (target === 'config') carregarWhatsApp();
         sidebar.classList.remove('open');
@@ -777,6 +815,105 @@
     }
 
     btnAtualizarMetricas.addEventListener('click', carregarMetricas);
+
+    // Clientes e pedidos (pedidos gravados no checkout da vitrine)
+    let todosClientes = [];
+    const formatarData = (v) => {
+      const d = new Date(v);
+      return v && !isNaN(d) ? d.toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' }) : '-';
+    };
+
+    async function carregarClientes() {
+      try {
+        const res = await fetchAdmin('/api/admin/clientes');
+        if (!res.ok) throw new Error('Erro ao carregar clientes');
+        todosClientes = await res.json();
+        renderizarClientes(filtrarClientes(todosClientes, document.getElementById('buscaClientes').value));
+      } catch (err) {
+        console.error(err);
+        mostrarToast('Erro ao carregar clientes', 'error');
+      }
+    }
+
+    function filtrarClientes(lista, busca) {
+      const termo = String(busca || '').trim().toLowerCase();
+      if (!termo) return lista;
+      return lista.filter(c => String(c.nome || '').toLowerCase().includes(termo) || String(c.email || '').toLowerCase().includes(termo));
+    }
+
+    function renderizarClientes(lista) {
+      const tbody = document.getElementById('tabelaClientes');
+      tbody.innerHTML = lista.map(c => `
+        <tr class="hover:bg-gray-50">
+          <td class="px-4 sm:px-6 py-4">
+            <p class="font-medium text-gray-900">${escapeHtml(c.nome || 'Sem nome')}</p>
+            <p class="text-sm text-gray-500">${escapeHtml(c.email)}</p>
+          </td>
+          <td class="px-4 sm:px-6 py-4 text-sm text-gray-500">${escapeHtml(formatarData(c.created_at))}</td>
+          <td class="px-4 sm:px-6 py-4 text-gray-900 font-medium">${Number(c.pedidos) || 0}</td>
+          <td class="px-4 sm:px-6 py-4 text-gray-900">${formatarMoeda(Number(c.total_pedidos))}</td>
+          <td class="px-4 sm:px-6 py-4 text-sm text-gray-500">${escapeHtml(formatarData(c.ultimo_pedido))}</td>
+          <td class="px-4 sm:px-6 py-4 text-right">
+            <button data-cliente="${Number(c.id)}" class="ver-pedidos text-orange-600 hover:text-orange-700 text-sm font-medium">Ver pedidos</button>
+          </td>
+        </tr>
+      `).join('') || '<tr><td colspan="6" class="px-6 py-8 text-center text-gray-500">Nenhum cliente cadastrado ainda</td></tr>';
+    }
+
+    function renderizarPedidos(lista) {
+      document.getElementById('listaPedidos').innerHTML = lista.map(p => {
+        const itens = Array.isArray(p.itens) ? p.itens : [];
+        const encomendas = itens.filter(i => i.encomenda === true);
+        return `
+        <div class="bg-white rounded-xl border border-gray-200 p-4 sm:p-6">
+          <div class="flex flex-col sm:flex-row sm:justify-between gap-1 mb-3">
+            <p class="font-semibold text-gray-900">Pedido #${Number(p.id)} <span class="font-normal text-gray-500">• ${escapeHtml(formatarData(p.created_at))}</span></p>
+            <p class="font-semibold text-gray-900">${formatarMoeda(Number(p.total))}</p>
+          </div>
+          <p class="text-sm text-gray-700">${escapeHtml(p.nome || '-')} • ${escapeHtml(p.telefone || '-')}${p.email ? ' • ' + escapeHtml(p.email) : ''}</p>
+          ${p.endereco ? `<p class="text-sm text-gray-500 mb-3">${escapeHtml(p.endereco)}</p>` : '<div class="mb-3"></div>'}
+          <ul class="divide-y divide-gray-100 border-t border-gray-100">
+            ${itens.map(i => `
+              <li class="py-2 flex justify-between gap-3 text-sm">
+                <span>
+                  ${escapeHtml(i.nome)} <span class="text-gray-400">${escapeHtml(i.codigo_sku)}</span>
+                  ${i.encomenda === true
+                    ? '<span class="ml-1 px-2 py-0.5 text-xs font-medium rounded-full bg-blue-100 text-blue-700">SOB ENCOMENDA</span>'
+                    : '<span class="ml-1 px-2 py-0.5 text-xs font-medium rounded-full bg-green-100 text-green-700">PRONTA ENTREGA</span>'}
+                </span>
+                <span class="text-gray-900 whitespace-nowrap">${formatarMoeda(Number(i.preco))}</span>
+              </li>`).join('')}
+          </ul>
+          ${encomendas.length ? `<p class="text-sm text-blue-700 mt-2">Sinal das encomendas (50%): ${formatarMoeda(Number(p.sinal))}</p>` : ''}
+        </div>`;
+      }).join('') || '<p class="text-gray-500">Nenhum pedido registrado.</p>';
+    }
+
+    async function carregarPedidos(filtro, titulo) {
+      try {
+        const res = await fetchAdmin('/api/admin/pedidos?cliente=' + encodeURIComponent(filtro));
+        if (!res.ok) throw new Error('Erro ao carregar pedidos');
+        document.getElementById('tituloPedidos').textContent = titulo;
+        renderizarPedidos(await res.json());
+        const painel = document.getElementById('painelPedidos');
+        painel.classList.remove('hidden');
+        painel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      } catch (err) {
+        console.error(err);
+        mostrarToast('Erro ao carregar pedidos', 'error');
+      }
+    }
+
+    document.getElementById('tabelaClientes').addEventListener('click', (e) => {
+      const btn = e.target.closest('.ver-pedidos');
+      if (!btn) return;
+      const id = Number(btn.dataset.cliente);
+      const c = todosClientes.find(x => x.id === id);
+      carregarPedidos(String(id), 'Pedidos de ' + (c ? (c.nome || c.email) : 'cliente'));
+    });
+    document.getElementById('buscaClientes').addEventListener('input', (e) => renderizarClientes(filtrarClientes(todosClientes, e.target.value)));
+    document.getElementById('btnPedidosSemConta').addEventListener('click', () => carregarPedidos('sem-conta', 'Pedidos sem conta (cliente não estava logado)'));
+    document.getElementById('btnAtualizarClientes').addEventListener('click', carregarClientes);
 
     // WhatsApp Config (higieniza: só dígitos antes de salvar / gerar wa.me)
     async function carregarWhatsApp() {

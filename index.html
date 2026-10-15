@@ -930,12 +930,14 @@
       }
 
       try {
-        // 1. Registra métrica no backend
+        // 1. Registra o pedido no backend (ligado à conta quando o cliente está logado)
         const idsProdutos = maleta.itens.map(item => item.id);
+        const headers = { 'Content-Type': 'application/json' };
+        if (cliente) headers.Authorization = 'Bearer ' + cliente.token;
         const resCheckout = await fetch('/api/maleta/checkout', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ produtoIds: idsProdutos })
+          headers,
+          body: JSON.stringify({ produtoIds: idsProdutos, contato: { nome, telefone, cep, numero, rua, bairro, cidade, complemento } })
         });
 
         if (!resCheckout.ok) throw new Error('Erro ao registrar maleta');
