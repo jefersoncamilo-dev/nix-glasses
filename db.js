@@ -66,6 +66,17 @@ async function initTables() {
       ADD COLUMN IF NOT EXISTS link_fornecedor VARCHAR(1000) NOT NULL DEFAULT ''
     `);
 
+    // Especificações técnicas mostradas ao cliente. Medidas em cm, com uma casa
+    // decimal (ex.: diâmetro 5,0); vazio = não informado.
+    await client.query(`
+      ALTER TABLE produtos
+      ADD COLUMN IF NOT EXISTS diametro_cm DECIMAL(4,1),
+      ADD COLUMN IF NOT EXISTS ponte_cm DECIMAL(4,1),
+      ADD COLUMN IF NOT EXISTS largura_total_cm DECIMAL(4,1),
+      ADD COLUMN IF NOT EXISTS material VARCHAR(60) NOT NULL DEFAULT '',
+      ADD COLUMN IF NOT EXISTS tipo VARCHAR(100) NOT NULL DEFAULT ''
+    `);
+
     // Histórico de compras/reposições de cada produto (custo unitário pago ao fornecedor).
     // origem: CADASTRO (custo informado ao cadastrar) ou REPOSICAO (registrada no painel).
     await client.query(`

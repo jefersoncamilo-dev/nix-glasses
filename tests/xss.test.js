@@ -51,6 +51,8 @@ function produtoMalicioso(extra = {}) {
     formato: PAYLOAD,
     estilo: PAYLOAD,
     cor_armacao: PAYLOAD,
+    material: PAYLOAD,
+    tipo: PAYLOAD,
     status: 'CONDICIONAL',
     imagem_url: `x" onerror="alert(1)`,
     fotos: [`x" onerror="alert(1)`, `y'><script>alert(2)</script>`],
@@ -92,7 +94,7 @@ describe('vitrine (index.html) escapa dados de produto', () => {
 
   it('nos detalhes do produto (carrossel e miniaturas)', () => {
     const detalhesConteudo = elemento();
-    const ctx = carregar('index.html', ['escapeHtml', 'fotosDoProduto', 'indiceCircular', 'ehSobEncomenda', 'calcularSinal', 'etiquetaProduto', 'renderizarDetalhes'], {
+    const ctx = carregar('index.html', ['escapeHtml', 'fotosDoProduto', 'indiceCircular', 'ehSobEncomenda', 'calcularSinal', 'etiquetaProduto', 'especificacoesProduto', 'renderizarDetalhes'], {
       produtos: [produtoMalicioso()],
       maleta: { itens: [] },
       detalhes: { id: 7, indice: 1 },

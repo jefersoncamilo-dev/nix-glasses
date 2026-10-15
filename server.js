@@ -413,6 +413,43 @@ function lerLinkFornecedor(v) {
   }
 }
 
+// Especificações técnicas: medidas em cm ("5,0", "5.0", "5 cm" ou número).
+// Devolve null (vazio), o número com uma casa decimal, ou NaN se inválido.
+const MEDIDAS_CM = [
+  ['diametro_cm', 'Diâmetro'],
+  ['ponte_cm', 'Ponte'],
+  ['largura_total_cm', 'Largura total'],
+];
+function lerMedidaCm(v) {
+  if (v === undefined || v === null) return null;
+  let n;
+  if (typeof v === 'number') n = v;
+  else if (typeof v === 'string') {
+    const t = v.trim().replace(/\s*cm$/i, '').replace(',', '.');
+    if (!t) return null;
+    if (!/^\d{1,2}(\.\d+)?$/.test(t)) return NaN;
+    n = Number(t);
+  } else return NaN;
+  if (!Number.isFinite(n) || n <= 0 || n >= 100) return NaN;
+  return Math.round(n * 10) / 10;
+}
+
+// Campos de especificação vindos do formulário/lote. Só inclui os enviados
+// (o PUT não mexe no que não veio). `erro` = a 1ª medida inválida.
+function lerEspecificacoes(body) {
+  const espec = {};
+  let erro = null;
+  for (const [campo, rotulo] of MEDIDAS_CM) {
+    if (body[campo] === undefined) continue;
+    const v = lerMedidaCm(body[campo]);
+    if (Number.isNaN(v)) erro = erro || { campo, mensagem: `${rotulo} inválido (em cm, ex.: 5,0)` };
+    else espec[campo] = v;
+  }
+  if (body.material !== undefined) espec.material = textoCurto(body.material, 60);
+  if (body.tipo !== undefined) espec.tipo = textoCurto(body.tipo, 100);
+  return { espec, erro };
+}
+
 // Cadastro em lote: confere uma linha e devolve o produto já normalizado.
 // Mesmas regras do formulário do painel (nome, SKU e preços obrigatórios).
 const STATUS_PRODUTO = ['DISPONIVEL', 'CONDICIONAL', 'ESGOTADO'];
@@ -442,6 +479,9 @@ function validarProdutoLote(linha) {
     estilo: textoCurto(l.estilo, 100) || null,
     cor_armacao: textoCurto(l.cor_armacao, 100) || null,
   };
+  const { espec, erro: erroEspec } = lerEspecificacoes(l);
+  Object.assign(produto, { diametro_cm: null, ponte_cm: null, largura_total_cm: null, material: '', tipo: '' }, espec);
+  if (erroEspec) erros.push(erroEspec);
   if (!produto.nome) erros.push({ campo: 'nome', mensagem: 'Informe o nome' });
   if (!produto.codigo_sku) erros.push({ campo: 'codigo_sku', mensagem: 'Informe o SKU' });
   if (produto.link_fornecedor === null) erros.push({ campo: 'link_fornecedor', mensagem: 'Link inválido (use http:// ou https://)' });
@@ -536,7 +576,8 @@ async function startServer() {
   async function handleListPublicos(req, res) {
     try {
       const result = await pool.query(
-        `SELECT id, nome, codigo_sku, preco_venda, imagem_url, fotos, status, disponibilidade, formato, estilo, cor_armacao
+        `SELECT id, nome, codigo_sku, preco_venda, imagem_url, fotos, status, disponibilidade, formato, estilo, cor_armacao,
+                diametro_cm, ponte_cm, largura_total_cm, material, tipo
          FROM produtos
          WHERE status IN ('DISPONIVEL', 'CONDICIONAL')
          ORDER BY created_at DESC`
@@ -554,7 +595,8 @@ async function startServer() {
     try {
       const result = await pool.query(
         `SELECT p.id, p.nome, p.codigo_sku, p.preco_custo, p.preco_venda, p.imagem_url, p.fotos, p.status, p.disponibilidade,
-                p.formato, p.estilo, p.cor_armacao, p.fornecedor, p.codigo_fornecedor, p.link_fornecedor, p.vezes_em_maleta,
+                p.formato, p.estilo, p.cor_armacao, p.diametro_cm, p.ponte_cm, p.largura_total_cm, p.material, p.tipo,
+                p.fornecedor, p.codigo_fornecedor, p.link_fornecedor, p.vezes_em_maleta,
                 to_char(uc.data_compra, 'YYYY-MM-DD') AS ultima_compra, uc.preco_custo AS custo_ultima_compra,
                 ca.preco_custo AS custo_compra_anterior, COALESCE(nc.total, 0)::int AS total_compras
          FROM produtos p
@@ -579,7 +621,7 @@ async function startServer() {
   async function handleListConditional(req, res) {
     try {
       const result = await pool.query(
-        `SELECT id, nome, codigo_sku, preco_custo, preco_venda, imagem_url, fotos, status, disponibilidade, formato, estilo, cor_armacao, fornecedor, codigo_fornecedor, link_fornecedor, vezes_em_maleta
+        `SELECT id, nome, codigo_sku, preco_custo, preco_venda, imagem_url, fotos, status, disponibilidade, formato, estilo, cor_armacao, diametro_cm, ponte_cm, largura_total_cm, material, tipo, fornecedor, codigo_fornecedor, link_fornecedor, vezes_em_maleta
          FROM produtos
          WHERE status = 'CONDICIONAL'
          ORDER BY created_at DESC`
@@ -614,6 +656,8 @@ async function startServer() {
     if (!DISPONIBILIDADES.includes(disponibilidade)) {
       return res.status(400).json({ error: 'Disponibilidade inválida' });
     }
+    const { espec, erro: erroEspec } = lerEspecificacoes(req.body);
+    if (erroEspec) return res.status(400).json({ error: erroEspec.mensagem });
 
     let client;
     try {
@@ -624,10 +668,12 @@ async function startServer() {
         if (file) fotos.push(await salvarImagem(client, file));
       }
       const result = await client.query(
-        `INSERT INTO produtos (nome, codigo_sku, preco_custo, preco_venda, imagem_url, fotos, disponibilidade, formato, estilo, cor_armacao, fornecedor, codigo_fornecedor, link_fornecedor)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+        `INSERT INTO produtos (nome, codigo_sku, preco_custo, preco_venda, imagem_url, fotos, disponibilidade, formato, estilo, cor_armacao, fornecedor, codigo_fornecedor, link_fornecedor,
+                               diametro_cm, ponte_cm, largura_total_cm, material, tipo)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
          RETURNING *`,
-        [nome, codigoFinal, preco_custo, preco_venda, fotos[0] || null, fotos, disponibilidade, formato, estilo, cor_armacao, fornecedor, codigoFornecedor, linkFornecedor]
+        [nome, codigoFinal, preco_custo, preco_venda, fotos[0] || null, fotos, disponibilidade, formato, estilo, cor_armacao, fornecedor, codigoFornecedor, linkFornecedor,
+          espec.diametro_cm ?? null, espec.ponte_cm ?? null, espec.largura_total_cm ?? null, espec.material || '', espec.tipo || '']
       );
       await registrarCompraCadastro(client, result.rows[0]);
       await client.query('COMMIT');
@@ -661,6 +707,8 @@ async function startServer() {
     if (linkFornecedor === null) {
       return res.status(400).json({ error: 'Link do fornecedor inválido (use http:// ou https://)' });
     }
+    const { espec, erro: erroEspec } = lerEspecificacoes(req.body);
+    if (erroEspec) return res.status(400).json({ error: erroEspec.mensagem });
 
     let client;
     try {
@@ -691,6 +739,11 @@ async function startServer() {
       if (req.body.fornecedor !== undefined) addField('fornecedor', textoCurto(req.body.fornecedor, 120));
       if (req.body.codigo_fornecedor !== undefined) addField('codigo_fornecedor', textoCurto(req.body.codigo_fornecedor, 100));
       if (req.body.link_fornecedor !== undefined) addField('link_fornecedor', linkFornecedor);
+      // addField pula undefined, mas null (medida apagada) precisa entrar
+      for (const [campo, valor] of Object.entries(espec)) {
+        fields.push(`${campo} = $${paramCount++}`);
+        values.push(valor);
+      }
 
       if (fields.length === 0 && !mexeNasFotos) {
         await client.query('ROLLBACK');
@@ -794,11 +847,13 @@ async function startServer() {
       for (const [i, p] of novos) {
         // ON CONFLICT cobre outro cadastro do mesmo SKU entre a checagem e o INSERT
         const r = await client.query(
-          `INSERT INTO produtos (nome, codigo_sku, preco_custo, preco_venda, status, disponibilidade, formato, estilo, cor_armacao, fornecedor, codigo_fornecedor, link_fornecedor)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+          `INSERT INTO produtos (nome, codigo_sku, preco_custo, preco_venda, status, disponibilidade, formato, estilo, cor_armacao, fornecedor, codigo_fornecedor, link_fornecedor,
+                                 diametro_cm, ponte_cm, largura_total_cm, material, tipo)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
            ON CONFLICT (codigo_sku) DO NOTHING
            RETURNING *`,
-          [p.nome, p.codigo_sku, p.preco_custo, p.preco_venda, p.status, p.disponibilidade, p.formato, p.estilo, p.cor_armacao, p.fornecedor, p.codigo_fornecedor, p.link_fornecedor]
+          [p.nome, p.codigo_sku, p.preco_custo, p.preco_venda, p.status, p.disponibilidade, p.formato, p.estilo, p.cor_armacao, p.fornecedor, p.codigo_fornecedor, p.link_fornecedor,
+            p.diametro_cm, p.ponte_cm, p.largura_total_cm, p.material, p.tipo]
         );
         if (!r.rows.length) {
           ignorados.push({ linha: i, codigo_sku: p.codigo_sku, codigo_fornecedor: p.codigo_fornecedor, campo: 'codigo_sku', motivo: 'SKU já cadastrado' });

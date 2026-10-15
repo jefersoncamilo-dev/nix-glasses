@@ -217,8 +217,9 @@ function extrairFuncao(html, nome) {
 function carregarPainel(globais = {}) {
   const html = fs.readFileSync(path.join(__dirname, '..', 'admin', 'index.html'), 'utf8');
   const colunas = html.match(/const COLUNAS_LOTE = \[[\s\S]*?\n {4}\];/)[0];
-  const funcoes = ['escapeHtml', 'linhaLoteVazia', 'linhaLoteEstaVazia', 'lerPreco', 'lerDisponibilidade', 'lerStatus', 'campoDoCabecalho', 'linhasDaPlanilha', 'linkSeguro', 'validarLote', 'avisosDuplicidade', 'renderizarLote'];
-  const fonte = `${colunas}\nconst MAX_LOTE = 100;\n${funcoes.map(f => extrairFuncao(html, f)).join('\n')}`;
+  const medidas = html.match(/const CAMPOS_MEDIDA = \[.*\];/)[0];
+  const funcoes = ['escapeHtml', 'linhaLoteVazia', 'linhaLoteEstaVazia', 'lerPreco', 'lerMedida', 'lerDisponibilidade', 'lerStatus', 'campoDoCabecalho', 'linhasDaPlanilha', 'linkSeguro', 'validarLote', 'avisosDuplicidade', 'renderizarLote'];
+  const fonte = `${colunas}\n${medidas}\nconst MAX_LOTE = 100;\n${funcoes.map(f => extrairFuncao(html, f)).join('\n')}`;
   const ctx = vm.createContext({ Number, String, Math, Map, Set, Object, URL, todosProdutos: [], ...globais });
   vm.runInContext(`${fonte}\n${funcoes.map(f => `this.${f} = ${f};`).join('\n')}`, ctx);
   return ctx;
