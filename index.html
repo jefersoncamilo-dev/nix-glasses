@@ -530,6 +530,24 @@
       trocarFotoCard(detalhes.id, 0);
     }
 
+    // Especificações Técnicas dos detalhes: [rótulo, valor] só do que foi preenchido.
+    // Medidas vêm do banco em cm ("5.0") e aparecem como "5,0 cm".
+    function especificacoesProduto(produto) {
+      const cm = (v) => {
+        const n = Number(v);
+        return v !== null && v !== undefined && v !== '' && Number.isFinite(n) && n > 0 ? `${n.toFixed(1).replace('.', ',')} cm` : '';
+      };
+      return [
+        ['Diâmetro', cm(produto.diametro_cm)],
+        ['Ponte', cm(produto.ponte_cm)],
+        ['Largura Total', cm(produto.largura_total_cm)],
+        ['Material', produto.material],
+        ['Formato da lente', produto.formato],
+        ['Cor', produto.cor_armacao],
+        ['Tipo', produto.tipo],
+      ].filter(([, valor]) => valor);
+    }
+
     function renderizarDetalhes() {
       if (!detalhes) return;
       const produto = produtos.find(p => p.id === detalhes.id);
@@ -540,6 +558,7 @@
       const encomenda = ehSobEncomenda(produto);
       const etiqueta = etiquetaProduto(produto);
       const jaNaMaleta = maleta.itens.some(i => i.id === produto.id);
+      const especificacoes = especificacoesProduto(produto);
       detalhesConteudo.innerHTML = `
         <div class="grid md:grid-cols-2">
           <div class="p-3 sm:p-4">
@@ -562,11 +581,12 @@
             <h3 class="text-xl sm:text-2xl font-bold text-gray-900 mb-1">${escapeHtml(produto.nome)}</h3>
             <p class="text-sm text-gray-500 mb-4">Ref: ${escapeHtml(produto.codigo_sku)}</p>
             <p class="text-2xl sm:text-3xl font-bold text-gray-900 mb-4">${formatarMoeda(produto.preco_venda)}</p>
+            ${produto.estilo ? `<p class="text-sm text-gray-500 mb-4">Estilo: <span class="text-gray-900">${escapeHtml(produto.estilo)}</span></p>` : ''}
+            ${especificacoes.length ? `
+            <h4 class="text-sm font-semibold text-gray-900 mb-2">Especificações Técnicas</h4>
             <dl class="grid grid-cols-2 gap-x-4 gap-y-2 text-sm mb-4">
-              ${produto.formato ? `<dt class="text-gray-500">Formato</dt><dd class="text-gray-900">${escapeHtml(produto.formato)}</dd>` : ''}
-              ${produto.estilo ? `<dt class="text-gray-500">Estilo</dt><dd class="text-gray-900">${escapeHtml(produto.estilo)}</dd>` : ''}
-              ${produto.cor_armacao ? `<dt class="text-gray-500">Cor da armação</dt><dd class="text-gray-900">${escapeHtml(produto.cor_armacao)}</dd>` : ''}
-            </dl>
+              ${especificacoes.map(([rotulo, valor]) => `<dt class="text-gray-500">${escapeHtml(rotulo)}</dt><dd class="text-gray-900">${escapeHtml(valor)}</dd>`).join('')}
+            </dl>` : ''}
             ${encomenda ? `<p class="text-sm text-blue-700 bg-blue-50 rounded-lg px-3 py-2 mb-4">50% sinal + 50% na entrega (sinal de ${formatarMoeda(calcularSinal(produto.preco_venda))})</p>` : ''}
             <div class="mt-auto">
               <button onclick="toggleMaleta(${id}); renderizarDetalhes()" class="w-full ${jaNaMaleta ? 'bg-gray-100 text-gray-600' : encomenda ? 'bg-blue-600 hover:bg-blue-700 text-white' : 'bg-orange-500 hover:bg-orange-600 text-white'} py-3 rounded-lg font-medium transition-colors">${jaNaMaleta ? 'Remover da Maleta' : encomenda ? 'Encomendar (adicionar à Maleta)' : 'Adicionar à Maleta'}</button>
