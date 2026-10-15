@@ -132,10 +132,11 @@ describe('painel (admin/index.html) escapa dados de produto', () => {
   it('na tabela de produtos', () => {
     const tabelaProdutos = elemento();
     const ctx = carregar('admin/index.html', ['escapeHtml', 'renderizarTabela'], {
-      todosProdutos: [produtoMalicioso({ status: PAYLOAD })],
+      todosProdutos: [produtoMalicioso({ status: PAYLOAD, fornecedor: PAYLOAD, codigo_fornecedor: PAYLOAD })],
       filtroStatusAdmin: elemento(),
       filtroDisponibilidadeAdmin: elemento(),
       filtroFormatoAdmin: elemento(),
+      filtroFornecedorAdmin: elemento(),
       buscaAdmin: elemento(),
       tabelaProdutos,
       emptyProdutos: elemento(),
