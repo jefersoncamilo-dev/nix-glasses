@@ -60,6 +60,35 @@ async function initTables() {
       ADD COLUMN IF NOT EXISTS codigo_fornecedor VARCHAR(100) NOT NULL DEFAULT ''
     `);
 
+    // Link do produto na loja do fornecedor (só http/https, conferido no servidor).
+    await client.query(`
+      ALTER TABLE produtos
+      ADD COLUMN IF NOT EXISTS link_fornecedor VARCHAR(1000) NOT NULL DEFAULT ''
+    `);
+
+    // Histórico de compras/reposições de cada produto (custo unitário pago ao fornecedor).
+    // origem: CADASTRO (custo informado ao cadastrar) ou REPOSICAO (registrada no painel).
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS compras_fornecedor (
+        id SERIAL PRIMARY KEY,
+        produto_id INTEGER NOT NULL REFERENCES produtos(id) ON DELETE CASCADE,
+        fornecedor VARCHAR(120) NOT NULL DEFAULT '',
+        preco_custo DECIMAL(10,2) NOT NULL,
+        quantidade INTEGER NOT NULL DEFAULT 1,
+        origem VARCHAR(20) NOT NULL DEFAULT 'REPOSICAO',
+        data_compra DATE NOT NULL DEFAULT CURRENT_DATE,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+    await client.query('CREATE INDEX IF NOT EXISTS compras_produto_idx ON compras_fornecedor (produto_id, data_compra DESC, id DESC)');
+    // Produtos cadastrados antes do histórico: o custo atual vira a compra do cadastro.
+    await client.query(`
+      INSERT INTO compras_fornecedor (produto_id, fornecedor, preco_custo, quantidade, origem, data_compra)
+      SELECT p.id, p.fornecedor, p.preco_custo, 1, 'CADASTRO', COALESCE(p.created_at::date, CURRENT_DATE)
+      FROM produtos p
+      WHERE NOT EXISTS (SELECT 1 FROM compras_fornecedor c WHERE c.produto_id = p.id)
+    `);
+
     // Até 4 fotos por produto (URLs /imagens/<id>, na ordem de exibição).
     // imagem_url continua sendo a 1ª foto, para quem só lê uma (métricas, acerto, maleta).
     // Produtos antigos: a foto única vira a foto 1.

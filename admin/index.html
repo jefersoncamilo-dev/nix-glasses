@@ -88,6 +88,7 @@
         <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-6">
           <h3 class="text-lg font-semibold text-gray-900">Gerenciar Produtos</h3>
           <div class="flex flex-col sm:flex-row gap-2">
+          <button type="button" data-abrir-fotos-sku class="w-full sm:w-auto justify-center bg-gray-100 hover:bg-gray-200 text-gray-700 px-4 py-2 rounded-lg font-medium transition-colors">Fotos por SKU</button>
           <button id="btnAbrirLote" type="button" class="w-full sm:w-auto justify-center bg-gray-100 hover:bg-gray-200 text-gray-700 px-4 py-2 rounded-lg font-medium transition-colors">Cadastro em Lote</button>
           <button id="btnNovoProduto" class="w-full sm:w-auto justify-center bg-orange-500 hover:bg-orange-600 text-white px-4 py-2 rounded-lg font-medium transition-colors flex items-center">
             <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
@@ -121,7 +122,7 @@
         <!-- Tabela -->
         <div class="bg-white rounded-xl border border-gray-200 overflow-hidden">
           <div class="overflow-x-auto -mx-0">
-            <table class="w-full min-w-[760px]">
+            <table class="w-full min-w-[860px]">
               <thead class="bg-gray-50 border-b border-gray-200">
                 <tr>
                   <th class="px-4 sm:px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Imagem</th>
@@ -162,10 +163,18 @@
         <div class="grid lg:grid-cols-2 gap-4 mb-4">
           <details class="bg-white rounded-xl border border-gray-200 p-4">
             <summary class="cursor-pointer font-medium text-gray-900">Colar da planilha (Excel / Google Sheets)</summary>
-            <p class="text-xs text-gray-500 mt-2 mb-2">Copie as linhas na planilha e cole abaixo. Ordem das colunas: <span id="loteOrdemColunas" class="font-medium"></span>. A linha de cabeçalho é ignorada. Preços aceitam 199,90 ou R$ 1.234,56.</p>
+            <p class="text-xs text-gray-500 mt-2 mb-2">Copie as linhas na planilha e cole abaixo. Com a linha de cabeçalho (começando por "Nome", "Produto" ou "Modelo"), as colunas são lidas pelo título, em qualquer ordem. Sem cabeçalho, a ordem é: <span id="loteOrdemColunas" class="font-medium"></span>. Preços aceitam 199,90 ou R$ 1.234,56.</p>
             <textarea id="loteColar" rows="4" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm font-mono focus:outline-none focus:ring-2 focus:ring-orange-500" placeholder="Cole aqui..."></textarea>
             <button id="btnLoteColar" class="mt-2 bg-gray-100 hover:bg-gray-200 text-gray-700 px-4 py-2 rounded-lg text-sm font-medium transition-colors">Adicionar linhas coladas</button>
           </details>
+          <div class="bg-white rounded-xl border border-gray-200 p-4">
+            <p class="font-medium text-gray-900 mb-1">Adicionar pelo link do fornecedor</p>
+            <p class="text-xs text-gray-500 mb-2">Cole o link do produto na loja do fornecedor: nome, custo, código e link entram numa nova linha.</p>
+            <div class="flex flex-col sm:flex-row gap-2">
+              <input type="url" id="loteImportarUrl" class="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-orange-500" placeholder="https://loja-do-fornecedor.com.br/produto/...">
+              <button id="btnLoteImportarUrl" class="bg-gray-100 hover:bg-gray-200 text-gray-700 px-4 py-2 rounded-lg text-sm font-medium transition-colors">Importar</button>
+            </div>
+          </div>
           <div class="bg-white rounded-xl border border-gray-200 p-4">
             <p class="font-medium text-gray-900 mb-2">Mesmo fornecedor para todas as linhas</p>
             <div class="flex flex-col sm:flex-row gap-2">
@@ -177,7 +186,7 @@
 
         <div class="bg-white rounded-xl border border-gray-200 overflow-hidden">
           <div class="overflow-x-auto">
-            <table class="w-full min-w-[1500px] text-sm">
+            <table class="w-full min-w-[1750px] text-sm">
               <thead class="bg-gray-50 border-b border-gray-200">
                 <tr id="loteCabecalho"></tr>
               </thead>
@@ -187,17 +196,31 @@
         </div>
         <p id="loteResumo" class="text-sm text-gray-500 mt-2"></p>
 
+        <div id="loteIgnorados" class="hidden mt-6 bg-amber-50 rounded-xl border border-amber-300 p-4" role="alert">
+          <p class="font-medium text-amber-800 mb-2" id="loteIgnoradosTitulo"></p>
+          <ul id="loteIgnoradosLista" class="divide-y divide-amber-100"></ul>
+        </div>
+
         <div id="loteCriados" class="hidden mt-6 bg-white rounded-xl border border-green-200 p-4">
-          <p class="font-medium text-green-700 mb-3" id="loteCriadosTitulo"></p>
+          <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-3">
+            <p class="font-medium text-green-700" id="loteCriadosTitulo"></p>
+            <button type="button" data-abrir-fotos-sku class="shrink-0 px-3 py-1.5 bg-orange-500 hover:bg-orange-600 text-white rounded-lg text-xs font-medium">Enviar fotos de todos por SKU</button>
+          </div>
           <ul id="loteCriadosLista" class="divide-y divide-gray-100"></ul>
         </div>
       </div>
 
       <!-- Aba Acerto -->
       <div id="tab-acerto" class="tab-content hidden">
-        <div class="flex items-center justify-between mb-6">
+        <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-6">
           <h3 class="text-lg font-semibold text-gray-900">Acerto de Maleta</h3>
+          <div class="flex flex-col sm:flex-row gap-2">
+            <button id="btnResumoMaleta" type="button" class="bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded-lg font-medium transition-colors">Resumo para WhatsApp</button>
+            <button id="btnTodosVendidos" type="button" class="bg-gray-100 hover:bg-gray-200 text-gray-700 px-4 py-2 rounded-lg font-medium transition-colors">Marcar todos vendidos</button>
+            <button id="btnTodosDevolvidos" type="button" class="bg-gray-100 hover:bg-gray-200 text-gray-700 px-4 py-2 rounded-lg font-medium transition-colors">Marcar todos devolvidos</button>
+          </div>
         </div>
+        <p class="text-sm text-gray-500 mb-4">Sem nada marcado, o resumo lista as peças em condicional (modelo, SKU e preço) para enviar à cliente. Com itens marcados, vira o resumo do acerto: com o que ela ficou, o total a pagar e o que voltou.</p>
         <div class="grid lg:grid-cols-2 gap-6">
           <!-- Comprados -->
           <div class="bg-white rounded-xl border border-gray-200 p-6">
@@ -289,7 +312,7 @@
           </div>
         </div>
         <div class="bg-white rounded-xl border border-gray-200 p-6">
-          <h4 class="text-lg font-semibold text-gray-900 mb-4">Top 10 Mais Adicionados à Maleta</p>
+          <h4 class="text-lg font-semibold text-gray-900 mb-4">Top 10 Mais Adicionados à Maleta</h4>
           <div class="overflow-x-auto">
             <table class="w-full">
               <thead class="bg-gray-50 border-b border-gray-200">
@@ -303,6 +326,24 @@
               <tbody id="tabelaTopMaleta" class="divide-y divide-gray-200">
                 <!-- Linhas inseridas via JS -->
               </tbody>
+            </table>
+          </div>
+        </div>
+        <div class="bg-white rounded-xl border border-gray-200 p-6 mt-6">
+          <h4 class="text-lg font-semibold text-gray-900 mb-1">Reposição por Fornecedor</h4>
+          <p class="text-sm text-gray-500 mb-4">Última compra de cada fornecedor e como o custo mudou da compra anterior para a última, por produto.</p>
+          <div class="overflow-x-auto">
+            <table class="w-full min-w-[560px]">
+              <thead class="bg-gray-50 border-b border-gray-200">
+                <tr>
+                  <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Fornecedor</th>
+                  <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Produtos</th>
+                  <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Última compra</th>
+                  <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Custo subiu / baixou</th>
+                  <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Variação média</th>
+                </tr>
+              </thead>
+              <tbody id="tabelaFornecedores" class="divide-y divide-gray-200"></tbody>
             </table>
           </div>
         </div>
@@ -334,6 +375,14 @@
       </div>
       <form id="formProduto" class="p-6 overflow-y-auto flex-1 space-y-4">
         <input type="hidden" id="produtoId">
+        <div class="bg-orange-50 border border-orange-200 rounded-lg p-3">
+          <label for="importarUrl" class="block text-sm font-medium text-gray-800 mb-1">Importar do link do fornecedor</label>
+          <div class="flex flex-col sm:flex-row gap-2">
+            <input type="url" id="importarUrl" class="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-orange-500 bg-white" placeholder="Cole o link do produto na loja do fornecedor">
+            <button type="button" id="btnImportarUrl" class="bg-orange-500 hover:bg-orange-600 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors">Importar</button>
+          </div>
+          <p id="importarStatus" class="text-xs text-gray-600 mt-1">Preenche nome, preço de custo, código e link. Confira os dados antes de salvar.</p>
+        </div>
         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
             <label class="block text-sm font-medium text-gray-700 mb-1">Nome *</label>
@@ -358,6 +407,13 @@
           <div>
             <label class="block text-sm font-medium text-gray-700 mb-1">Código do Fornecedor</label>
             <input type="text" id="codigo_fornecedor" name="codigo_fornecedor" maxlength="100" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500" placeholder="Código do produto no fornecedor">
+          </div>
+          <div class="md:col-span-2">
+            <label class="block text-sm font-medium text-gray-700 mb-1">Link do Fornecedor</label>
+            <div class="flex gap-2">
+              <input type="url" id="link_fornecedor" name="link_fornecedor" maxlength="1000" class="flex-1 min-w-0 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500" placeholder="https://loja-do-fornecedor.com.br/produto/...">
+              <a id="abrirLinkFornecedor" href="#" target="_blank" rel="noopener noreferrer" class="hidden shrink-0 px-3 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 text-sm" title="Abrir em nova aba">Abrir ↗</a>
+            </div>
           </div>
           <div>
             <label class="block text-sm font-medium text-gray-700 mb-1">Formato</label>
@@ -390,7 +446,7 @@
         </div>
         <div>
           <label class="block text-sm font-medium text-gray-700 mb-1">Fotos (até 4)</label>
-          <p class="text-xs text-gray-500 mb-2">A foto 1 é a capa do produto na vitrine.</p>
+          <p class="text-xs text-gray-500 mb-2">A foto 1 é a capa do produto na vitrine. Arraste várias fotos de uma vez para cá: elas ocupam as posições livres, em ordem.</p>
           <div id="slotsFotos" class="grid grid-cols-2 sm:grid-cols-4 gap-3"></div>
           <input type="file" id="imagemCamera" accept="image/*" capture="environment" class="hidden">
         </div>
@@ -399,6 +455,90 @@
           <button type="submit" class="w-full sm:w-auto bg-orange-500 hover:bg-orange-600 text-white px-6 py-2 rounded-lg font-medium transition-colors">Salvar</button>
         </div>
       </form>
+    </div>
+  </div>
+
+  <!-- Modal Reposição (histórico de compras do fornecedor) -->
+  <div id="modalReposicao" class="fixed inset-0 modal-overlay bg-black/50 hidden z-50 flex items-center justify-center p-4">
+    <div class="bg-white rounded-2xl max-w-lg w-full max-h-[90vh] overflow-hidden flex flex-col">
+      <div class="flex items-center justify-between p-6 border-b border-gray-200">
+        <div class="min-w-0">
+          <h3 class="text-xl font-bold text-gray-900">Reposição</h3>
+          <p id="reposicaoProduto" class="text-sm text-gray-500 truncate"></p>
+        </div>
+        <button type="button" data-fechar-modal="modalReposicao" class="p-2 text-gray-500 hover:text-gray-700 rounded-lg hover:bg-gray-100" aria-label="Fechar"><svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg></button>
+      </div>
+      <div class="p-6 overflow-y-auto flex-1 space-y-4">
+        <form id="formReposicao" class="grid grid-cols-2 sm:grid-cols-3 gap-3">
+          <div>
+            <label for="reposicaoCusto" class="block text-sm font-medium text-gray-700 mb-1">Custo unit. *</label>
+            <input type="text" inputmode="decimal" id="reposicaoCusto" required class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500">
+          </div>
+          <div>
+            <label for="reposicaoQtd" class="block text-sm font-medium text-gray-700 mb-1">Quantidade</label>
+            <input type="number" min="1" step="1" id="reposicaoQtd" value="1" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500">
+          </div>
+          <div class="col-span-2 sm:col-span-1">
+            <label for="reposicaoData" class="block text-sm font-medium text-gray-700 mb-1">Data</label>
+            <input type="date" id="reposicaoData" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500">
+          </div>
+          <label id="reposicaoReativarBox" class="col-span-2 sm:col-span-3 flex items-center gap-2 text-sm text-gray-700">
+            <input type="checkbox" id="reposicaoReativar" class="w-4 h-4 text-orange-500 border-gray-300 rounded"> Produto está esgotado: voltar para Disponível
+          </label>
+          <div class="col-span-2 sm:col-span-3 flex justify-end">
+            <button type="submit" class="bg-orange-500 hover:bg-orange-600 text-white px-5 py-2 rounded-lg font-medium transition-colors">Registrar compra</button>
+          </div>
+        </form>
+        <div>
+          <h4 class="text-sm font-semibold text-gray-900 mb-2">Histórico de compras</h4>
+          <ul id="reposicaoHistorico" class="divide-y divide-gray-100 text-sm"></ul>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal Fotos por SKU (upload múltiplo) -->
+  <div id="modalFotosSku" class="fixed inset-0 modal-overlay bg-black/50 hidden z-50 flex items-center justify-center p-4">
+    <div class="bg-white rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-hidden flex flex-col">
+      <div class="flex items-center justify-between p-6 border-b border-gray-200">
+        <h3 class="text-xl font-bold text-gray-900">Enviar fotos por SKU</h3>
+        <button type="button" data-fechar-modal="modalFotosSku" class="p-2 text-gray-500 hover:text-gray-700 rounded-lg hover:bg-gray-100" aria-label="Fechar"><svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg></button>
+      </div>
+      <div class="p-6 overflow-y-auto flex-1 space-y-4">
+        <p class="text-sm text-gray-600">Dê às fotos o nome do SKU do produto: <span class="font-mono">AV-1.jpg</span>, <span class="font-mono">AV-1_2.jpg</span>, <span class="font-mono">AV-1 (3).png</span>. Cada foto vai para o produto do SKU, nas posições livres (até 4 por produto), sem apagar as que já existem.</p>
+        <label id="dropFotosSku" class="block border-2 border-dashed border-gray-300 rounded-xl p-8 text-center cursor-pointer hover:border-orange-400 hover:bg-orange-50 transition-colors">
+          <span class="block text-gray-700 font-medium">Arraste as fotos aqui</span>
+          <span class="block text-sm text-gray-500">ou clique para escolher (JPG, PNG, WEBP, HEIC)</span>
+          <input type="file" id="inputFotosSku" multiple accept="image/*" class="hidden">
+        </label>
+        <div id="previaFotosSku" class="space-y-3"></div>
+      </div>
+      <div class="p-4 border-t border-gray-200 flex flex-col-reverse sm:flex-row sm:justify-between sm:items-center gap-2">
+        <p id="progressoFotosSku" class="text-sm text-gray-500"></p>
+        <button type="button" id="btnEnviarFotosSku" disabled class="bg-orange-500 hover:bg-orange-600 disabled:opacity-50 disabled:cursor-not-allowed text-white px-6 py-2 rounded-lg font-medium transition-colors">Enviar fotos</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal Resumo da Maleta (WhatsApp) -->
+  <div id="modalResumoMaleta" class="fixed inset-0 modal-overlay bg-black/50 hidden z-50 flex items-center justify-center p-4">
+    <div class="bg-white rounded-2xl max-w-lg w-full max-h-[90vh] overflow-hidden flex flex-col">
+      <div class="flex items-center justify-between p-6 border-b border-gray-200">
+        <h3 id="resumoMaletaTitulo" class="text-xl font-bold text-gray-900">Resumo da maleta</h3>
+        <button type="button" data-fechar-modal="modalResumoMaleta" class="p-2 text-gray-500 hover:text-gray-700 rounded-lg hover:bg-gray-100" aria-label="Fechar"><svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg></button>
+      </div>
+      <div class="p-6 overflow-y-auto flex-1 space-y-3">
+        <p class="text-xs text-gray-500">Pode editar o texto antes de enviar (por exemplo, para tirar peças de outra cliente).</p>
+        <textarea id="resumoMaletaTexto" rows="14" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm font-mono focus:outline-none focus:ring-2 focus:ring-orange-500"></textarea>
+        <div>
+          <label for="resumoMaletaTelefone" class="block text-sm font-medium text-gray-700 mb-1">WhatsApp da cliente (opcional)</label>
+          <input type="tel" id="resumoMaletaTelefone" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500" placeholder="5511999999999">
+        </div>
+      </div>
+      <div class="p-4 border-t border-gray-200 flex flex-col sm:flex-row sm:justify-end gap-2">
+        <button type="button" id="btnCopiarResumo" class="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 font-medium">Copiar texto</button>
+        <button type="button" id="btnWhatsappResumo" class="bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded-lg font-medium">Abrir no WhatsApp</button>
+      </div>
     </div>
   </div>
 
@@ -498,7 +638,7 @@
         if (target === 'acerto') carregarAcerto();
         if (target === 'lote') iniciarLote();
         if (target === 'clientes') carregarClientes();
-        if (target === 'metricas') carregarMetricas();
+        if (target === 'metricas') { carregarMetricas(); carregarResumoFornecedores(); }
         if (target === 'config') carregarWhatsApp();
         sidebar.classList.remove('open');
         sidebarOverlay.classList.add('hidden');
@@ -517,6 +657,7 @@
       { campo: 'codigo_sku', titulo: 'SKU *', largura: 'w-32' },
       { campo: 'fornecedor', titulo: 'Fornecedor', largura: 'w-40' },
       { campo: 'codigo_fornecedor', titulo: 'Cód. fornecedor', largura: 'w-32' },
+      { campo: 'link_fornecedor', titulo: 'Link fornecedor', largura: 'w-56' },
       { campo: 'preco_custo', titulo: 'Custo *', largura: 'w-24' },
       { campo: 'preco_venda', titulo: 'Venda *', largura: 'w-24' },
       { campo: 'disponibilidade', titulo: 'Disponibilidade', largura: 'w-36', opcoes: [['PRONTA_ENTREGA', 'Pronta Entrega'], ['SOB_ENCOMENDA', 'Sob Encomenda']] },
@@ -531,11 +672,11 @@
     const tabelaLote = document.getElementById('tabelaLote');
 
     function linhaLoteVazia() {
-      return { nome: '', codigo_sku: '', fornecedor: '', codigo_fornecedor: '', preco_custo: '', preco_venda: '', disponibilidade: 'PRONTA_ENTREGA', status: 'DISPONIVEL', formato: '', estilo: '', cor_armacao: '' };
+      return { nome: '', codigo_sku: '', fornecedor: '', codigo_fornecedor: '', link_fornecedor: '', preco_custo: '', preco_venda: '', disponibilidade: 'PRONTA_ENTREGA', status: 'DISPONIVEL', formato: '', estilo: '', cor_armacao: '' };
     }
 
     function linhaLoteEstaVazia(l) {
-      return ['nome', 'codigo_sku', 'fornecedor', 'codigo_fornecedor', 'preco_custo', 'preco_venda', 'formato', 'estilo', 'cor_armacao'].every(c => !String(l[c] || '').trim());
+      return ['nome', 'codigo_sku', 'fornecedor', 'codigo_fornecedor', 'link_fornecedor', 'preco_custo', 'preco_venda', 'formato', 'estilo', 'cor_armacao'].every(c => !String(l[c] || '').trim());
     }
 
     // "R$ 1.234,56", "199,90" ou "199.90" -> 1234.56 / 199.9. Vazio ou inválido -> NaN.
@@ -560,45 +701,107 @@
       return 'DISPONIVEL';
     }
 
-    // Texto copiado de uma planilha (colunas separadas por TAB, ou ; num CSV) -> linhas do lote
+    // Título de coluna da planilha -> campo do lote ('' se não reconhecer)
+    function campoDoCabecalho(titulo) {
+      const t = String(titulo || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[*.:]/g, '').replace(/\s+/g, ' ').trim();
+      if (!t) return '';
+      if (/^(link|url)/.test(t)) return 'link_fornecedor';
+      if (/^(cod|codigo|ref|referencia)( do)? forn/.test(t)) return 'codigo_fornecedor';
+      if (/^forn/.test(t)) return 'fornecedor';
+      if (/^(sku|codigo sku|codigo)$/.test(t)) return 'codigo_sku';
+      if (/^(nome|produto|modelo)/.test(t)) return 'nome';
+      if (/custo/.test(t)) return 'preco_custo';
+      if (/venda|^preco$/.test(t)) return 'preco_venda';
+      if (/^dispon/.test(t)) return 'disponibilidade';
+      if (/^status/.test(t)) return 'status';
+      if (/^formato/.test(t)) return 'formato';
+      if (/^estilo/.test(t)) return 'estilo';
+      if (/^cor/.test(t)) return 'cor_armacao';
+      return '';
+    }
+
+    // Texto copiado de uma planilha (colunas separadas por TAB, ou ; num CSV) -> linhas do lote.
+    // Com linha de cabeçalho, as colunas são lidas pelo título (em qualquer ordem);
+    // sem cabeçalho, na ordem de COLUNAS_LOTE.
     function linhasDaPlanilha(texto) {
       const linhas = String(texto || '').split(/\r?\n/).filter(l => l.trim());
       const resultado = [];
+      let ordem = COLUNAS_LOTE.map(c => c.campo);
       linhas.forEach((bruta, i) => {
         const cel = (bruta.includes('\t') ? bruta.split('\t') : bruta.split(';')).map(c => c.trim());
-        if (i === 0 && /^nome/i.test(cel[0] || '')) return; // cabeçalho
+        if (i === 0 && /^(nome|produto|modelo)/i.test(cel[0] || '')) { // cabeçalho
+          const campos = cel.map(campoDoCabecalho);
+          if (campos.filter(Boolean).length >= 2) { ordem = campos; return; }
+          if (/^nome/i.test(cel[0])) return; // "Nome" sozinho: cabeçalho sem títulos reconhecidos
+        }
         const l = linhaLoteVazia();
-        COLUNAS_LOTE.forEach((col, j) => {
+        ordem.forEach((campo, j) => {
+          if (!campo) return;
           const v = cel[j] || '';
-          if (col.campo === 'disponibilidade') l[col.campo] = lerDisponibilidade(v);
-          else if (col.campo === 'status') l[col.campo] = lerStatus(v);
-          else l[col.campo] = v;
+          if (campo === 'disponibilidade') l[campo] = lerDisponibilidade(v);
+          else if (campo === 'status') l[campo] = lerStatus(v);
+          else l[campo] = v;
         });
         resultado.push(l);
       });
       return resultado;
     }
 
-    // Erros de cada linha preenchida: { campo: mensagem }. skusExistentes em minúsculas.
-    function validarLote(linhas, skusExistentes) {
-      const vistos = new Map();
-      return linhas.map((l, i) => {
+    // Link do fornecedor seguro para abrir: só http/https; qualquer outra coisa -> ''
+    function linkSeguro(v) {
+      const t = String(v || '').trim();
+      if (!t) return '';
+      try {
+        const u = new URL(t);
+        return (u.protocol === 'http:' || u.protocol === 'https:') && !u.username && !u.password ? u.href : '';
+      } catch {
+        return '';
+      }
+    }
+
+    // Erros de cada linha preenchida: { campo: mensagem }. Duplicados não são erro:
+    // o servidor ignora essas linhas e grava as demais (ver avisosDuplicidade).
+    function validarLote(linhas) {
+      return linhas.map((l) => {
         const erros = {};
         if (linhaLoteEstaVazia(l)) return erros;
         if (!String(l.nome || '').trim()) erros.nome = 'Informe o nome';
-        const sku = String(l.codigo_sku || '').trim().toLowerCase();
-        if (!sku) erros.codigo_sku = 'Informe o SKU';
-        else if (skusExistentes.has(sku)) erros.codigo_sku = 'SKU já cadastrado';
-        else if (vistos.has(sku)) erros.codigo_sku = `SKU repetido na linha ${vistos.get(sku) + 1}`;
-        else vistos.set(sku, i);
+        if (!String(l.codigo_sku || '').trim()) erros.codigo_sku = 'Informe o SKU';
         ['preco_custo', 'preco_venda'].forEach(c => {
           if (Number.isNaN(lerPreco(l[c]))) erros[c] = 'Preço inválido';
         });
+        if (String(l.link_fornecedor || '').trim() && !linkSeguro(l.link_fornecedor)) erros.link_fornecedor = 'Link inválido (use http:// ou https://)';
         return erros;
       });
     }
 
+    // Aviso por linha (mesmas regras do servidor): SKU ou código do mesmo fornecedor
+    // já cadastrado, ou repetido numa linha anterior. Essas linhas serão ignoradas.
+    function avisosDuplicidade(linhas, produtos) {
+      const minusc = v => String(v || '').trim().toLowerCase();
+      const chave = (f, c) => minusc(f) + '\u0000' + minusc(c);
+      const skus = new Set(produtos.map(p => minusc(p.codigo_sku)));
+      const codigos = new Set(produtos.filter(p => minusc(p.codigo_fornecedor)).map(p => chave(p.fornecedor, p.codigo_fornecedor)));
+      const skusLote = new Map();
+      const codigosLote = new Map();
+      return linhas.map((l, i) => {
+        if (linhaLoteEstaVazia(l)) return '';
+        const sku = minusc(l.codigo_sku);
+        const cod = minusc(l.codigo_fornecedor) ? chave(l.fornecedor, l.codigo_fornecedor) : '';
+        let aviso = '';
+        if (sku && skus.has(sku)) aviso = 'SKU já cadastrado';
+        else if (cod && codigos.has(cod)) aviso = 'Cód. fornecedor já cadastrado';
+        else if (sku && skusLote.has(sku)) aviso = `SKU repetido na linha ${skusLote.get(sku) + 1}`;
+        else if (cod && codigosLote.has(cod)) aviso = `Cód. fornecedor repetido na linha ${codigosLote.get(cod) + 1}`;
+        if (aviso) return aviso + ': será ignorado';
+        if (sku) skusLote.set(sku, i);
+        if (cod) codigosLote.set(cod, i);
+        return '';
+      });
+    }
+
     function renderizarLote() {
+      const avisos = avisosDuplicidade(linhasLote, todosProdutos);
       tabelaLote.innerHTML = linhasLote.map((l, i) => {
         const erros = errosLote[i] || {};
         const celulas = COLUNAS_LOTE.map(col => {
@@ -607,7 +810,7 @@
           const attrs = `data-linha="${i}" data-campo="${col.campo}" class="lote-campo ${col.largura} px-2 py-1.5 border ${borda} rounded focus:outline-none focus:ring-2 focus:ring-orange-500" title="${escapeHtml(erro || '')}"`;
           const campo = col.opcoes
             ? `<select ${attrs}>${col.opcoes.map(([v, t]) => `<option value="${v}"${l[col.campo] === v ? ' selected' : ''}>${t}</option>`).join('')}</select>`
-            : `<input type="text" ${attrs} value="${escapeHtml(l[col.campo])}"${col.campo.startsWith('preco') ? ' inputmode="decimal"' : ''}>`;
+            : `<input type="${col.campo === 'link_fornecedor' ? 'url' : 'text'}" ${attrs} value="${escapeHtml(l[col.campo])}"${col.campo.startsWith('preco') ? ' inputmode="decimal"' : ''}${col.campo === 'link_fornecedor' ? ' placeholder="https://..."' : ''}>`;
           return `<td class="px-2 py-2 align-top">${campo}</td>`;
         }).join('');
         const mensagens = Object.values(erros);
@@ -620,10 +823,12 @@
             <button type="button" data-acao="remover" data-linha="${i}" class="px-2 py-1.5 text-red-500 hover:bg-red-50 rounded" title="Remover linha">✕</button>
           </td>
         </tr>${mensagens.length ? `
-        <tr class="lote-erro"><td></td><td colspan="${COLUNAS_LOTE.length + 1}" class="px-2 pb-2 text-xs text-red-600">${mensagens.map(escapeHtml).join(' • ')}</td></tr>` : ''}`;
+        <tr class="lote-erro"><td></td><td colspan="${COLUNAS_LOTE.length + 1}" class="px-2 pb-2 text-xs text-red-600">${mensagens.map(escapeHtml).join(' • ')}</td></tr>` : ''}${avisos[i] ? `
+        <tr class="lote-aviso"><td></td><td colspan="${COLUNAS_LOTE.length + 1}" class="px-2 pb-2 text-xs text-amber-700">⚠ ${escapeHtml(avisos[i])}</td></tr>` : ''}`;
       }).join('');
       const preenchidas = linhasLote.filter(l => !linhaLoteEstaVazia(l)).length;
-      document.getElementById('loteResumo').textContent = `${preenchidas} produto(s) preenchido(s) de ${linhasLote.length} linha(s). Máximo de ${MAX_LOTE} por vez.`;
+      const duplicados = avisos.filter(Boolean).length;
+      document.getElementById('loteResumo').textContent = `${preenchidas} produto(s) preenchido(s) de ${linhasLote.length} linha(s)${duplicados ? `, ${duplicados} duplicado(s) que será(ão) ignorado(s)` : ''}. Máximo de ${MAX_LOTE} por vez.`;
     }
 
     function iniciarLote() {
@@ -657,6 +862,11 @@
         el.classList.add('border-gray-300');
       }
     });
+    // Ao sair de um campo de SKU/fornecedor, refaz os avisos de duplicidade
+    tabelaLote.addEventListener('change', (e) => {
+      const el = e.target.closest('.lote-campo');
+      if (el && ['codigo_sku', 'fornecedor', 'codigo_fornecedor'].includes(el.dataset.campo)) renderizarLote();
+    });
     tabelaLote.addEventListener('click', (e) => {
       const btn = e.target.closest('button[data-acao]');
       if (!btn) return;
@@ -685,6 +895,24 @@
       campo.value = '';
       mostrarToast(`${novas.length} linha(s) adicionada(s)`);
     });
+    document.getElementById('btnLoteImportarUrl').addEventListener('click', async () => {
+      const btn = document.getElementById('btnLoteImportarUrl');
+      const campo = document.getElementById('loteImportarUrl');
+      const url = campo.value.trim();
+      if (!linkSeguro(url)) return mostrarToast('Cole um link começando com http:// ou https://', 'error');
+      btn.disabled = true;
+      try {
+        const c = camposDaImportacao(await buscarImportacao(url));
+        const fornecedorTodos = document.getElementById('loteFornecedorTodos').value.trim();
+        adicionarLinhasLote([{ ...linhaLoteVazia(), ...c, fornecedor: fornecedorTodos || c.fornecedor, preco_custo: c.preco_custo.replace('.', ',') }]);
+        campo.value = '';
+        mostrarToast('Produto adicionado. Complete SKU e preço de venda.');
+      } catch (err) {
+        mostrarToast(err.message, 'error');
+      } finally {
+        btn.disabled = false;
+      }
+    });
     document.getElementById('btnLoteFornecedorTodos').addEventListener('click', () => {
       const f = document.getElementById('loteFornecedorTodos').value.trim();
       linhasLote.forEach(l => { if (!linhaLoteEstaVazia(l)) l.fornecedor = f; });
@@ -697,8 +925,7 @@
       if (!indices.length) return mostrarToast('Preencha ao menos um produto', 'error');
       if (indices.length > MAX_LOTE) return mostrarToast(`Máximo de ${MAX_LOTE} produtos por vez`, 'error');
 
-      const skusExistentes = new Set(todosProdutos.map(p => String(p.codigo_sku).toLowerCase()));
-      errosLote = validarLote(linhasLote, skusExistentes);
+      errosLote = validarLote(linhasLote);
       if (errosLote.some(e => Object.keys(e).length)) {
         renderizarLote();
         return mostrarToast('Corrija as linhas marcadas em vermelho', 'error');
@@ -726,12 +953,14 @@
           renderizarLote();
           throw new Error(data.error || 'Erro ao salvar');
         }
-        mostrarToast(`${data.produtos.length} produto(s) cadastrado(s)!`);
+        const ignorados = data.ignorados || [];
+        mostrarToast(`${data.produtos.length} produto(s) cadastrado(s)${ignorados.length ? `, ${ignorados.length} ignorado(s) por duplicidade` : '!'}`, data.produtos.length ? 'success' : 'error');
         linhasLote = [linhaLoteVazia(), linhaLoteVazia(), linhaLoteVazia()];
         errosLote = [];
-        renderizarLote();
         await carregarProdutos();
+        renderizarLote();
         renderizarCriadosLote(data.produtos);
+        renderizarIgnoradosLote(ignorados);
       } catch (err) {
         console.error(err);
         mostrarToast(err.message, 'error');
@@ -739,6 +968,18 @@
         btn.disabled = false;
       }
     });
+
+    // Alerta com o que o servidor ignorou por já existir (ou repetir no lote)
+    function renderizarIgnoradosLote(ignorados) {
+      const painel = document.getElementById('loteIgnorados');
+      painel.classList.toggle('hidden', !ignorados.length);
+      document.getElementById('loteIgnoradosTitulo').textContent = `${ignorados.length} item(ns) não foram cadastrados porque já existiam:`;
+      document.getElementById('loteIgnoradosLista').innerHTML = ignorados.map(g => `
+        <li class="py-1.5 text-sm text-gray-800">
+          <span class="font-medium">SKU ${escapeHtml(g.codigo_sku)}</span>${g.codigo_fornecedor ? ` <span class="text-gray-500">• Cód. fornecedor ${escapeHtml(g.codigo_fornecedor)}</span>` : ''}
+          <span class="text-amber-700">: ${escapeHtml(g.motivo)}</span>
+        </li>`).join('');
+    }
 
     // Lista do que acabou de ser cadastrado, com atalho para adicionar as fotos
     function renderizarCriadosLote(produtos) {
@@ -748,7 +989,7 @@
           <span class="text-sm text-gray-900">${escapeHtml(p.nome)} <span class="text-gray-500">(${escapeHtml(p.codigo_sku)})</span></span>
           <button type="button" onclick="editarProduto(${Number(p.id)})" class="shrink-0 px-3 py-1.5 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 text-xs font-medium">Adicionar fotos</button>
         </li>`).join('');
-      document.getElementById('loteCriados').classList.remove('hidden');
+      document.getElementById('loteCriados').classList.toggle('hidden', !produtos.length);
     }
 
     // Carregar produtos
@@ -802,6 +1043,42 @@
       return String(v ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
     }
 
+    // Botão "Link" da listagem: abre a página do produto no fornecedor em nova aba
+    function botaoLinkFornecedor(link) {
+      const href = linkSeguro(link);
+      const icone = '<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg>';
+      return href
+        ? `<a href="${escapeHtml(href)}" target="_blank" rel="noopener noreferrer" class="inline-flex items-center gap-1 px-2 py-1.5 text-sm text-blue-600 hover:text-blue-800 hover:bg-blue-50 rounded-lg transition-colors" title="Abrir no fornecedor">${icone}Link</a>`
+        : `<span class="inline-flex items-center gap-1 px-2 py-1.5 text-sm text-gray-300 cursor-not-allowed" title="Sem link do fornecedor (cadastre editando o produto)">${icone}Link</span>`;
+    }
+
+    // Variação % do custo da última compra em relação à anterior (null sem compra anterior)
+    function variacaoCusto(p) {
+      const ult = Number(p.custo_ultima_compra);
+      const ant = Number(p.custo_compra_anterior);
+      if (p.custo_compra_anterior === null || p.custo_compra_anterior === undefined || !(ant > 0) || !Number.isFinite(ult)) return null;
+      return Math.round((ult - ant) / ant * 1000) / 10;
+    }
+
+    const formatarDia = (iso) => {
+      const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(iso || ''));
+      return m ? `${m[3]}/${m[2]}/${m[1]}` : '-';
+    };
+
+    function htmlVariacao(v) {
+      if (v === null) return '';
+      if (v === 0) return '<span class="text-gray-500">= custo</span>';
+      return v > 0
+        ? `<span class="text-red-600 font-medium" title="Custo subiu em relação à compra anterior">▲ ${String(v).replace('.', ',')}%</span>`
+        : `<span class="text-green-600 font-medium" title="Custo baixou em relação à compra anterior">▼ ${String(Math.abs(v)).replace('.', ',')}%</span>`;
+    }
+
+    function htmlUltimaCompra(p) {
+      if (!p.ultima_compra) return '';
+      const v = variacaoCusto(p);
+      return `<p class="text-xs text-gray-400" title="${Number(p.total_compras) || 0} compra(s) registrada(s)">Últ. compra ${escapeHtml(formatarDia(p.ultima_compra))}${v !== null ? ' • ' + htmlVariacao(v) : ''}</p>`;
+    }
+
     function renderizarTabela() {
       const statusFiltro = filtroStatusAdmin.value;
       const disponibilidadeFiltro = filtroDisponibilidadeAdmin.value;
@@ -842,6 +1119,7 @@
           <td class="px-4 sm:px-6 py-4">
             <p class="text-gray-900 font-medium text-sm sm:text-base">${formatarMoeda(p.preco_venda)}</p>
             <p class="text-xs sm:text-sm text-gray-500">Custo: ${formatarMoeda(p.preco_custo)}</p>
+            ${htmlUltimaCompra(p)}
           </td>
           <td class="px-4 sm:px-6 py-4">
             <span class="px-2 py-1 text-xs font-medium rounded-full ${statusClass(p.status)}">${escapeHtml(p.status)}</span>
@@ -849,8 +1127,10 @@
           </td>
           <td class="hidden sm:table-cell px-4 sm:px-6 py-4 text-gray-900 font-medium">${Number(p.vezes_em_maleta) || 0}</td>
           <td class="px-4 sm:px-6 py-4">
-            <div class="flex items-center space-x-2">
+            <div class="flex items-center space-x-1">
               <button onclick="editarProduto(${Number(p.id)})" class="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors" title="Editar"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg></button>
+              ${botaoLinkFornecedor(p.link_fornecedor)}
+              <button onclick="abrirReposicao(${Number(p.id)})" class="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors" title="Registrar reposição / histórico de compras"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z"/></svg></button>
               <button onclick="excluirProduto(${Number(p.id)})" class="p-2 text-red-500 hover:text-red-700 hover:bg-red-50 rounded-lg transition-colors" title="Excluir"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg></button>
             </div>
           </td>
@@ -973,12 +1253,15 @@
         document.getElementById('cor_armacao').value = produto.cor_armacao || '';
         document.getElementById('fornecedor').value = produto.fornecedor || '';
         document.getElementById('codigo_fornecedor').value = produto.codigo_fornecedor || '';
+        document.getElementById('link_fornecedor').value = produto.link_fornecedor || '';
         document.getElementById('status').value = produto.status;
         document.getElementById('disponibilidade').value = produto.disponibilidade || 'PRONTA_ENTREGA';
       } else {
         modalTitulo.textContent = 'Novo Produto';
       }
       atualizarAvisoSinal();
+      atualizarAbrirLink();
+      document.getElementById('importarStatus').textContent = 'Preenche nome, preço de custo, código e link. Confira os dados antes de salvar.';
       modalProduto.classList.remove('hidden');
       document.body.style.overflow = 'hidden';
     }
@@ -991,6 +1274,65 @@
       aviso.textContent = `Sinal de ${formatarMoeda(Math.round(preco * 50) / 100)} + restante na entrega.`;
       aviso.classList.toggle('hidden', !encomenda);
     }
+    // Botão "Abrir ↗" ao lado do link do fornecedor no formulário
+    function atualizarAbrirLink() {
+      const a = document.getElementById('abrirLinkFornecedor');
+      const href = linkSeguro(document.getElementById('link_fornecedor').value);
+      a.classList.toggle('hidden', !href);
+      if (href) a.href = href; else a.removeAttribute('href');
+    }
+    document.getElementById('link_fornecedor').addEventListener('input', atualizarAbrirLink);
+
+    // ---------- Importação pelo link do fornecedor ----------
+    async function buscarImportacao(url) {
+      const res = await fetchAdmin('/api/admin/importar-url', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || 'Não foi possível importar');
+      return data;
+    }
+
+    // Dados importados -> campos do produto (preço no formato do formulário, 199.90)
+    function camposDaImportacao(dados) {
+      const preco = Number(dados.preco_custo);
+      return {
+        nome: String(dados.nome || ''),
+        preco_custo: dados.preco_custo !== null && dados.preco_custo !== undefined && Number.isFinite(preco) ? preco.toFixed(2) : '',
+        codigo_fornecedor: String(dados.codigo_fornecedor || ''),
+        fornecedor: String(dados.fornecedor || ''),
+        link_fornecedor: linkSeguro(dados.link_fornecedor),
+      };
+    }
+
+    document.getElementById('btnImportarUrl').addEventListener('click', async () => {
+      const btn = document.getElementById('btnImportarUrl');
+      const status = document.getElementById('importarStatus');
+      const url = document.getElementById('importarUrl').value.trim();
+      if (!linkSeguro(url)) return mostrarToast('Cole um link começando com http:// ou https://', 'error');
+      btn.disabled = true;
+      status.textContent = 'Buscando o produto na loja...';
+      try {
+        const c = camposDaImportacao(await buscarImportacao(url));
+        const preenchidos = [];
+        ['nome', 'preco_custo', 'codigo_fornecedor', 'link_fornecedor'].forEach(campo => {
+          if (c[campo]) { document.getElementById(campo).value = c[campo]; preenchidos.push(campo); }
+        });
+        // Fornecedor só se estiver vazio: o nome da loja pode ser diferente do que você usa
+        if (c.fornecedor && !document.getElementById('fornecedor').value.trim()) document.getElementById('fornecedor').value = c.fornecedor;
+        atualizarAbrirLink();
+        const nomes = { nome: 'nome', preco_custo: 'custo', codigo_fornecedor: 'código', link_fornecedor: 'link' };
+        status.textContent = `Preenchido: ${preenchidos.map(x => nomes[x]).join(', ')}.${c.preco_custo ? '' : ' Preço não encontrado na página.'} Confira antes de salvar.`;
+      } catch (err) {
+        status.textContent = err.message;
+        mostrarToast(err.message, 'error');
+      } finally {
+        btn.disabled = false;
+      }
+    });
+
     document.getElementById('disponibilidade').addEventListener('change', atualizarAvisoSinal);
     document.getElementById('preco_venda').addEventListener('input', atualizarAvisoSinal);
 
@@ -1015,7 +1357,7 @@
         if (val) formData.append(field, val);
       });
       // Sempre enviados, para que apagar o fornecedor na edição também valha
-      ['fornecedor', 'codigo_fornecedor'].forEach(field => formData.append(field, document.getElementById(field).value.trim()));
+      ['fornecedor', 'codigo_fornecedor', 'link_fornecedor'].forEach(field => formData.append(field, document.getElementById(field).value.trim()));
       for (let i = 0; i < MAX_FOTOS; i++) {
         const file = slotsFotos[i]?.file;
         if (file) formData.append(`foto${i + 1}`, await prepararImagem(file));
@@ -1062,6 +1404,221 @@
       }
     };
 
+    // Modais simples: botão com data-fechar-modal ou clique fora fecham
+    function abrirModalSimples(id) {
+      document.getElementById(id).classList.remove('hidden');
+      document.body.style.overflow = 'hidden';
+    }
+    function fecharModalSimples(id) {
+      document.getElementById(id).classList.add('hidden');
+      document.body.style.overflow = '';
+    }
+    document.querySelectorAll('[data-fechar-modal]').forEach(btn => btn.addEventListener('click', () => fecharModalSimples(btn.dataset.fecharModal)));
+    ['modalReposicao', 'modalFotosSku', 'modalResumoMaleta'].forEach(id => {
+      const el = document.getElementById(id);
+      el.addEventListener('click', (e) => { if (e.target === el) fecharModalSimples(id); });
+    });
+
+    // ---------- Reposição (histórico de compras do fornecedor) ----------
+    let produtoReposicao = null;
+    const hojeIso = () => {
+      const d = new Date();
+      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    };
+
+    async function carregarHistoricoCompras(id) {
+      const lista = document.getElementById('reposicaoHistorico');
+      lista.innerHTML = '<li class="py-2 text-gray-500">Carregando...</li>';
+      try {
+        const res = await fetchAdmin(`/api/admin/produtos/${id}/compras`);
+        if (!res.ok) throw new Error();
+        const compras = await res.json();
+        lista.innerHTML = compras.map((c, i) => {
+          const anterior = compras[i + 1];
+          const v = anterior && Number(anterior.preco_custo) > 0
+            ? Math.round((Number(c.preco_custo) - Number(anterior.preco_custo)) / Number(anterior.preco_custo) * 1000) / 10
+            : null;
+          return `
+          <li class="py-2 flex justify-between gap-3">
+            <span>${escapeHtml(formatarDia(c.data_compra))} <span class="text-gray-400">• ${Number(c.quantidade) || 1} un.${c.origem === 'CADASTRO' ? ' • cadastro' : ''}${c.fornecedor ? ' • ' + escapeHtml(c.fornecedor) : ''}</span></span>
+            <span class="whitespace-nowrap">${formatarMoeda(Number(c.preco_custo))} ${htmlVariacao(v)}</span>
+          </li>`;
+        }).join('') || '<li class="py-2 text-gray-500">Nenhuma compra registrada.</li>';
+      } catch {
+        lista.innerHTML = '<li class="py-2 text-red-600">Erro ao carregar o histórico.</li>';
+      }
+    }
+
+    window.abrirReposicao = (id) => {
+      const p = todosProdutos.find(x => x.id === id);
+      if (!p) return;
+      produtoReposicao = p;
+      document.getElementById('reposicaoProduto').textContent = `${p.nome} (${p.codigo_sku})${p.fornecedor ? ' • ' + p.fornecedor : ''}`;
+      document.getElementById('reposicaoCusto').value = String(Number(p.preco_custo).toFixed(2)).replace('.', ',');
+      document.getElementById('reposicaoQtd').value = '1';
+      document.getElementById('reposicaoData').value = hojeIso();
+      const esgotado = p.status === 'ESGOTADO';
+      document.getElementById('reposicaoReativarBox').classList.toggle('hidden', !esgotado);
+      document.getElementById('reposicaoReativar').checked = esgotado;
+      carregarHistoricoCompras(id);
+      abrirModalSimples('modalReposicao');
+    };
+
+    document.getElementById('formReposicao').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      if (!produtoReposicao) return;
+      const custo = lerPreco(document.getElementById('reposicaoCusto').value);
+      if (Number.isNaN(custo)) return mostrarToast('Custo inválido', 'error');
+      try {
+        const res = await fetchAdmin(`/api/admin/produtos/${produtoReposicao.id}/compras`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            preco_custo: custo,
+            quantidade: Number(document.getElementById('reposicaoQtd').value) || 1,
+            data_compra: document.getElementById('reposicaoData').value,
+            reativar: document.getElementById('reposicaoReativar').checked,
+          }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.error || 'Erro ao registrar compra');
+        mostrarToast('Compra registrada!');
+        await carregarProdutos();
+        window.abrirReposicao(produtoReposicao.id);
+      } catch (err) {
+        mostrarToast(err.message, 'error');
+      }
+    });
+
+    // ---------- Fotos por SKU (vários arquivos de uma vez) ----------
+    // Nome do arquivo -> produto: "AV-1.jpg", "av-1_2.jpg", "AV-1 (3).png" vão para o SKU AV-1.
+    // Vale o SKU mais longo que casar (AV-10 não pega fotos de AV-1, e vice-versa).
+    // Retorna { grupos: [{ produto, arquivos: [índices] }], semProduto: [índices] }.
+    function associarFotosPorSku(nomes, produtos) {
+      const base = n => String(n || '').replace(/\.[a-z0-9]+$/i, '').trim().toLowerCase();
+      const skus = produtos
+        .map(p => ({ p, sku: String(p.codigo_sku || '').trim().toLowerCase() }))
+        .filter(x => x.sku)
+        .sort((a, b) => b.sku.length - a.sku.length);
+      const porId = new Map();
+      const semProduto = [];
+      nomes.forEach((nome, i) => {
+        const b = base(nome);
+        const achado = skus.find(({ sku }) => b === sku || (b.startsWith(sku) && /[\s_\-.(#]/.test(b[sku.length])));
+        if (!achado) return semProduto.push(i);
+        if (!porId.has(achado.p.id)) porId.set(achado.p.id, { produto: achado.p, arquivos: [], restos: new Map() });
+        const g = porId.get(achado.p.id);
+        g.arquivos.push(i);
+        g.restos.set(i, b.slice(achado.sku.length).replace(/^[\s_\-.(#]+/, '')); // "AV-1_2" -> "2"
+      });
+      // Ordem natural do que vem depois do SKU: sem sufixo primeiro, depois 2, 3, 10...
+      const grupos = [...porId.values()].map(({ produto, arquivos, restos }) => ({
+        produto,
+        arquivos: arquivos.sort((a, b) => restos.get(a).localeCompare(restos.get(b), 'pt-BR', { numeric: true }) || a - b),
+      }));
+      return { grupos, semProduto };
+    }
+
+    // Fotos atuais (URLs) e quantas posições livres o produto ainda tem
+    function fotosAtuais(p) {
+      return Array.isArray(p.fotos) && p.fotos.length ? p.fotos.slice(0, MAX_FOTOS) : (p.imagem_url ? [p.imagem_url] : []);
+    }
+
+    let arquivosSku = [];
+    let associacaoSku = { grupos: [], semProduto: [] };
+
+    function renderizarPreviaFotosSku() {
+      const previa = document.getElementById('previaFotosSku');
+      const btn = document.getElementById('btnEnviarFotosSku');
+      const nomes = arquivosSku.map(f => f.name);
+      associacaoSku = associarFotosPorSku(nomes, todosProdutos);
+      const linhas = associacaoSku.grupos.map(g => {
+        const livres = MAX_FOTOS - fotosAtuais(g.produto).length;
+        const vao = g.arquivos.slice(0, Math.max(0, livres));
+        const sobram = g.arquivos.length - vao.length;
+        return `
+          <li class="py-2">
+            <p class="text-sm text-gray-900"><span class="font-medium">${escapeHtml(g.produto.codigo_sku)}</span> • ${escapeHtml(g.produto.nome)}</p>
+            <p class="text-xs text-gray-500">${vao.length} foto(s) nova(s): ${vao.map(i => escapeHtml(nomes[i])).join(', ') || '-'}${sobram ? ` <span class="text-amber-700">• ${sobram} sem espaço (já tem ${MAX_FOTOS - livres} de ${MAX_FOTOS})</span>` : ''}</p>
+          </li>`;
+      }).join('');
+      const sem = associacaoSku.semProduto.length
+        ? `<div class="bg-amber-50 border border-amber-300 rounded-lg p-3 text-sm text-amber-800">${associacaoSku.semProduto.length} arquivo(s) sem produto com esse SKU: ${associacaoSku.semProduto.map(i => escapeHtml(nomes[i])).join(', ')}</div>`
+        : '';
+      previa.innerHTML = arquivosSku.length
+        ? `${linhas ? `<ul class="divide-y divide-gray-100 border border-gray-200 rounded-lg px-3">${linhas}</ul>` : ''}${sem}`
+        : '';
+      const total = associacaoSku.grupos.reduce((t, g) => t + Math.min(g.arquivos.length, Math.max(0, MAX_FOTOS - fotosAtuais(g.produto).length)), 0);
+      btn.disabled = !total;
+      document.getElementById('progressoFotosSku').textContent = arquivosSku.length ? `${total} foto(s) para ${associacaoSku.grupos.length} produto(s)` : '';
+    }
+
+    function adicionarArquivosSku(lista) {
+      const novos = [...lista].filter(f => /^image\//.test(f.type) || /\.(jpe?g|png|webp|heic|heif)$/i.test(f.name));
+      arquivosSku.push(...novos);
+      renderizarPreviaFotosSku();
+    }
+
+    function abrirFotosSku() {
+      arquivosSku = [];
+      renderizarPreviaFotosSku();
+      abrirModalSimples('modalFotosSku');
+      if (!todosProdutos.length) carregarProdutos().then(renderizarPreviaFotosSku);
+    }
+    document.querySelectorAll('[data-abrir-fotos-sku]').forEach(b => b.addEventListener('click', abrirFotosSku));
+
+    const dropFotosSku = document.getElementById('dropFotosSku');
+    document.getElementById('inputFotosSku').addEventListener('change', (e) => { adicionarArquivosSku(e.target.files); e.target.value = ''; });
+    ['dragenter', 'dragover'].forEach(ev => dropFotosSku.addEventListener(ev, (e) => { e.preventDefault(); dropFotosSku.classList.add('border-orange-400', 'bg-orange-50'); }));
+    ['dragleave', 'drop'].forEach(ev => dropFotosSku.addEventListener(ev, (e) => { e.preventDefault(); dropFotosSku.classList.remove('border-orange-400', 'bg-orange-50'); }));
+    dropFotosSku.addEventListener('drop', (e) => adicionarArquivosSku(e.dataTransfer.files));
+
+    // Envia produto a produto: mantém as fotos atuais e põe as novas nas posições livres
+    document.getElementById('btnEnviarFotosSku').addEventListener('click', async () => {
+      const btn = document.getElementById('btnEnviarFotosSku');
+      const progresso = document.getElementById('progressoFotosSku');
+      btn.disabled = true;
+      let ok = 0;
+      const falhas = [];
+      const grupos = associacaoSku.grupos;
+      for (const [n, g] of grupos.entries()) {
+        const atuais = fotosAtuais(g.produto);
+        const vao = g.arquivos.slice(0, MAX_FOTOS - atuais.length);
+        if (!vao.length) continue;
+        progresso.textContent = `Enviando ${n + 1} de ${grupos.length}: ${g.produto.codigo_sku}...`;
+        try {
+          const form = new FormData();
+          const manter = Array.from({ length: MAX_FOTOS }, (_, i) => atuais[i] || null);
+          for (const [k, i] of vao.entries()) form.append(`foto${atuais.length + k + 1}`, await prepararImagem(arquivosSku[i]));
+          form.append('fotos_manter', JSON.stringify(manter));
+          const res = await fetchAdmin(`/api/produtos/${g.produto.id}`, { method: 'PUT', body: form });
+          if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || 'erro');
+          ok++;
+        } catch (err) {
+          falhas.push(`${g.produto.codigo_sku} (${err.message})`);
+        }
+      }
+      await carregarProdutos();
+      arquivosSku = [];
+      renderizarPreviaFotosSku();
+      progresso.textContent = `${ok} produto(s) atualizado(s)${falhas.length ? `. Falharam: ${falhas.join(', ')}` : '.'}`;
+      mostrarToast(falhas.length ? `Fotos enviadas com ${falhas.length} falha(s)` : 'Fotos enviadas!', falhas.length ? 'error' : 'success');
+    });
+
+    // No formulário do produto: arrastar várias fotos preenche as posições livres em ordem
+    ['dragenter', 'dragover'].forEach(ev => slotsFotosEl.addEventListener(ev, (e) => { e.preventDefault(); slotsFotosEl.classList.add('ring-2', 'ring-orange-400', 'rounded-lg'); }));
+    ['dragleave', 'drop'].forEach(ev => slotsFotosEl.addEventListener(ev, (e) => { e.preventDefault(); slotsFotosEl.classList.remove('ring-2', 'ring-orange-400', 'rounded-lg'); }));
+    slotsFotosEl.addEventListener('drop', (e) => {
+      const arquivos = [...e.dataTransfer.files].filter(f => /^image\//.test(f.type) || /\.(heic|heif)$/i.test(f.name));
+      let colocadas = 0;
+      for (let i = 0; i < MAX_FOTOS && colocadas < arquivos.length; i++) {
+        const slot = slotsFotos[i] || {};
+        if (!slot.url && !slot.file) slotsFotos[i] = { url: null, file: arquivos[colocadas++] };
+      }
+      atualizarSlotsFotos();
+      if (colocadas < arquivos.length) mostrarToast(`${arquivos.length - colocadas} foto(s) não couberam (máximo ${MAX_FOTOS})`, 'error');
+    });
+
     // Acerto
 
     // As duas listas mostram os mesmos produtos em CONDICIONAL: o cliente
@@ -1094,6 +1651,76 @@
     async function carregarAcerto() {
       await carregarProdutos();
     }
+
+    // Texto para o WhatsApp. Sem nada marcado: peças enviadas para a cliente provar.
+    // Com itens marcados: resumo do acerto (o que ela ficou, total a pagar, devolvidos).
+    function montarResumoMaleta(condicionais, comprados, devolvidos) {
+      const moeda = v => formatarMoeda(Number(v)).replace(/\u00a0/g, ' ');
+      const linha = (p, i) => `${i + 1}. ${p.nome}\n   SKU: ${p.codigo_sku} | ${moeda(p.preco_venda)}`;
+      const soma = lista => lista.reduce((t, p) => t + Math.round(Number(p.preco_venda) * 100), 0) / 100;
+      const vendidos = condicionais.filter(p => comprados.includes(p.id));
+      const voltaram = condicionais.filter(p => devolvidos.includes(p.id));
+      if (!vendidos.length && !voltaram.length) {
+        return [
+          '*Nix Glasses: sua maleta* 🕶️',
+          '',
+          'Óculos enviados para você provar em casa:',
+          '',
+          ...condicionais.map(linha),
+          '',
+          `Total: ${condicionais.length} peça(s) | ${moeda(soma(condicionais))}`,
+          '',
+          'Quando decidir, me responda com o número dos modelos que vai ficar. 😉',
+        ].join('\n');
+      }
+      const partes = ['*Nix Glasses: acerto da maleta* 🕶️'];
+      if (vendidos.length) {
+        partes.push('', `✅ *Ficou com (${vendidos.length}):*`, ...vendidos.map(linha), '', `*Total a pagar: ${moeda(soma(vendidos))}*`);
+      }
+      if (voltaram.length) {
+        partes.push('', `↩️ *Devolvidos (${voltaram.length}):*`, ...voltaram.map(linha));
+      }
+      partes.push('', 'Agradecemos a preferência! 💛');
+      return partes.join('\n');
+    }
+
+    const idsMarcados = nome => Array.from(document.querySelectorAll(`input[name="${nome}"]:checked`)).map(cb => parseInt(cb.value));
+
+    document.getElementById('btnResumoMaleta').addEventListener('click', () => {
+      const condicionais = todosProdutos.filter(p => p.status === 'CONDICIONAL');
+      if (!condicionais.length) return mostrarToast('Nenhum item em condicional', 'error');
+      const comprados = idsMarcados('comprados');
+      const devolvidos = idsMarcados('devolvidos');
+      document.getElementById('resumoMaletaTitulo').textContent = comprados.length || devolvidos.length ? 'Resumo do acerto' : 'Resumo da maleta';
+      document.getElementById('resumoMaletaTexto').value = montarResumoMaleta(condicionais, comprados, devolvidos);
+      abrirModalSimples('modalResumoMaleta');
+    });
+
+    document.getElementById('btnCopiarResumo').addEventListener('click', async () => {
+      const campo = document.getElementById('resumoMaletaTexto');
+      try {
+        await navigator.clipboard.writeText(campo.value);
+      } catch {
+        campo.select();
+        document.execCommand('copy');
+      }
+      mostrarToast('Texto copiado!');
+    });
+
+    document.getElementById('btnWhatsappResumo').addEventListener('click', () => {
+      const tel = sanitizeWhatsapp(document.getElementById('resumoMaletaTelefone').value);
+      const texto = encodeURIComponent(document.getElementById('resumoMaletaTexto').value);
+      window.open(`https://wa.me/${tel}?text=${texto}`, '_blank', 'noopener');
+    });
+
+    // Baixa rápida: marca todos de um lado (e desmarca do outro)
+    function marcarTodos(nome) {
+      const outro = nome === 'comprados' ? 'devolvidos' : 'comprados';
+      document.querySelectorAll(`input[name="${nome}"]`).forEach(cb => { cb.checked = true; });
+      document.querySelectorAll(`input[name="${outro}"]`).forEach(cb => { cb.checked = false; });
+    }
+    document.getElementById('btnTodosVendidos').addEventListener('click', () => marcarTodos('comprados'));
+    document.getElementById('btnTodosDevolvidos').addEventListener('click', () => marcarTodos('devolvidos'));
 
     btnSalvarAcerto.addEventListener('click', async () => {
       const comprados = Array.from(document.querySelectorAll('input[name="comprados"]:checked')).map(cb => parseInt(cb.value));
@@ -1153,7 +1780,26 @@
       }
     }
 
-    btnAtualizarMetricas.addEventListener('click', carregarMetricas);
+    async function carregarResumoFornecedores() {
+      const tbody = document.getElementById('tabelaFornecedores');
+      try {
+        const res = await fetchAdmin('/api/admin/fornecedores/reposicao');
+        if (!res.ok) throw new Error();
+        const lista = await res.json();
+        tbody.innerHTML = lista.map(f => `
+          <tr class="hover:bg-gray-50">
+            <td class="px-4 py-3 font-medium text-gray-900">${escapeHtml(f.fornecedor || 'Sem fornecedor')}</td>
+            <td class="px-4 py-3 text-gray-700">${Number(f.produtos) || 0}</td>
+            <td class="px-4 py-3 text-gray-700">${escapeHtml(formatarDia(f.ultima_compra))}</td>
+            <td class="px-4 py-3 text-sm"><span class="text-red-600">▲ ${Number(f.subiram) || 0}</span> / <span class="text-green-600">▼ ${Number(f.baixaram) || 0}</span></td>
+            <td class="px-4 py-3 text-sm">${f.variacao_media === null ? '<span class="text-gray-400">-</span>' : htmlVariacao(Number(f.variacao_media))}</td>
+          </tr>`).join('') || '<tr><td colspan="5" class="px-4 py-4 text-center text-gray-500">Nenhum produto cadastrado</td></tr>';
+      } catch {
+        tbody.innerHTML = '<tr><td colspan="5" class="px-4 py-4 text-center text-red-600">Erro ao carregar fornecedores</td></tr>';
+      }
+    }
+
+    btnAtualizarMetricas.addEventListener('click', () => { carregarMetricas(); carregarResumoFornecedores(); });
 
     // Clientes e pedidos (pedidos gravados no checkout da vitrine)
     let todosClientes = [];
