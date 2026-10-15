@@ -131,8 +131,14 @@ describe('painel (admin/index.html) escapa dados de produto', () => {
 
   it('na tabela de produtos', () => {
     const tabelaProdutos = elemento();
-    const ctx = carregar('admin/index.html', ['escapeHtml', 'renderizarTabela'], {
-      todosProdutos: [produtoMalicioso({ status: PAYLOAD, fornecedor: PAYLOAD, codigo_fornecedor: PAYLOAD })],
+    const ctx = carregar('admin/index.html', ['escapeHtml', 'linkSeguro', 'botaoLinkFornecedor', 'variacaoCusto', 'htmlVariacao', 'htmlUltimaCompra', 'renderizarTabela'], {
+      URL,
+      formatarDia: v => String(v),
+      todosProdutos: [
+        produtoMalicioso({ status: PAYLOAD, fornecedor: PAYLOAD, codigo_fornecedor: PAYLOAD, link_fornecedor: PAYLOAD, ultima_compra: PAYLOAD }),
+        produtoMalicioso({ link_fornecedor: 'javascript:alert(1)//"><img src=x onerror=alert(1)>' }),
+        produtoMalicioso({ link_fornecedor: `https://x.com/${PAYLOAD}` }),
+      ],
       filtroStatusAdmin: elemento(),
       filtroDisponibilidadeAdmin: elemento(),
       filtroFormatoAdmin: elemento(),
@@ -145,6 +151,7 @@ describe('painel (admin/index.html) escapa dados de produto', () => {
     });
     ctx.renderizarTabela();
     semInjecao(tabelaProdutos.innerHTML);
+    assert.doesNotMatch(tabelaProdutos.innerHTML, /href="javascript:/i);
   });
 
   it('no ranking de métricas', async () => {

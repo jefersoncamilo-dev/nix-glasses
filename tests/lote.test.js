@@ -67,6 +67,28 @@ describe('fornecedor e código do fornecedor', () => {
     assert.equal(soStatus.body.fornecedor, 'Outro');
   });
 
+  it('link do fornecedor: grava, edita, apaga, recusa javascript: e não sai na vitrine', async () => {
+    const { status, body } = await criarProduto({ ...linha('LNK'), link_fornecedor: 'https://loja.exemplo.com/p/1?cor=preto' });
+    assert.equal(status, 201);
+    assert.equal(body.link_fornecedor, 'https://loja.exemplo.com/p/1?cor=preto');
+
+    for (const ruim of ['javascript:alert(1)', 'data:text/html,x', 'ftp://x.com/a', 'https://user:senha@x.com/', 'nada']) {
+      const r = await api('PUT', `/api/produtos/${body.id}`, { body: { link_fornecedor: ruim } });
+      assert.equal(r.status, 400, ruim);
+    }
+    assert.equal((await criarProduto({ ...linha('LNK2'), link_fornecedor: 'javascript:alert(1)' })).status, 400);
+
+    const outro = await api('PUT', `/api/produtos/${body.id}`, { body: { link_fornecedor: 'http://outra.com/x' } });
+    assert.equal(outro.body.link_fornecedor, 'http://outra.com/x');
+    const admin = await api('GET', '/api/admin/produtos');
+    assert.equal(admin.body[0].link_fornecedor, 'http://outra.com/x');
+    const publico = await api('GET', '/api/produtos', { auth: false });
+    assert.equal(publico.body[0].link_fornecedor, undefined);
+
+    const apagado = await api('PUT', `/api/produtos/${body.id}`, { body: { link_fornecedor: '' } });
+    assert.equal(apagado.body.link_fornecedor, '');
+  });
+
   it('produto sem fornecedor fica com texto vazio', async () => {
     const { body } = await criarProduto(linha('F-2'));
     assert.equal(body.fornecedor, '');
@@ -114,15 +136,54 @@ describe('cadastro em lote', () => {
     assert.equal(await contar(), 0);
   });
 
-  it('recusa SKU repetido no lote e SKU já cadastrado', async () => {
+  it('ignora SKU já cadastrado ou repetido no lote, grava o resto e diz o que ignorou', async () => {
     await criarProduto(linha('EXISTE'));
-    const r = await lote([linha('NOVO'), linha('novo'), linha('EXISTE')]);
-    assert.equal(r.status, 400);
-    assert.deepEqual(r.body.erros.map(e => [e.linha, e.campo, e.mensagem]), [
-      [1, 'codigo_sku', 'SKU repetido na linha 1'],
-      [2, 'codigo_sku', 'SKU já cadastrado'],
+    const r = await lote([linha('NOVO'), linha('novo'), linha('existe'), linha('OUTRO')]);
+    assert.equal(r.status, 201);
+    assert.deepEqual(r.body.produtos.map(p => p.codigo_sku), ['NOVO', 'OUTRO']);
+    assert.deepEqual(r.body.ignorados.map(e => [e.linha, e.codigo_sku, e.campo, e.motivo]), [
+      [1, 'novo', 'codigo_sku', 'SKU repetido na linha 1'],
+      [2, 'existe', 'codigo_sku', 'SKU já cadastrado'],
     ]);
+    assert.equal(await contar(), 3);
+  });
+
+  it('ignora código do fornecedor já cadastrado no mesmo fornecedor', async () => {
+    await criarProduto({ ...linha('A-1'), fornecedor: 'Clush', codigo_fornecedor: 'CL-77' });
+    const r = await lote([
+      linha('B-1', { fornecedor: 'clush', codigo_fornecedor: 'cl-77' }), // mesmo fornecedor e código: ignora
+      linha('B-2', { fornecedor: 'Outro', codigo_fornecedor: 'CL-77' }), // outro fornecedor: pode
+      linha('B-3', { fornecedor: 'Outro', codigo_fornecedor: 'cl-77' }), // repete a linha anterior
+      linha('B-4', { fornecedor: 'Clush', codigo_fornecedor: '' }), // sem código: nunca é duplicado
+      linha('B-5', { fornecedor: 'Clush', codigo_fornecedor: '' }),
+    ]);
+    assert.equal(r.status, 201);
+    assert.deepEqual(r.body.produtos.map(p => p.codigo_sku), ['B-2', 'B-4', 'B-5']);
+    assert.deepEqual(r.body.ignorados.map(e => [e.linha, e.codigo_fornecedor, e.campo, e.motivo]), [
+      [0, 'cl-77', 'codigo_fornecedor', 'Cód. fornecedor já cadastrado'],
+      [2, 'cl-77', 'codigo_fornecedor', 'Cód. fornecedor repetido na linha 2'],
+    ]);
+  });
+
+  it('lote só de duplicados responde 200 sem gravar nada', async () => {
+    await criarProduto(linha('JA'));
+    const r = await lote([linha('JA')]);
+    assert.equal(r.status, 200);
+    assert.deepEqual(r.body.produtos, []);
+    assert.equal(r.body.ignorados.length, 1);
     assert.equal(await contar(), 1);
+  });
+
+  it('grava o link do fornecedor e recusa link que não é http/https', async () => {
+    const ok = await lote([linha('LK-1', { link_fornecedor: ' https://clush.com.br/produtos/oculos-x ' }), linha('LK-2')]);
+    assert.equal(ok.status, 201);
+    assert.equal(ok.body.produtos[0].link_fornecedor, 'https://clush.com.br/produtos/oculos-x');
+    assert.equal(ok.body.produtos[1].link_fornecedor, '');
+
+    const ruim = await lote([linha('LK-3', { link_fornecedor: 'javascript:alert(1)' }), linha('LK-4', { link_fornecedor: 'clush.com.br/x' })]);
+    assert.equal(ruim.status, 400);
+    assert.deepEqual(ruim.body.erros.map(e => `${e.linha}:${e.campo}`), ['0:link_fornecedor', '1:link_fornecedor']);
+    assert.equal(await contar(), 2);
   });
 
   it('recusa preço negativo, lote vazio e lote acima do limite', async () => {
@@ -156,9 +217,9 @@ function extrairFuncao(html, nome) {
 function carregarPainel(globais = {}) {
   const html = fs.readFileSync(path.join(__dirname, '..', 'admin', 'index.html'), 'utf8');
   const colunas = html.match(/const COLUNAS_LOTE = \[[\s\S]*?\n {4}\];/)[0];
-  const funcoes = ['escapeHtml', 'linhaLoteVazia', 'linhaLoteEstaVazia', 'lerPreco', 'lerDisponibilidade', 'lerStatus', 'linhasDaPlanilha', 'validarLote', 'renderizarLote'];
+  const funcoes = ['escapeHtml', 'linhaLoteVazia', 'linhaLoteEstaVazia', 'lerPreco', 'lerDisponibilidade', 'lerStatus', 'campoDoCabecalho', 'linhasDaPlanilha', 'linkSeguro', 'validarLote', 'avisosDuplicidade', 'renderizarLote'];
   const fonte = `${colunas}\nconst MAX_LOTE = 100;\n${funcoes.map(f => extrairFuncao(html, f)).join('\n')}`;
-  const ctx = vm.createContext({ Number, String, Math, Map, Set, Object, ...globais });
+  const ctx = vm.createContext({ Number, String, Math, Map, Set, Object, URL, todosProdutos: [], ...globais });
   vm.runInContext(`${fonte}\n${funcoes.map(f => `this.${f} = ${f};`).join('\n')}`, ctx);
   return ctx;
 }
@@ -177,18 +238,18 @@ describe('painel: cadastro em lote', () => {
     assert.ok(Number.isNaN(ctx.lerPreco('-5')));
   });
 
-  it('transforma linhas coladas da planilha, ignorando o cabeçalho', () => {
+  it('transforma linhas coladas da planilha sem cabeçalho, na ordem das colunas', () => {
     const texto = [
-      'Nome\tSKU\tFornecedor\tCód. fornecedor\tCusto\tVenda\tDisponibilidade\tStatus',
-      'Aviador Gold\tAV-1\tAtacado SP\tX-9\t50,00\tR$ 199,90\tSob encomenda\tCondicional\tAviador\tClássico\tDourado',
+      'Aviador Gold\tAV-1\tAtacado SP\tX-9\thttps://forn.com/av1\t50,00\tR$ 199,90\tSob encomenda\tCondicional\tAviador\tClássico\tDourado',
       '',
-      'Redondo\tRD-1\t\t\t30\t89,9',
+      'Redondo\tRD-1\t\t\t\t30\t89,9',
     ].join('\r\n');
     const linhas = ctx.linhasDaPlanilha(texto);
     assert.equal(linhas.length, 2);
     assert.equal(linhas[0].nome, 'Aviador Gold');
     assert.equal(linhas[0].fornecedor, 'Atacado SP');
     assert.equal(linhas[0].codigo_fornecedor, 'X-9');
+    assert.equal(linhas[0].link_fornecedor, 'https://forn.com/av1');
     assert.equal(linhas[0].preco_venda, 'R$ 199,90');
     assert.equal(linhas[0].disponibilidade, 'SOB_ENCOMENDA');
     assert.equal(linhas[0].status, 'CONDICIONAL');
@@ -198,8 +259,27 @@ describe('painel: cadastro em lote', () => {
     assert.equal(linhas[1].fornecedor, '');
   });
 
+  it('com cabeçalho, lê as colunas pelo título em qualquer ordem (planilha antiga sem link)', () => {
+    const texto = [
+      'Nome\tSKU\tFornecedor\tCód. fornecedor\tCusto\tVenda\tDisponibilidade\tStatus',
+      'Aviador Gold\tAV-1\tAtacado SP\tX-9\t50,00\tR$ 199,90\tSob encomenda\tCondicional',
+    ].join('\n');
+    const [a] = ctx.linhasDaPlanilha(texto);
+    assert.equal(a.codigo_fornecedor, 'X-9');
+    assert.equal(a.link_fornecedor, '');
+    assert.equal(a.preco_custo, '50,00');
+    assert.equal(a.status, 'CONDICIONAL');
+
+    const [b] = ctx.linhasDaPlanilha('Produto;Link;Preço de custo;Código;Preço de venda\nClub;https://f.com/c;40;CM-9;150');
+    assert.equal(b.nome, 'Club');
+    assert.equal(b.link_fornecedor, 'https://f.com/c');
+    assert.equal(b.preco_custo, '40');
+    assert.equal(b.codigo_sku, 'CM-9');
+    assert.equal(b.preco_venda, '150');
+  });
+
   it('aceita CSV com ponto e vírgula', () => {
-    const [l] = ctx.linhasDaPlanilha('Clubmaster;CM-1;Forn;C1;40;150');
+    const [l] = ctx.linhasDaPlanilha('Clubmaster;CM-1;Forn;C1;;40;150');
     assert.equal(l.codigo_sku, 'CM-1');
     assert.equal(l.preco_venda, '150');
   });
@@ -209,33 +289,65 @@ describe('painel: cadastro em lote', () => {
     const erros = ctx.validarLote([
       l({ codigo_sku: 'A' }),
       ctx.linhaLoteVazia(),
-      l({ codigo_sku: 'a' }),
       l({ codigo_sku: 'JA', nome: ' ', preco_venda: 'x' }),
       l({ codigo_sku: '' }),
-    ], new Set(['ja']));
+      l({ codigo_sku: 'B', link_fornecedor: 'javascript:alert(1)' }),
+      l({ codigo_sku: 'C', link_fornecedor: 'https://ok.com/x' }),
+    ]);
     assert.deepEqual({ ...erros[0] }, {});
     assert.deepEqual({ ...erros[1] }, {});
-    assert.equal(erros[2].codigo_sku, 'SKU repetido na linha 1');
-    assert.equal(erros[3].codigo_sku, 'SKU já cadastrado');
-    assert.equal(erros[3].nome, 'Informe o nome');
-    assert.equal(erros[3].preco_venda, 'Preço inválido');
-    assert.equal(erros[4].codigo_sku, 'Informe o SKU');
+    assert.equal(erros[2].nome, 'Informe o nome');
+    assert.equal(erros[2].preco_venda, 'Preço inválido');
+    assert.equal(erros[3].codigo_sku, 'Informe o SKU');
+    assert.match(erros[4].link_fornecedor, /Link inválido/);
+    assert.deepEqual({ ...erros[5] }, {});
+  });
+
+  it('avisa (sem bloquear) quais linhas são duplicadas e serão ignoradas', () => {
+    const l = (extra) => ({ ...ctx.linhaLoteVazia(), nome: 'X', preco_custo: '10', preco_venda: '20', ...extra });
+    const avisos = ctx.avisosDuplicidade([
+      l({ codigo_sku: 'A' }),
+      l({ codigo_sku: 'a' }),
+      l({ codigo_sku: 'JA' }),
+      l({ codigo_sku: 'N1', fornecedor: 'clush', codigo_fornecedor: 'cl-1' }),
+      l({ codigo_sku: 'N2', fornecedor: 'Outro', codigo_fornecedor: 'CL-1' }),
+      l({ codigo_sku: 'N3', fornecedor: 'Outro', codigo_fornecedor: 'cl-1' }),
+      ctx.linhaLoteVazia(),
+    ], [{ codigo_sku: 'ja', fornecedor: 'Clush', codigo_fornecedor: 'CL-1' }]);
+    assert.deepEqual([...avisos], [
+      '',
+      'SKU repetido na linha 1: será ignorado',
+      'SKU já cadastrado: será ignorado',
+      'Cód. fornecedor já cadastrado: será ignorado',
+      '',
+      'Cód. fornecedor repetido na linha 5: será ignorado',
+      '',
+    ]);
+  });
+
+  it('linkSeguro só aceita http/https', () => {
+    assert.equal(ctx.linkSeguro(' https://a.com/x '), 'https://a.com/x');
+    assert.equal(ctx.linkSeguro('http://a.com'), 'http://a.com/');
+    for (const ruim of ['javascript:alert(1)', 'JaVaScRiPt:alert(1)', 'data:text/html,x', 'a.com', '', null, 'https://u:p@a.com']) {
+      assert.equal(ctx.linkSeguro(ruim), '', String(ruim));
+    }
   });
 
   it('escapa o que foi digitado ou colado ao redesenhar a tabela', () => {
     const PAYLOAD = '"><img src=x onerror=alert(1)>';
     const tabelaLote = { innerHTML: '' };
     const resumo = { textContent: '' };
-    const linha = { ...carregarPainel().linhaLoteVazia(), nome: PAYLOAD, codigo_sku: PAYLOAD, fornecedor: PAYLOAD, codigo_fornecedor: PAYLOAD, preco_custo: PAYLOAD, formato: PAYLOAD };
+    const linha = { ...carregarPainel().linhaLoteVazia(), nome: PAYLOAD, codigo_sku: PAYLOAD, fornecedor: PAYLOAD, codigo_fornecedor: PAYLOAD, link_fornecedor: PAYLOAD, preco_custo: PAYLOAD, formato: PAYLOAD };
     const painel = carregarPainel({
       tabelaLote,
       document: { getElementById: () => resumo },
-      linhasLote: [linha],
+      linhasLote: [linha, { ...linha }],
       errosLote: [{ nome: PAYLOAD }],
     });
     painel.renderizarLote();
+    assert.match(tabelaLote.innerHTML, /lote-aviso/); // a 2ª linha repete o SKU da 1ª
     assert.doesNotMatch(tabelaLote.innerHTML, /<img src=x/);
     assert.match(tabelaLote.innerHTML, /&lt;img src=x onerror=alert\(1\)&gt;/);
-    assert.match(resumo.textContent, /1 produto\(s\) preenchido\(s\)/);
+    assert.match(resumo.textContent, /2 produto\(s\) preenchido\(s\) de 2 linha\(s\), 1 duplicado/);
   });
 });

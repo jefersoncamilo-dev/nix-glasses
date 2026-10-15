@@ -5,6 +5,7 @@ const path = require('path');
 const cors = require('cors');
 const crypto = require('crypto');
 const { pool, initTables } = require('./db');
+const { importarProduto, ErroImportacao } = require('./importar-produto');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -393,6 +394,25 @@ function textoCurto(v, max) {
   return typeof v === 'string' || typeof v === 'number' ? String(v).trim().replace(/\s+/g, ' ').slice(0, max) : '';
 }
 
+// Link do produto na loja do fornecedor: '' (sem link), a URL normalizada, ou null se
+// inválido. Só http/https: o painel abre esse link, então javascript:/data: nunca entram.
+const MAX_LINK_FORNECEDOR = 1000;
+function lerLinkFornecedor(v) {
+  if (v === undefined || v === null) return '';
+  if (typeof v !== 'string') return null;
+  const t = v.trim();
+  if (!t) return '';
+  if (t.length > MAX_LINK_FORNECEDOR) return null;
+  try {
+    const u = new URL(t);
+    if ((u.protocol !== 'http:' && u.protocol !== 'https:') || !u.hostname || u.username || u.password) return null;
+    const href = u.href;
+    return href.length <= MAX_LINK_FORNECEDOR ? href : null;
+  } catch {
+    return null;
+  }
+}
+
 // Cadastro em lote: confere uma linha e devolve o produto já normalizado.
 // Mesmas regras do formulário do painel (nome, SKU e preços obrigatórios).
 const STATUS_PRODUTO = ['DISPONIVEL', 'CONDICIONAL', 'ESGOTADO'];
@@ -413,6 +433,7 @@ function validarProdutoLote(linha) {
     codigo_sku: textoCurto(l.codigo_sku, 100),
     fornecedor: textoCurto(l.fornecedor, 120),
     codigo_fornecedor: textoCurto(l.codigo_fornecedor, 100),
+    link_fornecedor: lerLinkFornecedor(l.link_fornecedor),
     preco_custo: lerPrecoLote(l.preco_custo),
     preco_venda: lerPrecoLote(l.preco_venda),
     status: l.status || 'DISPONIVEL',
@@ -423,6 +444,7 @@ function validarProdutoLote(linha) {
   };
   if (!produto.nome) erros.push({ campo: 'nome', mensagem: 'Informe o nome' });
   if (!produto.codigo_sku) erros.push({ campo: 'codigo_sku', mensagem: 'Informe o SKU' });
+  if (produto.link_fornecedor === null) erros.push({ campo: 'link_fornecedor', mensagem: 'Link inválido (use http:// ou https://)' });
   for (const campo of ['preco_custo', 'preco_venda']) {
     const v = produto[campo];
     if (!Number.isFinite(v) || v < 0 || v >= 1e8) erros.push({ campo, mensagem: 'Preço inválido' });
@@ -430,6 +452,41 @@ function validarProdutoLote(linha) {
   if (!STATUS_PRODUTO.includes(produto.status)) erros.push({ campo: 'status', mensagem: 'Status inválido' });
   if (!DISPONIBILIDADES_PRODUTO.includes(produto.disponibilidade)) erros.push({ campo: 'disponibilidade', mensagem: 'Disponibilidade inválida' });
   return { produto, erros };
+}
+
+// Lote: Map índice -> { campo, motivo } das linhas a ignorar por duplicidade.
+// SKU compara sem diferenciar maiúsculas; código do fornecedor só conta dentro do
+// mesmo fornecedor (dois fornecedores podem usar o mesmo código) e quando preenchido.
+// `existentes`: linhas do banco com sku, fornecedor e codigo já em minúsculas.
+function encontrarDuplicadosLote(produtos, existentes) {
+  const chaveForn = (fornecedor, codigo) => `${fornecedor}\u0000${codigo}`;
+  const skusBanco = new Set(existentes.map((r) => r.sku));
+  const codigosBanco = new Set(existentes.filter((r) => r.codigo).map((r) => chaveForn(r.fornecedor, r.codigo)));
+  const skusLote = new Map();
+  const codigosLote = new Map();
+  const duplicados = new Map();
+  produtos.forEach((p, i) => {
+    const sku = p.codigo_sku.toLowerCase();
+    const codigo = p.codigo_fornecedor ? chaveForn(p.fornecedor.toLowerCase(), p.codigo_fornecedor.toLowerCase()) : '';
+    let dup = null;
+    if (skusBanco.has(sku)) dup = { campo: 'codigo_sku', motivo: 'SKU já cadastrado' };
+    else if (codigo && codigosBanco.has(codigo)) dup = { campo: 'codigo_fornecedor', motivo: 'Cód. fornecedor já cadastrado' };
+    else if (skusLote.has(sku)) dup = { campo: 'codigo_sku', motivo: `SKU repetido na linha ${skusLote.get(sku) + 1}` };
+    else if (codigo && codigosLote.has(codigo)) dup = { campo: 'codigo_fornecedor', motivo: `Cód. fornecedor repetido na linha ${codigosLote.get(codigo) + 1}` };
+    if (dup) return duplicados.set(i, dup);
+    skusLote.set(sku, i);
+    if (codigo) codigosLote.set(codigo, i);
+  });
+  return duplicados;
+}
+
+// Ao cadastrar um produto, o custo informado vira a 1ª compra do histórico de reposição.
+async function registrarCompraCadastro(db, produto) {
+  await db.query(
+    `INSERT INTO compras_fornecedor (produto_id, fornecedor, preco_custo, quantidade, origem)
+     VALUES ($1, $2, $3, 1, 'CADASTRO')`,
+    [produto.id, produto.fornecedor || '', produto.preco_custo]
+  );
 }
 
 // Monta o pedido a partir das linhas de produtos do banco (preço e encomenda
@@ -491,12 +548,26 @@ async function startServer() {
     }
   }
 
+  // Lista do painel, com a última compra do histórico de reposição e o custo da
+  // compra anterior (para a variação de preço do fornecedor).
   async function handleListAdmin(req, res) {
     try {
       const result = await pool.query(
-        `SELECT id, nome, codigo_sku, preco_custo, preco_venda, imagem_url, fotos, status, disponibilidade, formato, estilo, cor_armacao, fornecedor, codigo_fornecedor, vezes_em_maleta
-         FROM produtos
-         ORDER BY created_at DESC`
+        `SELECT p.id, p.nome, p.codigo_sku, p.preco_custo, p.preco_venda, p.imagem_url, p.fotos, p.status, p.disponibilidade,
+                p.formato, p.estilo, p.cor_armacao, p.fornecedor, p.codigo_fornecedor, p.link_fornecedor, p.vezes_em_maleta,
+                to_char(uc.data_compra, 'YYYY-MM-DD') AS ultima_compra, uc.preco_custo AS custo_ultima_compra,
+                ca.preco_custo AS custo_compra_anterior, COALESCE(nc.total, 0)::int AS total_compras
+         FROM produtos p
+         LEFT JOIN LATERAL (
+           SELECT data_compra, preco_custo FROM compras_fornecedor c
+           WHERE c.produto_id = p.id ORDER BY data_compra DESC, id DESC LIMIT 1
+         ) uc ON true
+         LEFT JOIN LATERAL (
+           SELECT preco_custo FROM compras_fornecedor c
+           WHERE c.produto_id = p.id ORDER BY data_compra DESC, id DESC OFFSET 1 LIMIT 1
+         ) ca ON true
+         LEFT JOIN LATERAL (SELECT COUNT(*) AS total FROM compras_fornecedor c WHERE c.produto_id = p.id) nc ON true
+         ORDER BY p.created_at DESC`
       );
       res.json(result.rows);
     } catch (err) {
@@ -508,7 +579,7 @@ async function startServer() {
   async function handleListConditional(req, res) {
     try {
       const result = await pool.query(
-        `SELECT id, nome, codigo_sku, preco_custo, preco_venda, imagem_url, fotos, status, disponibilidade, formato, estilo, cor_armacao, fornecedor, codigo_fornecedor, vezes_em_maleta
+        `SELECT id, nome, codigo_sku, preco_custo, preco_venda, imagem_url, fotos, status, disponibilidade, formato, estilo, cor_armacao, fornecedor, codigo_fornecedor, link_fornecedor, vezes_em_maleta
          FROM produtos
          WHERE status = 'CONDICIONAL'
          ORDER BY created_at DESC`
@@ -535,6 +606,10 @@ async function startServer() {
     const codigoFinal = codigo_sku || sku;
     const fornecedor = textoCurto(req.body.fornecedor, 120);
     const codigoFornecedor = textoCurto(req.body.codigo_fornecedor, 100);
+    const linkFornecedor = lerLinkFornecedor(req.body.link_fornecedor);
+    if (linkFornecedor === null) {
+      return res.status(400).json({ error: 'Link do fornecedor inválido (use http:// ou https://)' });
+    }
     const disponibilidade = req.body.disponibilidade || 'PRONTA_ENTREGA';
     if (!DISPONIBILIDADES.includes(disponibilidade)) {
       return res.status(400).json({ error: 'Disponibilidade inválida' });
@@ -549,11 +624,12 @@ async function startServer() {
         if (file) fotos.push(await salvarImagem(client, file));
       }
       const result = await client.query(
-        `INSERT INTO produtos (nome, codigo_sku, preco_custo, preco_venda, imagem_url, fotos, disponibilidade, formato, estilo, cor_armacao, fornecedor, codigo_fornecedor)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+        `INSERT INTO produtos (nome, codigo_sku, preco_custo, preco_venda, imagem_url, fotos, disponibilidade, formato, estilo, cor_armacao, fornecedor, codigo_fornecedor, link_fornecedor)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
          RETURNING *`,
-        [nome, codigoFinal, preco_custo, preco_venda, fotos[0] || null, fotos, disponibilidade, formato, estilo, cor_armacao, fornecedor, codigoFornecedor]
+        [nome, codigoFinal, preco_custo, preco_venda, fotos[0] || null, fotos, disponibilidade, formato, estilo, cor_armacao, fornecedor, codigoFornecedor, linkFornecedor]
       );
+      await registrarCompraCadastro(client, result.rows[0]);
       await client.query('COMMIT');
       res.status(201).json(result.rows[0]);
     } catch (err) {
@@ -581,6 +657,10 @@ async function startServer() {
       return res.status(400).json({ error: 'fotos_manter inválido' });
     }
     const mexeNasFotos = manter !== undefined || enviadas.some(Boolean);
+    const linkFornecedor = lerLinkFornecedor(req.body.link_fornecedor);
+    if (linkFornecedor === null) {
+      return res.status(400).json({ error: 'Link do fornecedor inválido (use http:// ou https://)' });
+    }
 
     let client;
     try {
@@ -610,6 +690,7 @@ async function startServer() {
       addField('cor_armacao', cor_armacao);
       if (req.body.fornecedor !== undefined) addField('fornecedor', textoCurto(req.body.fornecedor, 120));
       if (req.body.codigo_fornecedor !== undefined) addField('codigo_fornecedor', textoCurto(req.body.codigo_fornecedor, 100));
+      if (req.body.link_fornecedor !== undefined) addField('link_fornecedor', linkFornecedor);
 
       if (fields.length === 0 && !mexeNasFotos) {
         await client.query('ROLLBACK');
@@ -665,8 +746,11 @@ async function startServer() {
   }
 
   // Cadastro em lote (JSON, sem fotos: elas entram depois, editando cada produto).
-  // Tudo ou nada: se alguma linha tiver erro, nada é gravado e a resposta diz
+  // Erros de preenchimento (nome, preço...) barram o lote inteiro e a resposta diz
   // qual linha (índice a partir de 0) e qual campo corrigir.
+  // Duplicados não barram: a linha cujo SKU ou código do fornecedor (do mesmo
+  // fornecedor) já existe no banco, ou repete uma linha anterior do lote, é
+  // ignorada e volta em `ignorados`; as demais são gravadas.
   async function handleCreateLote(req, res) {
     const linhas = req.body && req.body.produtos;
     if (!Array.isArray(linhas) || linhas.length === 0) {
@@ -682,52 +766,180 @@ async function startServer() {
       r.erros.forEach((e) => erros.push({ linha: i, ...e }));
       return r.produto;
     });
-
-    const vistos = new Map();
-    produtos.forEach((p, i) => {
-      if (!p.codigo_sku) return;
-      const chave = p.codigo_sku.toLowerCase();
-      if (vistos.has(chave)) erros.push({ linha: i, campo: 'codigo_sku', mensagem: `SKU repetido na linha ${vistos.get(chave) + 1}` });
-      else vistos.set(chave, i);
-    });
+    if (erros.length) {
+      erros.sort((a, b) => a.linha - b.linha);
+      return res.status(400).json({ error: 'Corrija as linhas marcadas', erros });
+    }
 
     let client;
     try {
       client = await pool.connect();
-      const skus = produtos.map((p) => p.codigo_sku).filter(Boolean);
-      const existentes = await client.query('SELECT codigo_sku FROM produtos WHERE codigo_sku = ANY($1)', [skus]);
-      const jaCadastrados = new Set(existentes.rows.map((r) => r.codigo_sku));
+      const existentes = await client.query(
+        `SELECT lower(codigo_sku) AS sku, lower(fornecedor) AS fornecedor, lower(codigo_fornecedor) AS codigo
+         FROM produtos
+         WHERE lower(codigo_sku) = ANY($1) OR (codigo_fornecedor <> '' AND lower(codigo_fornecedor) = ANY($2))`,
+        [produtos.map((p) => p.codigo_sku.toLowerCase()), produtos.map((p) => p.codigo_fornecedor.toLowerCase()).filter(Boolean)]
+      );
+      const duplicados = encontrarDuplicadosLote(produtos, existentes.rows);
+      const ignorados = [];
+      const novos = [];
       produtos.forEach((p, i) => {
-        if (jaCadastrados.has(p.codigo_sku)) erros.push({ linha: i, campo: 'codigo_sku', mensagem: 'SKU já cadastrado' });
+        const dup = duplicados.get(i);
+        if (dup) ignorados.push({ linha: i, codigo_sku: p.codigo_sku, codigo_fornecedor: p.codigo_fornecedor, ...dup });
+        else novos.push([i, p]);
       });
-
-      if (erros.length) {
-        erros.sort((a, b) => a.linha - b.linha);
-        return res.status(400).json({ error: 'Corrija as linhas marcadas', erros });
-      }
 
       await client.query('BEGIN');
       const criados = [];
-      for (const p of produtos) {
+      for (const [i, p] of novos) {
+        // ON CONFLICT cobre outro cadastro do mesmo SKU entre a checagem e o INSERT
         const r = await client.query(
-          `INSERT INTO produtos (nome, codigo_sku, preco_custo, preco_venda, status, disponibilidade, formato, estilo, cor_armacao, fornecedor, codigo_fornecedor)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+          `INSERT INTO produtos (nome, codigo_sku, preco_custo, preco_venda, status, disponibilidade, formato, estilo, cor_armacao, fornecedor, codigo_fornecedor, link_fornecedor)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+           ON CONFLICT (codigo_sku) DO NOTHING
            RETURNING *`,
-          [p.nome, p.codigo_sku, p.preco_custo, p.preco_venda, p.status, p.disponibilidade, p.formato, p.estilo, p.cor_armacao, p.fornecedor, p.codigo_fornecedor]
+          [p.nome, p.codigo_sku, p.preco_custo, p.preco_venda, p.status, p.disponibilidade, p.formato, p.estilo, p.cor_armacao, p.fornecedor, p.codigo_fornecedor, p.link_fornecedor]
         );
+        if (!r.rows.length) {
+          ignorados.push({ linha: i, codigo_sku: p.codigo_sku, codigo_fornecedor: p.codigo_fornecedor, campo: 'codigo_sku', motivo: 'SKU já cadastrado' });
+          continue;
+        }
+        await registrarCompraCadastro(client, r.rows[0]);
         criados.push(r.rows[0]);
       }
       await client.query('COMMIT');
-      res.status(201).json({ produtos: criados });
+      ignorados.sort((a, b) => a.linha - b.linha);
+      res.status(criados.length ? 201 : 200).json({ produtos: criados, ignorados });
     } catch (err) {
       if (client) await client.query('ROLLBACK').catch(() => {});
       console.error(err);
-      if (err.code === '23505') {
-        return res.status(400).json({ error: 'SKU já cadastrado' });
-      }
       res.status(500).json({ error: 'Erro ao cadastrar produtos' });
     } finally {
       if (client) client.release();
+    }
+  }
+
+  // ---------- Histórico de reposição (compras do fornecedor) ----------
+
+  function idProduto(v) {
+    return typeof v === 'string' && /^\d{1,9}$/.test(v) && Number(v) > 0 ? Number(v) : null;
+  }
+
+  async function handleListCompras(req, res) {
+    const id = idProduto(req.params.id);
+    if (!id) return res.status(404).json({ error: 'Produto não encontrado' });
+    try {
+      const { rows } = await pool.query(
+        `SELECT id, fornecedor, preco_custo, quantidade, origem, to_char(data_compra, 'YYYY-MM-DD') AS data_compra, created_at
+         FROM compras_fornecedor WHERE produto_id = $1
+         ORDER BY data_compra DESC, id DESC LIMIT 100`,
+        [id]
+      );
+      res.json(rows);
+    } catch (err) {
+      console.error(err);
+      res.status(500).json({ error: 'Erro ao buscar histórico de compras' });
+    }
+  }
+
+  // Registra uma reposição: custo unitário pago, quantidade e data (padrão hoje).
+  // O custo do produto passa a ser o da compra mais recente; com reativar=true
+  // um produto ESGOTADO volta a DISPONIVEL.
+  async function handleCreateCompra(req, res) {
+    const id = idProduto(req.params.id);
+    if (!id) return res.status(404).json({ error: 'Produto não encontrado' });
+    const b = req.body || {};
+    const custo = lerPrecoLote(b.preco_custo);
+    if (!Number.isFinite(custo) || custo < 0 || custo >= 1e8) return res.status(400).json({ error: 'Custo inválido' });
+    const quantidade = b.quantidade === undefined || b.quantidade === '' ? 1 : Number(b.quantidade);
+    if (!Number.isInteger(quantidade) || quantidade < 1 || quantidade > 100000) return res.status(400).json({ error: 'Quantidade inválida' });
+    let data = null;
+    if (b.data_compra !== undefined && b.data_compra !== '') {
+      const d = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(b.data_compra));
+      const dt = d && new Date(Date.UTC(+d[1], +d[2] - 1, +d[3]));
+      if (!d || dt.getUTCMonth() !== +d[2] - 1 || dt.getUTCDate() !== +d[3] || +d[1] < 2000) {
+        return res.status(400).json({ error: 'Data inválida' });
+      }
+      data = b.data_compra;
+    }
+
+    let client;
+    try {
+      client = await pool.connect();
+      await client.query('BEGIN');
+      const prod = await client.query('SELECT id, fornecedor, status FROM produtos WHERE id = $1 FOR UPDATE', [id]);
+      if (!prod.rows.length) {
+        await client.query('ROLLBACK');
+        return res.status(404).json({ error: 'Produto não encontrado' });
+      }
+      const compra = await client.query(
+        `INSERT INTO compras_fornecedor (produto_id, fornecedor, preco_custo, quantidade, origem, data_compra)
+         VALUES ($1, $2, $3, $4, 'REPOSICAO', COALESCE($5::date, CURRENT_DATE))
+         RETURNING id, fornecedor, preco_custo, quantidade, origem, to_char(data_compra, 'YYYY-MM-DD') AS data_compra, created_at`,
+        [id, prod.rows[0].fornecedor, custo, quantidade, data]
+      );
+      const produto = await client.query(
+        `UPDATE produtos SET
+           preco_custo = (SELECT preco_custo FROM compras_fornecedor WHERE produto_id = $1 ORDER BY data_compra DESC, id DESC LIMIT 1),
+           status = CASE WHEN $2 AND status = 'ESGOTADO' THEN 'DISPONIVEL' ELSE status END,
+           updated_at = CURRENT_TIMESTAMP
+         WHERE id = $1 RETURNING *`,
+        [id, b.reativar === true]
+      );
+      await client.query('COMMIT');
+      res.status(201).json({ compra: compra.rows[0], produto: produto.rows[0] });
+    } catch (err) {
+      if (client) await client.query('ROLLBACK').catch(() => {});
+      console.error(err);
+      res.status(500).json({ error: 'Erro ao registrar compra' });
+    } finally {
+      if (client) client.release();
+    }
+  }
+
+  // Resumo por fornecedor: produtos, última compra, quantos subiram/baixaram de
+  // custo na última compra e a variação média (última vs. anterior).
+  async function handleResumoFornecedores(req, res) {
+    try {
+      const { rows } = await pool.query(
+        `WITH ult AS (
+           SELECT p.fornecedor, uc.data_compra, uc.preco_custo AS custo_ult, ca.preco_custo AS custo_ant
+           FROM produtos p
+           LEFT JOIN LATERAL (
+             SELECT data_compra, preco_custo FROM compras_fornecedor c
+             WHERE c.produto_id = p.id ORDER BY data_compra DESC, id DESC LIMIT 1
+           ) uc ON true
+           LEFT JOIN LATERAL (
+             SELECT preco_custo FROM compras_fornecedor c
+             WHERE c.produto_id = p.id ORDER BY data_compra DESC, id DESC OFFSET 1 LIMIT 1
+           ) ca ON true
+         )
+         SELECT fornecedor,
+                COUNT(*)::int AS produtos,
+                to_char(MAX(data_compra), 'YYYY-MM-DD') AS ultima_compra,
+                COUNT(*) FILTER (WHERE custo_ant IS NOT NULL AND custo_ult > custo_ant)::int AS subiram,
+                COUNT(*) FILTER (WHERE custo_ant IS NOT NULL AND custo_ult < custo_ant)::int AS baixaram,
+                ROUND(AVG((custo_ult - custo_ant) / custo_ant * 100) FILTER (WHERE custo_ant > 0), 1)::float AS variacao_media
+         FROM ult
+         GROUP BY fornecedor
+         ORDER BY MAX(data_compra) DESC NULLS LAST, fornecedor`
+      );
+      res.json(rows);
+    } catch (err) {
+      console.error(err);
+      res.status(500).json({ error: 'Erro ao buscar resumo dos fornecedores' });
+    }
+  }
+
+  // Importação pelo link do produto na loja do fornecedor (só preenche o formulário;
+  // nada é gravado aqui).
+  async function handleImportarUrl(req, res) {
+    try {
+      res.json(await importarProduto(req.body && req.body.url));
+    } catch (err) {
+      if (err instanceof ErroImportacao) return res.status(err.status).json({ error: err.message });
+      console.error(err);
+      res.status(500).json({ error: 'Erro ao importar o produto' });
     }
   }
 
@@ -1076,6 +1288,10 @@ async function startServer() {
   // ---------- Rotas admin (sempre exigem token; sem ADMIN_USER/ADMIN_PASS_HASH respondem 503) ----------
   app.get('/api/admin/produtos', requireAdmin, handleListAdmin);
   app.post('/api/admin/produtos/lote', requireAdmin, handleCreateLote);
+  app.post('/api/admin/importar-url', requireAdmin, handleImportarUrl);
+  app.get('/api/admin/produtos/:id/compras', requireAdmin, handleListCompras);
+  app.post('/api/admin/produtos/:id/compras', requireAdmin, handleCreateCompra);
+  app.get('/api/admin/fornecedores/reposicao', requireAdmin, handleResumoFornecedores);
   app.post('/api/produtos', requireAdmin, uploadImagem, handleCreateProduto);
   app.put('/api/produtos/:id', requireAdmin, uploadImagem, handleUpdateProduto);
   app.post('/api/admin/acerto', requireAdmin, handleAcerto);
