@@ -655,8 +655,10 @@
     window.imgFallback = imgFallback;
 
     // Higieniza WhatsApp: remove tudo que não for dígito antes de gerar https://wa.me/
+    // Só dígitos; número brasileiro sem o 55 (DDD + 8 ou 9 dígitos) ganha o código do país
     function sanitizeWhatsapp(num) {
-      return String(num || '').replace(/\D/g, '');
+      const digitos = String(num || '').replace(/\D/g, '');
+      return digitos.length === 10 || digitos.length === 11 ? '55' + digitos : digitos;
     }
 
     // Auth admin: token JWT em localStorage (obtido em ./login.html)
@@ -713,6 +715,7 @@
         tabContents.forEach(c => c.classList.add('hidden'));
         tab.classList.add('bg-orange-50', 'text-orange-600');
         document.getElementById(`tab-${target}`).classList.remove('hidden');
+        document.getElementById('pageTitle').textContent = tab.textContent.trim();
         if (target === 'acerto') carregarAcerto();
         if (target === 'lote') iniciarLote();
         if (target === 'clientes') carregarClientes();
@@ -1864,9 +1867,10 @@
 
     const idsMarcados = marca => [...marcacoesAcerto].filter(([, m]) => m === marca).map(([id]) => id);
 
-    function abrirResumoMaleta(titulo, texto) {
+    function abrirResumoMaleta(titulo, texto, telefone) {
       document.getElementById('resumoMaletaTitulo').textContent = titulo;
       document.getElementById('resumoMaletaTexto').value = texto;
+      if (telefone !== undefined) document.getElementById('resumoMaletaTelefone').value = telefone;
       abrirModalSimples('modalResumoMaleta');
     }
 
@@ -1936,6 +1940,8 @@
 
       const condicionais = todosProdutos.filter(p => p.status === 'CONDICIONAL');
       const obs = document.getElementById('obsAcerto');
+      // O campo é limpo depois de salvar; o "Enviar resumo" do aviso reaproveita o número
+      const telefone = document.getElementById('resumoMaletaTelefone').value;
       estadoSalvandoAcerto(true);
       try {
         const res = await fetchAdmin('/api/admin/acerto', {
@@ -1956,7 +1962,7 @@
         if (vendidos.length) partes.push(`${vendidos.length} vendido(s) (${formatarMoeda(data.total_vendido)})`);
         if (voltaram.length) partes.push(`${voltaram.length} de volta ao estoque`);
         mostrarToast(`Acerto salvo: ${partes.join(', ')}.${ignorados ? ` ${ignorados} item(ns) já não estavam em condicional.` : ''}`, 'success',
-          { texto: 'Enviar resumo', onClick: () => abrirResumoMaleta('Fechamento do acerto', resumo) });
+          { texto: 'Enviar resumo', onClick: () => abrirResumoMaleta('Fechamento do acerto', resumo, telefone) });
 
         marcacoesAcerto.clear();
         obs.value = '';
