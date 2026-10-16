@@ -172,6 +172,21 @@ async function initTables() {
     `);
     await client.query('CREATE INDEX IF NOT EXISTS pedidos_cliente_idx ON pedidos (cliente_id, created_at DESC)');
 
+    // Maleta de um pedido: "Enviar maleta" põe as peças de pronta entrega em
+    // CONDICIONAL ligadas ao pedido, e o acerto registra de qual pedido foi.
+    await client.query(`
+      ALTER TABLE pedidos
+      ADD COLUMN IF NOT EXISTS maleta_enviada_em TIMESTAMP
+    `);
+    await client.query(`
+      ALTER TABLE produtos
+      ADD COLUMN IF NOT EXISTS pedido_condicional_id INTEGER REFERENCES pedidos(id) ON DELETE SET NULL
+    `);
+    await client.query(`
+      ALTER TABLE acertos
+      ADD COLUMN IF NOT EXISTS pedido_id INTEGER REFERENCES pedidos(id) ON DELETE SET NULL
+    `);
+
     await client.query(`
       CREATE TABLE IF NOT EXISTS configuracoes (
         chave VARCHAR(100) PRIMARY KEY,

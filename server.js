@@ -598,7 +598,7 @@ async function startServer() {
       const result = await pool.query(
         `SELECT p.id, p.nome, p.nome_curto, p.codigo_sku, p.preco_custo, p.preco_venda, p.imagem_url, p.fotos, p.status, p.disponibilidade,
                 p.formato, p.estilo, p.cor_armacao, p.diametro_cm, p.ponte_cm, p.largura_total_cm, p.material, p.tipo,
-                p.fornecedor, p.codigo_fornecedor, p.link_fornecedor, p.vezes_em_maleta,
+                p.fornecedor, p.codigo_fornecedor, p.link_fornecedor, p.vezes_em_maleta, p.pedido_condicional_id,
                 to_char(uc.data_compra, 'YYYY-MM-DD') AS ultima_compra, uc.preco_custo AS custo_ultima_compra,
                 ca.preco_custo AS custo_compra_anterior, COALESCE(nc.total, 0)::int AS total_compras
          FROM produtos p
@@ -734,6 +734,8 @@ async function startServer() {
       addField('preco_custo', preco_custo);
       addField('preco_venda', preco_venda);
       addField('status', status);
+      // Fora de condicional a peça deixa de pertencer à maleta de um pedido
+      if (status !== undefined && status !== 'CONDICIONAL') fields.push('pedido_condicional_id = NULL');
       addField('disponibilidade', disponibilidade);
       addField('formato', formato);
       addField('estilo', estilo);
@@ -1092,7 +1094,7 @@ async function startServer() {
     try {
       const { rows } = await pool.query(
         `SELECT p.id, p.cliente_id, p.nome, p.telefone, p.email, p.endereco, p.itens,
-                p.total_prova, p.total_encomendas, p.sinal, p.total, p.created_at
+                p.total_prova, p.total_encomendas, p.sinal, p.total, p.maleta_enviada_em, p.created_at
          FROM pedidos p ${where}
          ORDER BY p.created_at DESC, p.id DESC
          LIMIT 200`,
@@ -1105,8 +1107,68 @@ async function startServer() {
     }
   }
 
+  // Admin: "Enviar maleta" de um pedido. As peças de pronta entrega que ainda estão
+  // DISPONIVEL vão para CONDICIONAL ligadas ao pedido; as que já saíram (vendidas ou
+  // na maleta de outra cliente) voltam em `indisponiveis`. Pode repetir sem efeito colateral.
+  async function handleEnviarMaleta(req, res) {
+    const { id } = req.params;
+    if (!/^\d{1,9}$/.test(id) || Number(id) === 0) return res.status(400).json({ error: 'Pedido inválido' });
+    const pedidoId = Number(id);
+
+    let client;
+    try {
+      client = await pool.connect();
+      await client.query('BEGIN');
+      const { rows } = await client.query('SELECT id, itens FROM pedidos WHERE id = $1 FOR UPDATE', [pedidoId]);
+      if (!rows.length) {
+        await client.query('ROLLBACK');
+        return res.status(404).json({ error: 'Pedido não encontrado' });
+      }
+      const prova = (Array.isArray(rows[0].itens) ? rows[0].itens : [])
+        .filter((i) => i && i.encomenda !== true && Number.isInteger(Number(i.produto_id)));
+      const ids = [...new Set(prova.map((i) => Number(i.produto_id)))];
+      if (!ids.length) {
+        await client.query('ROLLBACK');
+        return res.status(400).json({ error: 'Este pedido não tem peças de pronta entrega' });
+      }
+
+      const enviados = (await client.query(
+        `UPDATE produtos SET status = 'CONDICIONAL', pedido_condicional_id = $2, updated_at = CURRENT_TIMESTAMP
+         WHERE id = ANY($1) AND status = 'DISPONIVEL'
+         RETURNING id`,
+        [ids, pedidoId]
+      )).rows.map((r) => r.id);
+      const naMaleta = (await client.query(
+        `SELECT id FROM produtos WHERE id = ANY($1) AND status = 'CONDICIONAL' AND pedido_condicional_id = $2`,
+        [ids, pedidoId]
+      )).rows.map((r) => r.id);
+      const indisponiveis = prova
+        .filter((i) => !naMaleta.includes(Number(i.produto_id)))
+        .map((i) => ({ produto_id: Number(i.produto_id), nome: i.nome, codigo_sku: i.codigo_sku }));
+
+      if (!naMaleta.length) {
+        await client.query('ROLLBACK');
+        return res.status(409).json({ error: 'Nenhuma peça deste pedido está disponível', indisponiveis });
+      }
+
+      const atualizado = await client.query(
+        `UPDATE pedidos SET maleta_enviada_em = COALESCE(maleta_enviada_em, CURRENT_TIMESTAMP)
+         WHERE id = $1 RETURNING maleta_enviada_em`,
+        [pedidoId]
+      );
+      await client.query('COMMIT');
+      res.json({ enviados, na_maleta: naMaleta, indisponiveis, maleta_enviada_em: atualizado.rows[0].maleta_enviada_em });
+    } catch (err) {
+      if (client) await client.query('ROLLBACK').catch(() => {});
+      console.error(err);
+      res.status(500).json({ error: 'Erro ao enviar a maleta' });
+    } finally {
+      if (client) client.release();
+    }
+  }
+
   async function handleAcerto(req, res) {
-    let { comprados, devolvidos, itens, observacoes } = req.body;
+    let { comprados, devolvidos, itens, observacoes, pedido_id } = req.body;
 
     // Compatibilidade com admin/acerto.html (inglês): { itens: [{sku|id, bought, returned}] }
     if ((!Array.isArray(comprados) && !Array.isArray(devolvidos)) && Array.isArray(itens)) {
@@ -1150,6 +1212,11 @@ async function startServer() {
     }
 
     const obs = typeof observacoes === 'string' ? observacoes.trim().slice(0, 2000) : '';
+    // Pedido da maleta (opcional): só para o histórico do acerto
+    const pedidoId = pedido_id === undefined || pedido_id === null || pedido_id === '' ? null : Number(pedido_id);
+    if (pedidoId !== null && !(Number.isInteger(pedidoId) && pedidoId > 0 && pedidoId < 2 ** 31)) {
+      return res.status(400).json({ error: 'Pedido inválido' });
+    }
 
     let client;
     try {
@@ -1162,7 +1229,7 @@ async function startServer() {
       let totalCentavos = 0;
       if (comprados.length > 0) {
         const r = await client.query(
-          `UPDATE produtos SET status = 'ESGOTADO', updated_at = CURRENT_TIMESTAMP
+          `UPDATE produtos SET status = 'ESGOTADO', pedido_condicional_id = NULL, updated_at = CURRENT_TIMESTAMP
            WHERE id = ANY($1) AND status = 'CONDICIONAL'
            RETURNING id, preco_venda`,
           [comprados]
@@ -1174,7 +1241,7 @@ async function startServer() {
       let retornados = [];
       if (devolvidos.length > 0) {
         const r = await client.query(
-          `UPDATE produtos SET status = 'DISPONIVEL', updated_at = CURRENT_TIMESTAMP
+          `UPDATE produtos SET status = 'DISPONIVEL', pedido_condicional_id = NULL, updated_at = CURRENT_TIMESTAMP
            WHERE id = ANY($1) AND status = 'CONDICIONAL'
            RETURNING id`,
           [devolvidos]
@@ -1195,8 +1262,9 @@ async function startServer() {
       }
 
       await client.query(
-        `INSERT INTO acertos (comprados, devolvidos, observacoes) VALUES ($1, $2, $3)`,
-        [vendidos, retornados, obs || null]
+        `INSERT INTO acertos (comprados, devolvidos, observacoes, pedido_id)
+         VALUES ($1, $2, $3, (SELECT id FROM pedidos WHERE id = $4))`,
+        [vendidos, retornados, obs || null, pedidoId]
       );
 
       await client.query('COMMIT');
@@ -1214,7 +1282,7 @@ async function startServer() {
   async function handleListAcertos(req, res) {
     try {
       const result = await pool.query(
-        `SELECT id, comprados, devolvidos, observacoes, created_at
+        `SELECT id, comprados, devolvidos, observacoes, pedido_id, created_at
          FROM acertos
          ORDER BY created_at DESC
          LIMIT 100`
@@ -1361,6 +1429,7 @@ async function startServer() {
   app.get('/api/admin/metrics', requireAdmin, handleMetrics);
   app.get('/api/admin/clientes', requireAdmin, handleListClientes);
   app.get('/api/admin/pedidos', requireAdmin, handleListPedidos);
+  app.post('/api/admin/pedidos/:id/enviar-maleta', requireAdmin, handleEnviarMaleta);
 
   // ---------- Aliases EN (compatibilidade front-end em inglês) ----------
   app.get('/api/products', handleListPublicos);
