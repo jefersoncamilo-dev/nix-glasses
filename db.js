@@ -190,6 +190,9 @@ async function initTables() {
     // Pedidos no painel: status (NOVO ao chegar da vitrine) e fechamento na entrega
     // (itens que a cliente desistiu, desconto em R$ ou %, acessórios extras).
     // total_compra: itens marcados como "Compra direta" no carrinho.
+    const temEncomendas = (await client.query(
+      `SELECT 1 FROM information_schema.tables WHERE table_name = 'encomendas'`
+    )).rows.length > 0;
     const temStatus = (await client.query(
       `SELECT 1 FROM information_schema.columns WHERE table_name = 'pedidos' AND column_name = 'status'`
     )).rows.length > 0;
@@ -224,6 +227,51 @@ async function initTables() {
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
     `);
+
+    // Encomendas de clientes: vêm do checkout (itens sob encomenda), do botão
+    // "Encomendar" num pedido ou são lançadas à mão no painel. Os dados do cliente e
+    // do produto ficam copiados aqui (o produto pode nem estar cadastrado).
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS encomendas (
+        id SERIAL PRIMARY KEY,
+        pedido_id INTEGER REFERENCES pedidos(id) ON DELETE SET NULL,
+        cliente_id INTEGER REFERENCES clientes(id) ON DELETE SET NULL,
+        produto_id INTEGER REFERENCES produtos(id) ON DELETE SET NULL,
+        origem VARCHAR(10) NOT NULL DEFAULT 'MANUAL',
+        nome_cliente VARCHAR(100) NOT NULL DEFAULT '',
+        telefone VARCHAR(30) NOT NULL DEFAULT '',
+        modelo VARCHAR(255) NOT NULL DEFAULT '',
+        codigo_sku VARCHAR(100) NOT NULL DEFAULT '',
+        especificacoes TEXT NOT NULL DEFAULT '',
+        valor DECIMAL(10,2) NOT NULL DEFAULT 0,
+        sinal_pago DECIMAL(10,2) NOT NULL DEFAULT 0,
+        status VARCHAR(30) NOT NULL DEFAULT 'AGUARDANDO_FABRICANTE',
+        observacoes TEXT NOT NULL DEFAULT '',
+        entregue_em TIMESTAMP,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+    await client.query('CREATE INDEX IF NOT EXISTS encomendas_status_idx ON encomendas (status, created_at DESC)');
+    await client.query('CREATE INDEX IF NOT EXISTS encomendas_cliente_idx ON encomendas (cliente_id, created_at DESC)');
+    // Um item de pedido vira no máximo uma encomenda
+    await client.query(`
+      CREATE UNIQUE INDEX IF NOT EXISTS encomendas_pedido_produto_idx ON encomendas (pedido_id, produto_id)
+      WHERE pedido_id IS NOT NULL AND produto_id IS NOT NULL
+    `);
+    // Pedidos de antes desta tabela: as encomendas deles entram uma vez, na criação
+    if (!temEncomendas) {
+      await client.query(`
+        INSERT INTO encomendas (pedido_id, cliente_id, produto_id, origem, nome_cliente, telefone, modelo, codigo_sku, valor, created_at)
+        SELECT p.id, p.cliente_id, pr.id, 'SITE', p.nome, p.telefone, i->>'nome', COALESCE(i->>'codigo_sku', ''),
+               COALESCE((i->>'preco')::numeric, 0), p.created_at
+        FROM pedidos p
+        CROSS JOIN LATERAL jsonb_array_elements(p.itens) i
+        LEFT JOIN produtos pr ON pr.id = (i->>'produto_id')::int
+        WHERE (i->>'encomenda')::boolean IS TRUE
+        ON CONFLICT DO NOTHING
+      `);
+    }
 
     await client.query(`
       CREATE TABLE IF NOT EXISTS configuracoes (

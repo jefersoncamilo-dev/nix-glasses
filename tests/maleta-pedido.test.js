@@ -193,7 +193,7 @@ describe('painel: maleta no acerto', () => {
 
   it('pedido com maleta enviada mostra "Fazer acerto" no lugar de "Enviar maleta"', () => {
     const lista = { innerHTML: '' };
-    const ctx = carregar(['escapeHtml', 'intencaoItemPedido', 'etiquetaIntencao', 'badgeStatusPedido', 'htmlPedido', 'renderizarPedidos'], {
+    const ctx = carregar(['escapeHtml', 'intencaoItemPedido', 'etiquetaIntencao', 'badgeStatusPedido', 'rotuloStatusEncomenda', 'htmlPedido', 'renderizarPedidos'], {
       document: { getElementById: () => lista }, formatarMoeda: v => `R$ ${v}`, formatarData: v => String(v), STATUS_PEDIDO: [],
     });
     const itens = [{ nome: 'A', codigo_sku: 'A', preco: 1, encomenda: false }];

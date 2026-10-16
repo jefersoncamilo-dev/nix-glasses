@@ -579,6 +579,21 @@ function intencaoDoItem(item) {
 }
 
 const STATUS_PEDIDO = ['NOVO', 'EM_ANDAMENTO', 'ENTREGUE', 'CANCELADO'];
+const STATUS_ENCOMENDA = ['AGUARDANDO_FABRICANTE', 'EM_TRANSITO', 'PRONTO_ENTREGA', 'ENTREGUE', 'CANCELADA'];
+
+// Totais do pedido a partir dos itens gravados (depois de um item virar encomenda)
+function totaisDoPedido(itens) {
+  const c = v => Math.round(Number(v) * 100);
+  const soma = (lista, campo) => lista.reduce((t, i) => t + c(i[campo]), 0) / 100;
+  const por = (intencao) => itens.filter(i => intencaoDoItem(i) === intencao);
+  return {
+    total_prova: soma(por('CONDICIONAL'), 'preco'),
+    total_compra: soma(por('COMPRA'), 'preco'),
+    total_encomendas: soma(por('ENCOMENDA'), 'preco'),
+    sinal: soma(por('ENCOMENDA'), 'sinal'),
+    total: soma(itens, 'preco'),
+  };
+}
 const TIPOS_DESCONTO = ['VALOR', 'PERCENTUAL'];
 const MAX_EXTRAS = 30;
 const MAX_QTD_EXTRA = 99;
@@ -1114,6 +1129,14 @@ async function startServer() {
             JSON.stringify(p.itens), p.totalProva, p.totalCompra, p.totalEncomendas, p.sinal, p.total]
         );
         pedido = { id: rows[0].id, status: rows[0].status };
+        // Itens sob encomenda já entram no painel de Encomendas
+        for (const i of p.itens.filter(x => x.intencao === 'ENCOMENDA')) {
+          await client.query(
+            `INSERT INTO encomendas (pedido_id, cliente_id, produto_id, origem, nome_cliente, telefone, modelo, codigo_sku, valor)
+             VALUES ($1, $2, $3, 'SITE', $4, $5, $6, $7, $8) ON CONFLICT DO NOTHING`,
+            [pedido.id, dono[0] ? dono[0].id : null, i.produto_id, p.nome, p.telefone, i.nome, i.codigo_sku, i.preco]
+          );
+        }
       }
 
       await client.query('COMMIT');
@@ -1176,7 +1199,9 @@ async function startServer() {
         `SELECT p.id, p.cliente_id, p.nome, p.telefone, p.email, p.endereco, p.itens, p.status,
                 p.total_prova, p.total_compra, p.total_encomendas, p.sinal, p.total, p.maleta_enviada_em, p.created_at,
                 p.itens_removidos, p.extras, p.desconto_tipo, p.desconto_valor, p.total_final, p.entregue_em, p.updated_at,
-                COALESCE(ac.vendidos, '{}') AS vendidos_acerto, COALESCE(ac.devolvidos, '{}') AS devolvidos_acerto
+                COALESCE(ac.vendidos, '{}') AS vendidos_acerto, COALESCE(ac.devolvidos, '{}') AS devolvidos_acerto,
+                COALESCE((SELECT json_agg(json_build_object('id', e.id, 'produto_id', e.produto_id, 'status', e.status) ORDER BY e.id)
+                          FROM encomendas e WHERE e.pedido_id = p.id), '[]') AS encomendas
          FROM pedidos p
          LEFT JOIN LATERAL (
            SELECT (SELECT array_agg(DISTINCT x) FROM acertos a2, unnest(a2.comprados) x WHERE a2.pedido_id = p.id) AS vendidos,
@@ -1455,6 +1480,178 @@ async function startServer() {
       if (client) await client.query('ROLLBACK').catch(() => {});
       console.error(err);
       res.status(500).json({ error: 'Erro ao salvar o fechamento do pedido' });
+    } finally {
+      if (client) client.release();
+    }
+  }
+
+  // ---------- Encomendas ----------
+  const CAMPOS_ENCOMENDA = 'id, pedido_id, cliente_id, produto_id, origem, nome_cliente, telefone, modelo, codigo_sku, especificacoes, valor, sinal_pago, status, observacoes, entregue_em, created_at, updated_at';
+
+  function lerValorEncomenda(v) {
+    if (v === undefined || v === null || v === '') return 0;
+    const n = typeof v === 'number' ? v : Number(String(v).trim().replace(',', '.'));
+    return Number.isFinite(n) && n >= 0 && n <= 1e6 ? Math.round(n * 100) / 100 : null;
+  }
+
+  // Campos editáveis; parcial=true só lê o que veio no corpo
+  function lerEncomenda(body, parcial) {
+    const b = body || {};
+    const tem = (k) => !parcial || b[k] !== undefined;
+    const e = {};
+    if (tem('nome_cliente')) e.nome_cliente = textoCurto(b.nome_cliente, 100);
+    if (tem('telefone')) e.telefone = textoCurto(b.telefone, 30);
+    if (tem('modelo')) e.modelo = textoCurto(b.modelo, 255);
+    if (tem('codigo_sku')) e.codigo_sku = textoCurto(b.codigo_sku, 100);
+    if (tem('especificacoes')) e.especificacoes = typeof b.especificacoes === 'string' ? b.especificacoes.trim().slice(0, 2000) : '';
+    if (tem('observacoes')) e.observacoes = typeof b.observacoes === 'string' ? b.observacoes.trim().slice(0, 2000) : '';
+    for (const k of ['valor', 'sinal_pago']) {
+      if (tem(k)) {
+        e[k] = lerValorEncomenda(b[k]);
+        if (e[k] === null) return { erro: `${k === 'valor' ? 'Valor' : 'Sinal'} inválido` };
+      }
+    }
+    if (tem('status')) {
+      e.status = b.status === undefined ? 'AGUARDANDO_FABRICANTE' : b.status;
+      if (!STATUS_ENCOMENDA.includes(e.status)) return { erro: 'Status da encomenda inválido' };
+    }
+    if (e.valor !== undefined && e.sinal_pago !== undefined && e.sinal_pago > e.valor && e.valor > 0) return { erro: 'Sinal maior que o valor' };
+    return { dados: e };
+  }
+
+  async function handleListEncomendas(req, res) {
+    const { status, cliente } = req.query;
+    const condicoes = [];
+    const params = [];
+    if (status !== undefined) {
+      if (!STATUS_ENCOMENDA.includes(status)) return res.status(400).json({ error: 'Status inválido' });
+      params.push(status);
+      condicoes.push(`status = $${params.length}`);
+    }
+    if (cliente !== undefined) {
+      if (typeof cliente !== 'string' || !/^\d{1,9}$/.test(cliente)) return res.status(400).json({ error: 'Cliente inválido' });
+      params.push(Number(cliente));
+      condicoes.push(`cliente_id = $${params.length}`);
+    }
+    try {
+      const { rows } = await pool.query(
+        `SELECT ${CAMPOS_ENCOMENDA} FROM encomendas ${condicoes.length ? 'WHERE ' + condicoes.join(' AND ') : ''}
+         ORDER BY created_at DESC, id DESC LIMIT 300`, params);
+      res.json(rows);
+    } catch (err) {
+      console.error(err);
+      res.status(500).json({ error: 'Erro ao buscar encomendas' });
+    }
+  }
+
+  // Encomenda lançada à mão (cliente pediu no balcão, por telefone etc.)
+  async function handleCreateEncomenda(req, res) {
+    const { erro, dados: e } = lerEncomenda(req.body, false);
+    if (erro) return res.status(400).json({ error: erro });
+    if (!e.modelo) return res.status(400).json({ error: 'Informe o modelo encomendado' });
+    if (!e.nome_cliente && !e.telefone) return res.status(400).json({ error: 'Informe o nome ou o telefone da cliente' });
+    const clienteId = req.body.cliente_id === undefined || req.body.cliente_id === null || req.body.cliente_id === '' ? null : Number(req.body.cliente_id);
+    if (clienteId !== null && !(Number.isInteger(clienteId) && clienteId > 0 && clienteId < 2 ** 31)) return res.status(400).json({ error: 'Cliente inválido' });
+    try {
+      const { rows } = await pool.query(
+        `INSERT INTO encomendas (cliente_id, origem, nome_cliente, telefone, modelo, codigo_sku, especificacoes, valor, sinal_pago, status, observacoes)
+         VALUES ((SELECT id FROM clientes WHERE id = $1), 'MANUAL', $2, $3, $4, $5, $6, $7, $8, $9, $10)
+         RETURNING ${CAMPOS_ENCOMENDA}`,
+        [clienteId, e.nome_cliente, e.telefone, e.modelo, e.codigo_sku, e.especificacoes, e.valor, e.sinal_pago, e.status, e.observacoes]
+      );
+      res.status(201).json(rows[0]);
+    } catch (err) {
+      console.error(err);
+      res.status(500).json({ error: 'Erro ao criar encomenda' });
+    }
+  }
+
+  async function handleUpdateEncomenda(req, res) {
+    if (!/^\d{1,9}$/.test(req.params.id)) return res.status(400).json({ error: 'Encomenda inválida' });
+    const { erro, dados: e } = lerEncomenda(req.body, true);
+    if (erro) return res.status(400).json({ error: erro });
+    const campos = Object.keys(e);
+    if (!campos.length) return res.status(400).json({ error: 'Nada para alterar' });
+    if (e.modelo === '') return res.status(400).json({ error: 'Informe o modelo encomendado' });
+    try {
+      const atual = await pool.query('SELECT valor, sinal_pago FROM encomendas WHERE id = $1', [Number(req.params.id)]);
+      if (!atual.rows.length) return res.status(404).json({ error: 'Encomenda não encontrada' });
+      const valor = e.valor !== undefined ? e.valor : Number(atual.rows[0].valor);
+      const sinal = e.sinal_pago !== undefined ? e.sinal_pago : Number(atual.rows[0].sinal_pago);
+      if (valor > 0 && sinal > valor) return res.status(400).json({ error: 'Sinal maior que o valor' });
+      const sets = campos.map((k, i) => `${k} = $${i + 2}`);
+      const params = [Number(req.params.id), ...campos.map(k => e[k])];
+      if (e.status) {
+        params.push(e.status === 'ENTREGUE');
+        sets.push(`entregue_em = CASE WHEN $${params.length}::boolean THEN COALESCE(entregue_em, CURRENT_TIMESTAMP) ELSE NULL END`);
+      }
+      const { rows } = await pool.query(
+        `UPDATE encomendas SET ${sets.join(', ')}, updated_at = CURRENT_TIMESTAMP WHERE id = $1 RETURNING ${CAMPOS_ENCOMENDA}`,
+        params
+      );
+      if (!rows.length) return res.status(404).json({ error: 'Encomenda não encontrada' });
+      res.json(rows[0]);
+    } catch (err) {
+      console.error(err);
+      res.status(500).json({ error: 'Erro ao salvar encomenda' });
+    }
+  }
+
+  // Admin: botão "Encomendar" num item do pedido (esgotado, sob medida...). O item
+  // passa a ser encomenda no pedido (sai da maleta e do fechamento, com sinal de 50%)
+  // e entra no painel de Encomendas.
+  async function handleEncomendarItem(req, res) {
+    const pedidoId = lerIdPedido(req, res);
+    if (pedidoId === null) return;
+    const produtoId = Number(req.body && req.body.produto_id);
+    if (!Number.isInteger(produtoId) || produtoId <= 0 || produtoId >= 2 ** 31) return res.status(400).json({ error: 'Produto inválido' });
+    const especificacoes = typeof (req.body && req.body.especificacoes) === 'string' ? req.body.especificacoes.trim().slice(0, 2000) : '';
+
+    let client;
+    const falhar = async (status, payload) => {
+      await client.query('ROLLBACK');
+      res.status(status).json(payload);
+    };
+    try {
+      client = await pool.connect();
+      await client.query('BEGIN');
+      const { rows } = await client.query('SELECT * FROM pedidos WHERE id = $1 FOR UPDATE', [pedidoId]);
+      if (!rows.length) return falhar(404, { error: 'Pedido não encontrado' });
+      const pedido = rows[0];
+      if (pedido.status !== 'NOVO' && pedido.status !== 'EM_ANDAMENTO') return falhar(409, { error: 'Só pedidos abertos podem ganhar encomendas' });
+      const itens = Array.isArray(pedido.itens) ? pedido.itens : [];
+      const item = itens.find(i => Number(i.produto_id) === produtoId);
+      if (!item) return falhar(400, { error: 'Este produto não está no pedido' });
+      if (intencaoDoItem(item) !== 'ENCOMENDA') {
+        const naMaleta = await client.query(
+          `SELECT 1 FROM produtos WHERE id = $1 AND status = 'CONDICIONAL' AND pedido_condicional_id = $2`, [produtoId, pedidoId]);
+        if (naMaleta.rows.length) return falhar(409, { error: 'Esta peça está na maleta com a cliente: faça o acerto antes de encomendar' });
+        if ((await client.query('SELECT 1 FROM acertos a WHERE a.pedido_id = $1 AND $2 = ANY(a.comprados)', [pedidoId, produtoId])).rows.length) {
+          return falhar(409, { error: 'Esta peça já foi vendida no acerto' });
+        }
+        item.intencao = 'ENCOMENDA';
+        item.encomenda = true;
+        item.sinal = Math.round(Number(item.preco) * 50) / 100;
+        const t = totaisDoPedido(itens);
+        await client.query(
+          `UPDATE pedidos SET itens = $2, total_prova = $3, total_compra = $4, total_encomendas = $5, sinal = $6, total = $7,
+                  itens_removidos = array_remove(itens_removidos, $8), updated_at = CURRENT_TIMESTAMP
+           WHERE id = $1`,
+          [pedidoId, JSON.stringify(itens), t.total_prova, t.total_compra, t.total_encomendas, t.sinal, t.total, produtoId]
+        );
+      }
+      await client.query(
+        `INSERT INTO encomendas (pedido_id, cliente_id, produto_id, origem, nome_cliente, telefone, modelo, codigo_sku, valor, especificacoes)
+         VALUES ($1, $2, (SELECT id FROM produtos WHERE id = $3), 'PEDIDO', $4, $5, $6, $7, $8, $9) ON CONFLICT DO NOTHING`,
+        [pedidoId, pedido.cliente_id, produtoId, pedido.nome, pedido.telefone, item.nome || '', item.codigo_sku || '', Number(item.preco) || 0, especificacoes]
+      );
+      const enc = await client.query(`SELECT ${CAMPOS_ENCOMENDA} FROM encomendas WHERE pedido_id = $1 AND produto_id = $2`, [pedidoId, produtoId]);
+      await client.query('COMMIT');
+      res.json({ encomenda: enc.rows[0] || null, itens });
+    } catch (err) {
+      if (client) await client.query('ROLLBACK').catch(() => {});
+      console.error(err);
+      res.status(500).json({ error: 'Erro ao encomendar o item' });
     } finally {
       if (client) client.release();
     }
@@ -1783,6 +1980,10 @@ async function startServer() {
   app.post('/api/admin/pedidos/:id/enviar-maleta', requireAdmin, handleEnviarMaleta);
   app.patch('/api/admin/pedidos/:id/status', requireAdmin, handleStatusPedido);
   app.put('/api/admin/pedidos/:id/fechamento', requireAdmin, handleFechamentoPedido);
+  app.post('/api/admin/pedidos/:id/encomendar', requireAdmin, handleEncomendarItem);
+  app.get('/api/admin/encomendas', requireAdmin, handleListEncomendas);
+  app.post('/api/admin/encomendas', requireAdmin, handleCreateEncomenda);
+  app.put('/api/admin/encomendas/:id', requireAdmin, handleUpdateEncomenda);
   app.get('/api/admin/acessorios', requireAdmin, handleListAcessorios);
   app.post('/api/admin/acessorios', requireAdmin, handleCreateAcessorio);
   app.put('/api/admin/acessorios/:id', requireAdmin, handleUpdateAcessorio);
