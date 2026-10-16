@@ -47,6 +47,11 @@
         Pedidos
         <span id="badgeNovosPedidos" data-n="0" title="Pedidos novos" class="badge-contagem hidden ml-auto text-xs font-semibold px-2 py-0.5 rounded-full bg-orange-500 text-white"></span>
       </a>
+      <a href="#" data-tab="encomendas" class="tab-btn flex items-center px-4 py-3 text-gray-700 rounded-lg hover:bg-gray-100 font-medium">
+        <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17a2 2 0 11-4 0 2 2 0 014 0zM19 17a2 2 0 11-4 0 2 2 0 014 0zM13 16V6a1 1 0 00-1-1H4a1 1 0 00-1 1v10a1 1 0 001 1h1m8-1a1 1 0 01-1 1H9m4-1V8a1 1 0 011-1h2.586a1 1 0 01.707.293l3.414 3.414a1 1 0 01.293.707V16a1 1 0 01-1 1h-1m-6-1a1 1 0 001 1h1M5 17a2 2 0 104 0m-4 0a2 2 0 114 0m6 0a2 2 0 104 0m-4 0a2 2 0 114 0"/></svg>
+        Encomendas
+        <span id="badgeEncomendasProntas" data-n="0" title="Encomendas prontas para entrega" class="badge-contagem hidden ml-auto text-xs font-semibold px-2 py-0.5 rounded-full bg-blue-600 text-white"></span>
+      </a>
       <a href="#" data-tab="lote" class="tab-btn flex items-center px-4 py-3 text-gray-700 rounded-lg hover:bg-gray-100 font-medium">
         <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h18M3 14h18M10 3v18M5 3h14a2 2 0 012 2v14a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2z"/></svg>
         Cadastro em Lote
@@ -238,6 +243,19 @@
         <div id="filtrosStatusPedido" class="flex flex-wrap gap-2 mb-4"></div>
         <p class="text-sm text-gray-500 mb-4">Cada item mostra o que a cliente escolheu no carrinho: <strong>Compra direta</strong>, <strong>Maleta</strong> (para provar) ou <strong>Encomenda</strong>. Na entrega, use <strong>Fechar na entrega</strong> para tirar itens, dar desconto e somar acessórios.</p>
         <div id="listaPedidosGeral" class="space-y-4"></div>
+      </div>
+
+      <!-- Aba Encomendas: do site, do botão Encomendar nos pedidos ou lançadas à mão -->
+      <div id="tab-encomendas" class="tab-content hidden">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
+          <h3 class="text-lg font-semibold text-gray-900">Encomendas</h3>
+          <div class="flex flex-col sm:flex-row gap-2">
+            <input type="text" id="buscaEncomendas" placeholder="Buscar por cliente, telefone ou modelo..." class="w-full sm:w-72 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500">
+            <button id="btnNovaEncomenda" class="bg-orange-500 hover:bg-orange-600 text-white px-4 py-2 rounded-lg font-medium transition-colors">Nova encomenda</button>
+          </div>
+        </div>
+        <div id="filtrosStatusEncomenda" class="flex flex-wrap gap-2 mb-4"></div>
+        <div id="listaEncomendas" class="grid lg:grid-cols-2 gap-4"></div>
       </div>
 
       <!-- Aba Acessórios: estoque próprio de itens de apoio -->
@@ -682,6 +700,59 @@
     </div>
   </div>
 
+  <!-- Modal Encomenda (nova ou editar) -->
+  <div id="modalEncomenda" class="fixed inset-0 modal-overlay bg-black/50 hidden z-50 flex items-center justify-center p-4">
+    <form id="formEncomenda" class="bg-white rounded-2xl max-w-xl w-full max-h-[92vh] overflow-hidden flex flex-col">
+      <div class="flex items-center justify-between p-4 sm:p-6 border-b border-gray-200">
+        <h3 id="encomendaTitulo" class="text-xl font-bold text-gray-900">Nova encomenda</h3>
+        <button type="button" data-fechar-modal="modalEncomenda" class="p-2 text-gray-500 hover:text-gray-700 rounded-lg hover:bg-gray-100" aria-label="Fechar"><svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg></button>
+      </div>
+      <div class="p-4 sm:p-6 overflow-y-auto flex-1 grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <input type="hidden" id="encomendaId">
+        <div>
+          <label for="encomendaCliente" class="block text-sm font-medium text-gray-700 mb-1">Cliente</label>
+          <input type="text" id="encomendaCliente" maxlength="100" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500">
+        </div>
+        <div>
+          <label for="encomendaTelefone" class="block text-sm font-medium text-gray-700 mb-1">WhatsApp</label>
+          <input type="tel" id="encomendaTelefone" maxlength="30" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500">
+        </div>
+        <div>
+          <label for="encomendaModelo" class="block text-sm font-medium text-gray-700 mb-1">Modelo *</label>
+          <input type="text" id="encomendaModelo" maxlength="255" required class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500">
+        </div>
+        <div>
+          <label for="encomendaSku" class="block text-sm font-medium text-gray-700 mb-1">SKU</label>
+          <input type="text" id="encomendaSku" maxlength="100" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500">
+        </div>
+        <div class="sm:col-span-2">
+          <label for="encomendaEspecificacoes" class="block text-sm font-medium text-gray-700 mb-1">Detalhes (grau, cor, tamanho...)</label>
+          <textarea id="encomendaEspecificacoes" rows="2" maxlength="2000" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500" placeholder="Ex.: lente com grau OD -1,25 / OE -1,00, cor preta"></textarea>
+        </div>
+        <div>
+          <label for="encomendaValor" class="block text-sm font-medium text-gray-700 mb-1">Valor (R$)</label>
+          <input type="text" inputmode="decimal" id="encomendaValor" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500">
+        </div>
+        <div>
+          <label for="encomendaSinal" class="block text-sm font-medium text-gray-700 mb-1">Sinal pago (R$)</label>
+          <input type="text" inputmode="decimal" id="encomendaSinal" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500">
+        </div>
+        <div class="sm:col-span-2">
+          <label for="encomendaStatus" class="block text-sm font-medium text-gray-700 mb-1">Status</label>
+          <select id="encomendaStatus" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500"></select>
+        </div>
+        <div class="sm:col-span-2">
+          <label for="encomendaObs" class="block text-sm font-medium text-gray-700 mb-1">Observações</label>
+          <textarea id="encomendaObs" rows="2" maxlength="2000" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500" placeholder="Ex.: fornecedor X, previsão dia 20"></textarea>
+        </div>
+      </div>
+      <div class="p-4 border-t border-gray-200 flex justify-end gap-2">
+        <button type="button" data-fechar-modal="modalEncomenda" class="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 font-medium">Cancelar</button>
+        <button type="submit" id="btnSalvarEncomenda" class="bg-orange-500 hover:bg-orange-600 text-white px-4 py-2 rounded-lg font-medium">Salvar</button>
+      </div>
+    </form>
+  </div>
+
   <!-- Modal Fechamento do pedido na entrega -->
   <div id="modalFechamento" class="fixed inset-0 modal-overlay bg-black/50 hidden z-50 flex items-center justify-center p-4">
     <div class="bg-white rounded-2xl max-w-2xl w-full max-h-[92vh] overflow-hidden flex flex-col">
@@ -835,6 +906,7 @@
         if (target === 'lote') iniciarLote();
         if (target === 'clientes') carregarClientes();
         if (target === 'pedidos') carregarPedidosGeral();
+        if (target === 'encomendas') carregarEncomendas();
         if (target === 'acessorios') carregarAcessorios();
         if (target === 'metricas') { carregarMetricas(); carregarResumoFornecedores(); }
         if (target === 'config') carregarWhatsApp();
@@ -1650,7 +1722,7 @@
       document.body.style.overflow = '';
     }
     document.querySelectorAll('[data-fechar-modal]').forEach(btn => btn.addEventListener('click', () => fecharModalSimples(btn.dataset.fecharModal)));
-    ['modalReposicao', 'modalFotosSku', 'modalResumoMaleta', 'modalFechamento'].forEach(id => {
+    ['modalReposicao', 'modalFotosSku', 'modalResumoMaleta', 'modalFechamento', 'modalEncomenda'].forEach(id => {
       const el = document.getElementById(id);
       el.addEventListener('click', (e) => { if (e.target === el) fecharModalSimples(id); });
     });
@@ -2277,6 +2349,11 @@
     }
 
     // Card de um pedido, usado na aba Pedidos e nos pedidos de cada cliente
+    function rotuloStatusEncomenda(status) {
+      const rotulos = { AGUARDANDO_FABRICANTE: 'Aguardando fabricante', EM_TRANSITO: 'Em trânsito', PRONTO_ENTREGA: 'Pronta para entrega', ENTREGUE: 'Entregue', CANCELADA: 'Cancelada' };
+      return rotulos[status] || String(status || '');
+    }
+
     function htmlPedido(p) {
       const itens = Array.isArray(p.itens) ? p.itens : [];
       const id = Number(p.id);
@@ -2289,13 +2366,21 @@
       const prova = itens.filter(i => intencaoItemPedido(i) === 'CONDICIONAL').length;
       const encomendas = itens.filter(i => intencaoItemPedido(i) === 'ENCOMENDA');
       const temFechamento = p.total_final !== null && p.total_final !== undefined;
+      const encomendasPedido = Array.isArray(p.encomendas) ? p.encomendas : [];
       const nota = (i) => {
         const pid = Number(i.produto_id);
         const intencao = intencaoItemPedido(i);
+        if (intencao === 'ENCOMENDA') {
+          const enc = encomendasPedido.find(e => Number(e.produto_id) === pid);
+          return enc ? `<span class="block text-xs text-blue-700">Encomenda #${Number(enc.id)}: ${escapeHtml(rotuloStatusEncomenda(enc.status))}</span>` : '';
+        }
         if (intencao === 'CONDICIONAL' && vendidos.includes(pid)) return '<span class="block text-xs text-green-700">vendida no acerto</span>';
-        if (intencao === 'CONDICIONAL' && devolvidos.includes(pid)) return '<span class="block text-xs text-gray-500">devolvida</span>';
-        if (intencao === 'COMPRA' && removidos.includes(pid)) return '<span class="block text-xs text-red-600">tirada do pedido</span>';
-        return '';
+        const tirada = intencao === 'COMPRA' && removidos.includes(pid) ? '<span class="block text-xs text-red-600">tirada do pedido</span>' : '';
+        // Esgotada, sob medida ou a cliente quer outra cor: vira encomenda
+        const encomendar = aberto
+          ? `<button type="button" data-encomendar-item="${id}" data-produto="${pid}" class="block text-xs font-medium text-blue-700 hover:underline">Encomendar</button>` : '';
+        if (intencao === 'CONDICIONAL' && devolvidos.includes(pid)) return '<span class="block text-xs text-gray-500">devolvida</span>' + encomendar;
+        return tirada + encomendar;
       };
       const opcoesStatus = STATUS_PEDIDO.filter(s => s[0] !== 'ENTREGUE')
         .map(s => `<option value="${s[0]}" ${s[0] === status ? 'selected' : ''}>${s[1]}</option>`).join('');
@@ -2457,12 +2542,35 @@
       await recarregarPedidos();
     }
 
+    // "Encomendar" um item do pedido: vira encomenda no pedido e entra no menu Encomendas
+    async function encomendarItemPedido(pedidoId, produtoId) {
+      const especificacoes = prompt('Encomendar esta peça. Detalhes para o fornecedor (grau, cor, tamanho...), se houver:', '');
+      if (especificacoes === null) return;
+      try {
+        const res = await fetchAdmin(`/api/admin/pedidos/${pedidoId}/encomendar`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ produto_id: produtoId, especificacoes })
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.error || 'Erro ao encomendar');
+        mostrarToast(`Encomenda #${Number(data.encomenda && data.encomenda.id)} criada a partir do pedido #${pedidoId}`, 'success',
+          { texto: 'Ver encomendas', onClick: () => document.querySelector('.tab-btn[data-tab="encomendas"]').click() });
+      } catch (err) {
+        console.error(err);
+        mostrarToast(err.message, 'error');
+      }
+      await recarregarPedidos();
+    }
+
     // Cliques nos cards de pedido (aba Pedidos e pedidos do cliente)
     async function aoClicarPedido(e) {
       const acerto = e.target.closest('[data-acerto-pedido]');
       if (acerto) return abrirAcertoDoPedido(acerto.dataset.acertoPedido);
       const fechar = e.target.closest('[data-fechar-pedido]');
       if (fechar) return abrirFechamento(Number(fechar.dataset.fecharPedido));
+      const encomendar = e.target.closest('[data-encomendar-item]');
+      if (encomendar) return encomendarItemPedido(Number(encomendar.dataset.encomendarItem), Number(encomendar.dataset.produto));
       const reabrir = e.target.closest('[data-reabrir-pedido]');
       if (reabrir) return mudarStatusPedido(Number(reabrir.dataset.reabrirPedido), 'NOVO');
       // Enviar maleta: as peças "para provar" do pedido vão para condicional, ligadas a ele
@@ -2705,6 +2813,192 @@
     document.getElementById('btnSalvarFechamento').addEventListener('click', () => salvarFechamento(false));
     document.getElementById('btnConcluirEntrega').addEventListener('click', () => salvarFechamento(true));
 
+    // ---------- Encomendas ----------
+    const STATUS_ENCOMENDA = [
+      ['AGUARDANDO_FABRICANTE', 'Aguardando fabricante', 'bg-yellow-100 text-yellow-800'],
+      ['EM_TRANSITO', 'Em trânsito', 'bg-purple-100 text-purple-700'],
+      ['PRONTO_ENTREGA', 'Pronta para entrega', 'bg-blue-100 text-blue-700'],
+      ['ENTREGUE', 'Entregue', 'bg-green-100 text-green-700'],
+      ['CANCELADA', 'Cancelada', 'bg-gray-200 text-gray-600'],
+    ];
+    const ENCOMENDA_ABERTA = ['AGUARDANDO_FABRICANTE', 'EM_TRANSITO', 'PRONTO_ENTREGA'];
+
+    // Botão do próximo passo no card: [status, texto] ou null
+    function proximoStatusEncomenda(status) {
+      if (status === 'AGUARDANDO_FABRICANTE') return ['EM_TRANSITO', 'Marcar em trânsito'];
+      if (status === 'EM_TRANSITO') return ['PRONTO_ENTREGA', 'Chegou: pronta para entrega'];
+      if (status === 'PRONTO_ENTREGA') return ['ENTREGUE', 'Marcar entregue'];
+      return null;
+    }
+
+    function origemEncomenda(e) {
+      if (e.origem === 'SITE') return e.pedido_id ? `Site · pedido #${Number(e.pedido_id)}` : 'Site';
+      if (e.origem === 'PEDIDO') return e.pedido_id ? `Pedido #${Number(e.pedido_id)}` : 'Pedido';
+      return 'Lançada no painel';
+    }
+
+    function htmlEncomenda(e) {
+      const id = Number(e.id);
+      const s = STATUS_ENCOMENDA.find(x => x[0] === e.status) || [e.status, String(e.status || ''), 'bg-gray-100 text-gray-700'];
+      const valor = Number(e.valor) || 0;
+      const sinal = Number(e.sinal_pago) || 0;
+      const proximo = proximoStatusEncomenda(e.status);
+      return `
+        <div class="bg-white rounded-xl border ${e.status === 'PRONTO_ENTREGA' ? 'border-blue-300' : 'border-gray-200'} p-4 sm:p-5">
+          <div class="flex justify-between gap-3 mb-2">
+            <div class="min-w-0">
+              <p class="font-semibold text-gray-900">${escapeHtml(e.modelo)} ${e.codigo_sku ? `<span class="font-normal text-gray-400">${escapeHtml(e.codigo_sku)}</span>` : ''}</p>
+              <p class="text-xs text-gray-500">Encomenda #${id} · ${escapeHtml(origemEncomenda(e))} · ${escapeHtml(formatarData(e.created_at))}</p>
+            </div>
+            <span class="self-start whitespace-nowrap px-2 py-0.5 text-xs font-semibold rounded-full ${s[2]}">${escapeHtml(s[1])}</span>
+          </div>
+          <p class="text-sm text-gray-700">${escapeHtml(e.nome_cliente || 'Sem nome')}${e.telefone ? ' • ' + escapeHtml(e.telefone) : ''}</p>
+          ${e.especificacoes ? `<p class="text-sm text-gray-600 mt-1 whitespace-pre-line">${escapeHtml(e.especificacoes)}</p>` : ''}
+          ${e.observacoes ? `<p class="text-xs text-gray-500 mt-1 whitespace-pre-line">Obs.: ${escapeHtml(e.observacoes)}</p>` : ''}
+          <div class="mt-3 grid grid-cols-3 gap-2 text-sm">
+            <div><p class="text-xs text-gray-500">Valor</p><p class="font-medium text-gray-900">${formatarMoeda(valor)}</p></div>
+            <div><p class="text-xs text-gray-500">Sinal pago</p><p class="font-medium text-gray-900">${formatarMoeda(sinal)}</p></div>
+            <div><p class="text-xs text-gray-500">Falta pagar</p><p class="font-medium ${valor - sinal > 0 ? 'text-orange-700' : 'text-gray-900'}">${formatarMoeda(Math.max(Math.round((valor - sinal) * 100) / 100, 0))}</p></div>
+          </div>
+          <div class="mt-3 flex flex-wrap gap-2">
+            ${proximo ? `<button type="button" data-status-encomenda="${id}" data-novo-status="${proximo[0]}" class="px-3 py-1.5 bg-orange-500 hover:bg-orange-600 text-white rounded-lg text-sm font-medium">${proximo[1]}</button>` : ''}
+            ${e.status === 'PRONTO_ENTREGA' && e.telefone ? `<button type="button" data-avisar-encomenda="${id}" class="px-3 py-1.5 bg-green-500 hover:bg-green-600 text-white rounded-lg text-sm font-medium">Avisar no WhatsApp</button>` : ''}
+            <button type="button" data-editar-encomenda="${id}" class="px-3 py-1.5 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 text-sm font-medium">Editar</button>
+          </div>
+        </div>`;
+    }
+
+    function filtrarEncomendas(lista, filtro, busca) {
+      const termo = String(busca || '').trim().toLowerCase().replace(/^#/, '');
+      const digitos = termo.replace(/\D/g, '');
+      return lista.filter(e => {
+        const passa = filtro === 'TODAS' || (filtro === 'ABERTAS' ? ENCOMENDA_ABERTA.includes(e.status) : e.status === filtro);
+        if (!passa) return false;
+        if (!termo) return true;
+        return String(e.id) === termo || ['nome_cliente', 'modelo', 'codigo_sku'].some(k => String(e[k] || '').toLowerCase().includes(termo)) ||
+          (digitos.length >= 3 && String(e.telefone || '').replace(/\D/g, '').includes(digitos));
+      });
+    }
+
+    // Mensagem para a cliente quando a encomenda chegou
+    function textoAvisoEncomenda(e) {
+      const falta = Math.max(Math.round(((Number(e.valor) || 0) - (Number(e.sinal_pago) || 0)) * 100) / 100, 0);
+      let msg = `Olá${e.nome_cliente ? ', ' + String(e.nome_cliente).split(' ')[0] : ''}! Sua encomenda chegou na Nix Glasses:\n`;
+      msg += `*${e.modelo}*${e.especificacoes ? `\n${e.especificacoes}` : ''}\n`;
+      if (falta > 0) msg += `\nValor restante: ${formatarMoeda(falta)}\n`;
+      msg += '\nVamos combinar a entrega?';
+      return msg;
+    }
+
+    let todasEncomendas = [];
+    let filtroEncomenda = 'ABERTAS';
+
+    function mostrarEncomendas() {
+      const opcoes = [['ABERTAS', 'Em aberto'], ...STATUS_ENCOMENDA.map(s => [s[0], s[1]]), ['TODAS', 'Todas']];
+      document.getElementById('filtrosStatusEncomenda').innerHTML = opcoes.map(([valor, rotulo]) => `
+        <button type="button" data-filtro-encomenda="${valor}" aria-pressed="${valor === filtroEncomenda}" class="px-3 py-1.5 rounded-full text-sm font-medium border ${valor === filtroEncomenda ? 'bg-orange-500 text-white border-orange-500' : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'}">${rotulo} <span class="opacity-75">${filtrarEncomendas(todasEncomendas, valor, '').length}</span></button>`).join('');
+      document.getElementById('listaEncomendas').innerHTML =
+        filtrarEncomendas(todasEncomendas, filtroEncomenda, document.getElementById('buscaEncomendas').value).map(htmlEncomenda).join('') ||
+        '<p class="text-gray-500">Nenhuma encomenda aqui.</p>';
+      const prontas = todasEncomendas.filter(e => e.status === 'PRONTO_ENTREGA').length;
+      const badge = document.getElementById('badgeEncomendasProntas');
+      badge.dataset.n = String(prontas);
+      badge.classList[prontas ? 'remove' : 'add']('hidden');
+    }
+
+    async function carregarEncomendas() {
+      try {
+        const res = await fetchAdmin('/api/admin/encomendas');
+        if (!res.ok) throw new Error('Erro ao carregar encomendas');
+        todasEncomendas = await res.json();
+        mostrarEncomendas();
+      } catch (err) {
+        console.error(err);
+        mostrarToast('Erro ao carregar encomendas', 'error');
+      }
+    }
+
+    async function salvarDadosEncomenda(id, dados) {
+      const res = await fetchAdmin(id ? `/api/admin/encomendas/${Number(id)}` : '/api/admin/encomendas', {
+        method: id ? 'PUT' : 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(dados)
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || 'Erro ao salvar encomenda');
+      return data;
+    }
+
+    function abrirModalEncomenda(e = null) {
+      document.getElementById('encomendaTitulo').textContent = e ? `Encomenda #${Number(e.id)}` : 'Nova encomenda';
+      document.getElementById('encomendaStatus').innerHTML = STATUS_ENCOMENDA.map(s => `<option value="${s[0]}">${s[1]}</option>`).join('');
+      const v = (n) => (n === null || n === undefined || Number(n) === 0 ? '' : String(Number(n)).replace('.', ','));
+      document.getElementById('encomendaId').value = e ? String(e.id) : '';
+      document.getElementById('encomendaCliente').value = e ? e.nome_cliente : '';
+      document.getElementById('encomendaTelefone').value = e ? e.telefone : '';
+      document.getElementById('encomendaModelo').value = e ? e.modelo : '';
+      document.getElementById('encomendaSku').value = e ? e.codigo_sku : '';
+      document.getElementById('encomendaEspecificacoes').value = e ? e.especificacoes : '';
+      document.getElementById('encomendaValor').value = e ? v(e.valor) : '';
+      document.getElementById('encomendaSinal').value = e ? v(e.sinal_pago) : '';
+      document.getElementById('encomendaStatus').value = e ? e.status : 'AGUARDANDO_FABRICANTE';
+      document.getElementById('encomendaObs').value = e ? e.observacoes : '';
+      abrirModalSimples('modalEncomenda');
+    }
+
+    document.getElementById('btnNovaEncomenda').addEventListener('click', () => abrirModalEncomenda());
+    document.getElementById('formEncomenda').addEventListener('submit', async (ev) => {
+      ev.preventDefault();
+      const id = document.getElementById('encomendaId').value;
+      try {
+        await salvarDadosEncomenda(id, {
+          nome_cliente: document.getElementById('encomendaCliente').value,
+          telefone: document.getElementById('encomendaTelefone').value,
+          modelo: document.getElementById('encomendaModelo').value,
+          codigo_sku: document.getElementById('encomendaSku').value,
+          especificacoes: document.getElementById('encomendaEspecificacoes').value,
+          valor: document.getElementById('encomendaValor').value,
+          sinal_pago: document.getElementById('encomendaSinal').value,
+          status: document.getElementById('encomendaStatus').value,
+          observacoes: document.getElementById('encomendaObs').value,
+        });
+        fecharModalSimples('modalEncomenda');
+        mostrarToast(id ? 'Encomenda salva' : 'Encomenda criada');
+        await carregarEncomendas();
+      } catch (err) {
+        mostrarToast(err.message, 'error');
+      }
+    });
+    document.getElementById('filtrosStatusEncomenda').addEventListener('click', (ev) => {
+      const btn = ev.target.closest('[data-filtro-encomenda]');
+      if (!btn) return;
+      filtroEncomenda = btn.dataset.filtroEncomenda;
+      mostrarEncomendas();
+    });
+    document.getElementById('buscaEncomendas').addEventListener('input', mostrarEncomendas);
+    document.getElementById('listaEncomendas').addEventListener('click', async (ev) => {
+      const editar = ev.target.closest('[data-editar-encomenda]');
+      const acharEnc = (id) => todasEncomendas.find(x => Number(x.id) === Number(id));
+      if (editar) return abrirModalEncomenda(acharEnc(editar.dataset.editarEncomenda));
+      const avisar = ev.target.closest('[data-avisar-encomenda]');
+      if (avisar) {
+        const e = acharEnc(avisar.dataset.avisarEncomenda);
+        if (e) abrirResumoMaleta(`Aviso da encomenda #${Number(e.id)}`, textoAvisoEncomenda(e), e.telefone);
+        return;
+      }
+      const passo = ev.target.closest('[data-status-encomenda]');
+      if (!passo || passo.disabled) return;
+      passo.disabled = true;
+      try {
+        const e = await salvarDadosEncomenda(passo.dataset.statusEncomenda, { status: passo.dataset.novoStatus });
+        mostrarToast(`Encomenda #${Number(e.id)}: ${(STATUS_ENCOMENDA.find(s => s[0] === e.status) || [, e.status])[1]}`,
+          'success', e.status === 'PRONTO_ENTREGA' && e.telefone ? { texto: 'Avisar cliente', onClick: () => abrirResumoMaleta(`Aviso da encomenda #${Number(e.id)}`, textoAvisoEncomenda(e), e.telefone) } : null);
+      } catch (err) {
+        mostrarToast(err.message, 'error');
+      }
+      await carregarEncomendas();
+    });
+
     // ---------- Acessórios ----------
     async function carregarAcessorios() {
       try {
@@ -2817,6 +3111,7 @@
       }
       carregarProdutos();
       carregarPedidosGeral();
+      carregarEncomendas();
     });
   </script>
 </body>
