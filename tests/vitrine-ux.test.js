@@ -182,13 +182,13 @@ describe('vitrine: botão da maleta muda na hora', () => {
   it('estados do botão: adicionar, encomendar e já na maleta', () => {
     const { ctx } = vitrine([]);
     const pronta = { ...hexagonal, disponibilidade: 'PRONTA_ENTREGA' };
-    assert.match(ctx.botaoMaletaCard(pronta, false), /aria-pressed="false"[^>]*bg-orange-500[\s\S]*Adicionar à Maleta/);
-    assert.match(ctx.botaoMaletaCard(hexagonal, false), /bg-blue-600[\s\S]*Encomendar \(na Maleta\)/);
+    assert.match(ctx.botaoMaletaCard(pronta, false), /aria-pressed="false"[^>]*btn-primario[\s\S]*Adicionar à Maleta/);
+    assert.match(ctx.botaoMaletaCard(hexagonal, false), /btn-encomenda[\s\S]*Encomendar \(na Maleta\)/);
     const naMaleta = ctx.botaoMaletaCard(hexagonal, true);
-    assert.match(naMaleta, /aria-pressed="true"[^>]*bg-green-50/);
+    assert.match(naMaleta, /aria-pressed="true"[^>]*btn-na-maleta/);
     assert.match(naMaleta, /✓ Na Maleta</);
     assert.match(naMaleta, /onclick="toggleMaleta\(5\)"/);
-    assert.match(naMaleta, /class="btn-maleta /);
+    assert.match(naMaleta, /class="btn btn-sm btn-maleta /);
   });
 
   it('clicar troca só o botão e o selo do card, sem redesenhar o catálogo', () => {
