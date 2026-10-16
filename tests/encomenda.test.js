@@ -100,7 +100,7 @@ function extrairFuncao(html, nome) {
 }
 
 const FUNCOES = ['escapeHtml', 'fotosDoProduto', 'indiceCircular', 'ehSobEncomenda', 'calcularSinal', 'passaFiltroStatus', 'etiquetaProduto',
-  'nomeCard', 'tagsCard', 'botaoMaletaCard', 'atualizarCardMaleta', 'itemEhEncomenda', 'resumoMaleta', 'renderizarCatalogo', 'toggleMaleta', 'salvarMaleta', 'atualizarMaletaUI', 'montarTextoWhatsapp'];
+  'nomeCard', 'tagsCard', 'botaoMaletaCard', 'atualizarCardMaleta', 'itemEhEncomenda', 'resumoMaleta', 'renderizarCatalogo', 'toggleMaleta', 'salvarMaleta', 'textoGuiaCatalogo', 'atualizarGuias', 'atualizarMaletaUI', 'montarTextoWhatsapp'];
 
 function elemento() {
   return {
