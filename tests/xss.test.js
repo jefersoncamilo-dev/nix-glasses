@@ -196,7 +196,7 @@ describe('painel (admin/index.html) escapa clientes e pedidos', () => {
 
   it('na tabela de clientes', () => {
     const tbody = elemento();
-    const ctx = carregar('admin/index.html', ['escapeHtml', 'renderizarClientes'], {
+    const ctx = carregar('admin/index.html', ['escapeHtml', 'badgesPendencias', 'renderizarClientes'], {
       ...globais,
       document: { getElementById: () => tbody },
     });
