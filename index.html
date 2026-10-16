@@ -45,6 +45,12 @@
     .provador-espelho { position: absolute; inset: 0; transform: scaleX(-1); }
     .provador-espelho video, .provador-espelho canvas { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
     #modalProvador input[type=range] { accent-color: #f97316; }
+    /* Botão da maleta: sem o atraso de toque do celular, "afunda" ao tocar e pulsa ao mudar de estado */
+    .btn-maleta { touch-action: manipulation; -webkit-tap-highlight-color: transparent; transition: background-color 0.15s ease, color 0.15s ease, transform 0.1s ease; }
+    .btn-maleta:active { transform: scale(0.96); }
+    .btn-maleta.pulso { animation: pulsoMaleta 0.35s ease; }
+    @keyframes pulsoMaleta { 0% { transform: scale(0.94); } 60% { transform: scale(1.04); } 100% { transform: scale(1); } }
+    @media (prefers-reduced-motion: reduce) { .btn-maleta.pulso { animation: none; } }
   </style>
 </head>
 <body class="min-h-screen" style="background:var(--nix-bg);color:var(--nix-text)">
@@ -348,6 +354,54 @@
     const fotoCard = {};
     let detalhes = null;
 
+    // ---------- Botão Voltar do celular fecha o modal aberto ----------
+    // Abrir um modal empilha uma entrada no histórico (pushState); o Voltar dispara
+    // popstate e fecha o modal do topo em vez de sair do catálogo. Fechar pelo X, pelo
+    // fundo ou pelo Esc consome essa entrada com history.back(), e o popstate que vem
+    // dele é ignorado.
+    const historicoModais = { pilha: [], ignorar: 0, adiados: [] };
+    const FECHAR_MODAL = {
+      detalhes: () => fecharDetalhes(),
+      provador: () => fecharProvador(),
+      maleta: () => fecharModalMaleta(),
+      cliente: () => fecharCliente(),
+    };
+
+    function entrarModalHistorico(nome) {
+      const h = historicoModais;
+      if (h.pilha.includes(nome) || h.adiados.includes(nome)) return;
+      // Um history.back() ainda não terminou: empilhar agora seria desfeito por ele
+      if (h.ignorar > 0) return void h.adiados.push(nome);
+      h.pilha.push(nome);
+      history.pushState({ nixModal: nome }, '');
+    }
+
+    function sairModalHistorico(nome) {
+      const h = historicoModais;
+      const adiado = h.adiados.indexOf(nome);
+      if (adiado >= 0) return void h.adiados.splice(adiado, 1);
+      const i = h.pilha.lastIndexOf(nome);
+      if (i < 0) return; // já saiu pelo Voltar
+      h.pilha.splice(i, 1);
+      h.ignorar++;
+      history.back();
+    }
+
+    function aoVoltarHistorico() {
+      const h = historicoModais;
+      if (h.ignorar > 0) {
+        h.ignorar--;
+        if (h.ignorar === 0) h.adiados.splice(0).forEach(entrarModalHistorico);
+        return;
+      }
+      const nome = h.pilha.pop();
+      if (nome) FECHAR_MODAL[nome]();
+    }
+
+    window.addEventListener('popstate', aoVoltarHistorico);
+    // Recarregou a página com um modal aberto: a entrada antiga não tem mais modal
+    if (history.state && history.state.nixModal) history.replaceState(null, '');
+
     // Fallback de imagem (caso o upload falhe / imagem ausente)
     function imgFallback(el) {
       el.onerror = null;
@@ -438,6 +492,27 @@
       return { texto: p.status, classe: 'bg-gray-100 text-gray-700' };
     }
 
+    // Nome do card: o "Nome curto" cadastrado no painel ou, sem ele, o nome completo
+    // (que o card limita a 2 linhas). Detalhes, maleta e WhatsApp usam o nome completo.
+    function nomeCard(p) {
+      return String(p.nome_curto || '').trim() || String(p.nome ?? '');
+    }
+
+    // Etiquetas discretas do card: material, formato e cor, só o que foi preenchido
+    function tagsCard(p) {
+      return [p.material, p.formato, p.cor_armacao].map(v => String(v ?? '').trim()).filter(Boolean);
+    }
+
+    // Botão do card. O mesmo HTML é usado para trocar só o botão logo após o clique.
+    function botaoMaletaCard(produto, jaNaMaleta) {
+      const encomenda = ehSobEncomenda(produto);
+      const cor = jaNaMaleta ? 'bg-green-50 text-green-700 border-green-300 hover:bg-green-100'
+        : encomenda ? 'bg-blue-600 hover:bg-blue-700 text-white border-transparent' : 'bg-orange-500 hover:bg-orange-600 text-white border-transparent';
+      const curto = jaNaMaleta ? '✓ Na Maleta' : encomenda ? '+ Encomenda' : '+ Maleta';
+      const longo = jaNaMaleta ? '✓ Na Maleta · Remover' : encomenda ? 'Encomendar (na Maleta)' : 'Adicionar à Maleta';
+      return `<button type="button" data-btn-maleta onclick="toggleMaleta(${Number(produto.id)})" aria-pressed="${jaNaMaleta}" class="btn-maleta w-full ${cor} border py-1.5 sm:py-2 rounded-lg text-xs sm:text-sm font-medium"><span class="sm:hidden">${curto}</span><span class="hidden sm:inline">${longo}</span></button>`;
+    }
+
     // Itens da maleta marcados como encomenda (guardados assim ao adicionar)
     function itemEhEncomenda(item) {
       return item.encomenda === true;
@@ -483,7 +558,8 @@
         const indice = fotos.length ? indiceCircular(fotoCard[id] || 0, fotos.length) : 0;
         const card = document.createElement('div');
         card.dataset.card = id;
-        card.className = 'glass-card bg-white rounded-xl sm:rounded-2xl overflow-hidden border border-gray-100';
+        const tags = tagsCard(produto);
+        card.className = 'glass-card bg-white rounded-xl sm:rounded-2xl overflow-hidden border border-gray-100 flex flex-col';
         card.innerHTML = `
           <div class="aspect-square bg-gray-100 relative overflow-hidden">
             <button type="button" onclick="abrirDetalhes(${id})" class="block w-full h-full" aria-label="Ver fotos e detalhes de ${escapeHtml(produto.nome)}">
@@ -498,23 +574,17 @@
             <div class="absolute top-1.5 right-1.5 sm:top-3 sm:right-3">
               <span class="px-1.5 sm:px-2 py-0.5 sm:py-1 text-[9px] sm:text-xs font-medium rounded-full ${etiqueta.classe}">${escapeHtml(etiqueta.texto)}</span>
             </div>
-            ${jaNaMaleta ? '<div class="absolute top-1.5 left-1.5 sm:top-3 sm:left-3 bg-orange-500 text-white px-1.5 sm:px-2 py-0.5 sm:py-1 text-[9px] sm:text-xs font-medium rounded-full">Na Maleta</div>' : ''}
+            <div data-selo-maleta class="${jaNaMaleta ? '' : 'hidden '}absolute top-1.5 left-1.5 sm:top-3 sm:left-3 bg-orange-500 text-white px-1.5 sm:px-2 py-0.5 sm:py-1 text-[9px] sm:text-xs font-medium rounded-full">Na Maleta</div>
           </div>
-          <div class="p-2 sm:p-4">
-            <h3 class="font-semibold text-gray-900 text-xs sm:text-base leading-tight mb-0.5 sm:mb-1 truncate">${escapeHtml(produto.nome)}</h3>
-            <p class="text-[10px] sm:text-sm text-gray-500 mb-1 sm:mb-2 truncate">${escapeHtml(produto.codigo_sku)}</p>
-            <div class="flex items-center justify-between mb-2 sm:mb-3">
+          <div class="p-2 sm:p-4 flex-1 flex flex-col">
+            <h3 class="font-semibold text-gray-900 text-xs sm:text-base leading-snug mb-0.5 line-clamp-2 break-words" title="${escapeHtml(produto.nome)}">${escapeHtml(nomeCard(produto))}</h3>
+            <p class="text-[10px] sm:text-xs text-gray-400 mb-1 sm:mb-2 truncate">${escapeHtml(produto.codigo_sku)}</p>
+            ${tags.length ? `<div class="flex flex-wrap gap-1 mb-1.5 sm:mb-2">${tags.map(t => `<span class="max-w-full truncate px-1.5 sm:px-2 py-0.5 text-[9px] sm:text-[11px] leading-tight text-gray-600 bg-gray-100 rounded-full">${escapeHtml(t)}</span>`).join('')}</div>` : ''}
+            <div class="mt-auto flex flex-wrap items-center gap-x-2 gap-y-1 mb-2 sm:mb-3">
               <span class="text-sm sm:text-xl font-bold text-gray-900">${formatarMoeda(produto.preco_venda)}</span>
-              ${produto.formato ? `<span class="hidden sm:inline text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded">${escapeHtml(produto.formato)}</span>` : ''}
+              ${encomenda ? `<span data-selo-sinal class="px-1.5 sm:px-2 py-0.5 text-[9px] sm:text-[11px] font-medium leading-tight text-blue-700 bg-blue-50 border border-blue-100 rounded-full whitespace-nowrap" title="50% de sinal agora e 50% na entrega">Sinal: ${formatarMoeda(calcularSinal(produto.preco_venda))}</span>` : ''}
             </div>
-            <div class="hidden sm:flex items-center space-x-2 text-sm text-gray-500 mb-3">
-              ${produto.estilo ? `<span>${escapeHtml(produto.estilo)}</span>` : ''}
-              ${produto.cor_armacao ? `<span>•</span><span>${escapeHtml(produto.cor_armacao)}</span>` : ''}
-            </div>
-            ${encomenda ? `<p class="text-[10px] sm:text-xs text-blue-700 bg-blue-50 rounded px-1.5 sm:px-2 py-1 mb-2 sm:mb-3 leading-tight">50% sinal + 50% na entrega<span class="hidden sm:inline"> (sinal de ${formatarMoeda(calcularSinal(produto.preco_venda))})</span></p>` : ''}
-            <button onclick="toggleMaleta(${Number(produto.id)})" class="w-full ${jaNaMaleta ? 'bg-gray-100 text-gray-600' : encomenda ? 'bg-blue-600 hover:bg-blue-700 text-white' : 'bg-orange-500 hover:bg-orange-600 text-white'} py-1.5 sm:py-2 rounded-lg text-xs sm:text-sm font-medium transition-colors">
-              <span class="sm:hidden">${jaNaMaleta ? 'Remover' : encomenda ? '+ Encomenda' : '+ Maleta'}</span><span class="hidden sm:inline">${jaNaMaleta ? 'Remover da Maleta' : encomenda ? 'Encomendar (na Maleta)' : 'Adicionar à Maleta'}</span>
-            </button>
+            <div data-acao-maleta>${botaoMaletaCard(produto, jaNaMaleta)}</div>
           </div>
         `;
         catalogoGrid.appendChild(card);
@@ -539,6 +609,23 @@
       });
     }
 
+    // Depois do clique na maleta troca só o botão e o selo "Na Maleta" do card: a
+    // resposta é imediata e as fotos não são recarregadas. Sem o card na tela, redesenha tudo.
+    function atualizarCardMaleta(produtoId) {
+      const produto = produtos.find(p => p.id === produtoId);
+      const card = produto && catalogoGrid.querySelector ? catalogoGrid.querySelector(`[data-card="${Number(produtoId)}"]`) : null;
+      const acao = card && card.querySelector('[data-acao-maleta]');
+      if (!acao) return renderizarCatalogo();
+      const jaNaMaleta = maleta.itens.some(i => i.id === produtoId);
+      const tinhaFoco = acao.contains(document.activeElement);
+      acao.innerHTML = botaoMaletaCard(produto, jaNaMaleta);
+      const botao = acao.querySelector('[data-btn-maleta]');
+      botao.classList.add('pulso');
+      if (tinhaFoco) botao.focus();
+      const selo = card.querySelector('[data-selo-maleta]');
+      if (selo) selo.classList.toggle('hidden', !jaNaMaleta);
+    }
+
     // Detalhes do produto: foto grande com setas, deslizar e miniaturas
     function abrirDetalhes(produtoId) {
       if (!produtos.some(p => p.id === produtoId)) return;
@@ -546,13 +633,16 @@
       renderizarDetalhes();
       modalDetalhes.classList.remove('hidden');
       document.body.style.overflow = 'hidden';
+      entrarModalHistorico('detalhes');
     }
 
     function fecharDetalhes() {
+      if (!detalhes) return;
       detalhes = null;
       modalDetalhes.classList.add('hidden');
       detalhesConteudo.innerHTML = '';
       document.body.style.overflow = '';
+      sairModalHistorico('detalhes');
     }
 
     function mostrarFotoDetalhes(indice) {
@@ -626,7 +716,7 @@
             ${encomenda ? `<p class="text-sm text-blue-700 bg-blue-50 rounded-lg px-3 py-2 mb-4">50% sinal + 50% na entrega (sinal de ${formatarMoeda(calcularSinal(produto.preco_venda))})</p>` : ''}
             <div class="mt-auto">
               ${fotos.length ? `<button type="button" onclick="abrirProvador(${id})" class="w-full mb-2 border border-gray-300 text-gray-800 hover:bg-gray-50 py-3 rounded-lg font-medium transition-colors">Provar virtualmente</button>` : ''}
-              <button onclick="toggleMaleta(${id}); renderizarDetalhes()" class="w-full ${jaNaMaleta ? 'bg-gray-100 text-gray-600' : encomenda ? 'bg-blue-600 hover:bg-blue-700 text-white' : 'bg-orange-500 hover:bg-orange-600 text-white'} py-3 rounded-lg font-medium transition-colors">${jaNaMaleta ? 'Remover da Maleta' : encomenda ? 'Encomendar (adicionar à Maleta)' : 'Adicionar à Maleta'}</button>
+              <button type="button" onclick="toggleMaleta(${id}); renderizarDetalhes()" aria-pressed="${jaNaMaleta}" class="btn-maleta w-full border ${jaNaMaleta ? 'bg-green-50 text-green-700 border-green-300 hover:bg-green-100' : encomenda ? 'bg-blue-600 hover:bg-blue-700 text-white border-transparent' : 'bg-orange-500 hover:bg-orange-600 text-white border-transparent'} py-3 rounded-lg font-medium">${jaNaMaleta ? '✓ Na Maleta · Remover' : encomenda ? 'Encomendar (adicionar à Maleta)' : 'Adicionar à Maleta'}</button>
             </div>
           </div>
         </div>
@@ -837,6 +927,7 @@
       document.getElementById('provadorTitulo').textContent = `Provador Virtual · ${produto.nome}`;
       modalProvador.classList.remove('hidden');
       document.body.style.overflow = 'hidden';
+      entrarModalHistorico('provador');
 
       if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
         statusProvador.textContent = 'Seu navegador não libera a câmera aqui. Use um navegador atualizado em uma página https.';
@@ -905,6 +996,7 @@
       modalProvador.classList.add('hidden');
       // Os detalhes do produto continuam abertos por baixo
       if (!detalhes) document.body.style.overflow = '';
+      sairModalHistorico('provador');
     }
 
     document.getElementById('fecharProvador').addEventListener('click', fecharProvador);
@@ -921,17 +1013,16 @@
       if (!produto) return;
 
       const index = maleta.itens.findIndex(i => i.id === produtoId);
-      if (index >= 0) {
-        maleta.itens.splice(index, 1);
-        mostrarToast(`${produto.nome} removido da maleta`);
-      } else {
-        const encomenda = ehSobEncomenda(produto);
-        maleta.itens.push({ id: produto.id, nome: produto.nome, preco: Number(produto.preco_venda), imagem: produto.imagem_url, encomenda });
-        mostrarToast(`${produto.nome} adicionado à maleta${encomenda ? ' (sob encomenda)' : ''}`);
-      }
+      const encomenda = ehSobEncomenda(produto);
+      if (index >= 0) maleta.itens.splice(index, 1);
+      else maleta.itens.push({ id: produto.id, nome: produto.nome, preco: Number(produto.preco_venda), imagem: produto.imagem_url, encomenda });
+      // Primeiro o botão muda (feedback imediato), depois o resto
+      atualizarCardMaleta(produtoId);
+      if (index < 0 && typeof navigator !== 'undefined' && navigator.vibrate) navigator.vibrate(12);
       salvarMaleta();
-      renderizarCatalogo();
       atualizarMaletaUI();
+      const nome = nomeCard(produto);
+      mostrarToast(index >= 0 ? `${nome} removido da maleta` : `${nome} adicionado à maleta${encomenda ? ' (sob encomenda)' : ''}`);
     }
 
     // Salvar maleta no localStorage
@@ -984,24 +1075,23 @@
     }
 
     // Modal maleta
-    btnMaleta.addEventListener('click', () => {
+    function abrirModalMaleta() {
       atualizarMaletaUI();
       preencherDadosCliente();
       modalMaleta.classList.remove('hidden');
       document.body.style.overflow = 'hidden';
-    });
+      entrarModalHistorico('maleta');
+    }
 
-    fecharMaleta.addEventListener('click', () => {
+    function fecharModalMaleta() {
       modalMaleta.classList.add('hidden');
       document.body.style.overflow = '';
-    });
+      sairModalHistorico('maleta');
+    }
 
-    modalMaleta.addEventListener('click', (e) => {
-      if (e.target === modalMaleta) {
-        modalMaleta.classList.add('hidden');
-        document.body.style.overflow = '';
-      }
-    });
+    btnMaleta.addEventListener('click', abrirModalMaleta);
+    fecharMaleta.addEventListener('click', fecharModalMaleta);
+    modalMaleta.addEventListener('click', (e) => { if (e.target === modalMaleta) fecharModalMaleta(); });
 
     // Máscara de CEP (00000-000) + busca ViaCEP funcional no modal da maleta
     cepInput.addEventListener('input', () => {
@@ -1108,12 +1198,14 @@
       renderizarCliente();
       modalCliente.classList.remove('hidden');
       document.body.style.overflow = 'hidden';
+      entrarModalHistorico('cliente');
       if (!cliente) document.getElementById('clienteEmail').focus();
     }
 
     function fecharCliente() {
       modalCliente.classList.add('hidden');
       document.body.style.overflow = '';
+      sairModalHistorico('cliente');
     }
 
     // Preenche o nome da entrega com o do cliente, sem apagar o que já foi digitado
@@ -1270,8 +1362,7 @@
         // 3. Limpa maleta e abre WhatsApp
         localStorage.removeItem('nix_maleta');
         maleta = { itens: [] };
-        modalMaleta.classList.add('hidden');
-        document.body.style.overflow = '';
+        fecharModalMaleta();
         window.open(url, '_blank');
         mostrarToast('Pedido encaminhado para o WhatsApp!');
       } catch (err) {

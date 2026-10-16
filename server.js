@@ -434,8 +434,9 @@ function lerMedidaCm(v) {
   return Math.round(n * 10) / 10;
 }
 
-// Campos de especificação vindos do formulário/lote. Só inclui os enviados
-// (o PUT não mexe no que não veio). `erro` = a 1ª medida inválida.
+// Campos de especificação vindos do formulário/lote (e o nome curto do card, que
+// segue o mesmo caminho). Só inclui os enviados (o PUT não mexe no que não veio).
+// `erro` = a 1ª medida inválida.
 function lerEspecificacoes(body) {
   const espec = {};
   let erro = null;
@@ -447,6 +448,7 @@ function lerEspecificacoes(body) {
   }
   if (body.material !== undefined) espec.material = textoCurto(body.material, 60);
   if (body.tipo !== undefined) espec.tipo = textoCurto(body.tipo, 100);
+  if (body.nome_curto !== undefined) espec.nome_curto = textoCurto(body.nome_curto, 80);
   return { espec, erro };
 }
 
@@ -480,7 +482,7 @@ function validarProdutoLote(linha) {
     cor_armacao: textoCurto(l.cor_armacao, 100) || null,
   };
   const { espec, erro: erroEspec } = lerEspecificacoes(l);
-  Object.assign(produto, { diametro_cm: null, ponte_cm: null, largura_total_cm: null, material: '', tipo: '' }, espec);
+  Object.assign(produto, { diametro_cm: null, ponte_cm: null, largura_total_cm: null, material: '', tipo: '', nome_curto: '' }, espec);
   if (erroEspec) erros.push(erroEspec);
   if (!produto.nome) erros.push({ campo: 'nome', mensagem: 'Informe o nome' });
   if (!produto.codigo_sku) erros.push({ campo: 'codigo_sku', mensagem: 'Informe o SKU' });
@@ -576,7 +578,7 @@ async function startServer() {
   async function handleListPublicos(req, res) {
     try {
       const result = await pool.query(
-        `SELECT id, nome, codigo_sku, preco_venda, imagem_url, fotos, status, disponibilidade, formato, estilo, cor_armacao,
+        `SELECT id, nome, nome_curto, codigo_sku, preco_venda, imagem_url, fotos, status, disponibilidade, formato, estilo, cor_armacao,
                 diametro_cm, ponte_cm, largura_total_cm, material, tipo
          FROM produtos
          WHERE status IN ('DISPONIVEL', 'CONDICIONAL')
@@ -594,7 +596,7 @@ async function startServer() {
   async function handleListAdmin(req, res) {
     try {
       const result = await pool.query(
-        `SELECT p.id, p.nome, p.codigo_sku, p.preco_custo, p.preco_venda, p.imagem_url, p.fotos, p.status, p.disponibilidade,
+        `SELECT p.id, p.nome, p.nome_curto, p.codigo_sku, p.preco_custo, p.preco_venda, p.imagem_url, p.fotos, p.status, p.disponibilidade,
                 p.formato, p.estilo, p.cor_armacao, p.diametro_cm, p.ponte_cm, p.largura_total_cm, p.material, p.tipo,
                 p.fornecedor, p.codigo_fornecedor, p.link_fornecedor, p.vezes_em_maleta,
                 to_char(uc.data_compra, 'YYYY-MM-DD') AS ultima_compra, uc.preco_custo AS custo_ultima_compra,
@@ -621,7 +623,7 @@ async function startServer() {
   async function handleListConditional(req, res) {
     try {
       const result = await pool.query(
-        `SELECT id, nome, codigo_sku, preco_custo, preco_venda, imagem_url, fotos, status, disponibilidade, formato, estilo, cor_armacao, diametro_cm, ponte_cm, largura_total_cm, material, tipo, fornecedor, codigo_fornecedor, link_fornecedor, vezes_em_maleta
+        `SELECT id, nome, nome_curto, codigo_sku, preco_custo, preco_venda, imagem_url, fotos, status, disponibilidade, formato, estilo, cor_armacao, diametro_cm, ponte_cm, largura_total_cm, material, tipo, fornecedor, codigo_fornecedor, link_fornecedor, vezes_em_maleta
          FROM produtos
          WHERE status = 'CONDICIONAL'
          ORDER BY created_at DESC`
@@ -669,11 +671,11 @@ async function startServer() {
       }
       const result = await client.query(
         `INSERT INTO produtos (nome, codigo_sku, preco_custo, preco_venda, imagem_url, fotos, disponibilidade, formato, estilo, cor_armacao, fornecedor, codigo_fornecedor, link_fornecedor,
-                               diametro_cm, ponte_cm, largura_total_cm, material, tipo)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
+                               diametro_cm, ponte_cm, largura_total_cm, material, tipo, nome_curto)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
          RETURNING *`,
         [nome, codigoFinal, preco_custo, preco_venda, fotos[0] || null, fotos, disponibilidade, formato, estilo, cor_armacao, fornecedor, codigoFornecedor, linkFornecedor,
-          espec.diametro_cm ?? null, espec.ponte_cm ?? null, espec.largura_total_cm ?? null, espec.material || '', espec.tipo || '']
+          espec.diametro_cm ?? null, espec.ponte_cm ?? null, espec.largura_total_cm ?? null, espec.material || '', espec.tipo || '', espec.nome_curto || '']
       );
       await registrarCompraCadastro(client, result.rows[0]);
       await client.query('COMMIT');
@@ -848,12 +850,12 @@ async function startServer() {
         // ON CONFLICT cobre outro cadastro do mesmo SKU entre a checagem e o INSERT
         const r = await client.query(
           `INSERT INTO produtos (nome, codigo_sku, preco_custo, preco_venda, status, disponibilidade, formato, estilo, cor_armacao, fornecedor, codigo_fornecedor, link_fornecedor,
-                                 diametro_cm, ponte_cm, largura_total_cm, material, tipo)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
+                                 diametro_cm, ponte_cm, largura_total_cm, material, tipo, nome_curto)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
            ON CONFLICT (codigo_sku) DO NOTHING
            RETURNING *`,
           [p.nome, p.codigo_sku, p.preco_custo, p.preco_venda, p.status, p.disponibilidade, p.formato, p.estilo, p.cor_armacao, p.fornecedor, p.codigo_fornecedor, p.link_fornecedor,
-            p.diametro_cm, p.ponte_cm, p.largura_total_cm, p.material, p.tipo]
+            p.diametro_cm, p.ponte_cm, p.largura_total_cm, p.material, p.tipo, p.nome_curto]
         );
         if (!r.rows.length) {
           ignorados.push({ linha: i, codigo_sku: p.codigo_sku, codigo_fornecedor: p.codigo_fornecedor, campo: 'codigo_sku', motivo: 'SKU já cadastrado' });

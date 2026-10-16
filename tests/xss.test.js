@@ -46,6 +46,7 @@ function produtoMalicioso(extra = {}) {
   return {
     id: 7,
     nome: PAYLOAD,
+    nome_curto: PAYLOAD,
     codigo_sku: PAYLOAD,
     sku: PAYLOAD,
     formato: PAYLOAD,
@@ -77,7 +78,7 @@ function semInjecao(html) {
 describe('vitrine (index.html) escapa dados de produto', () => {
   for (const disponibilidade of ['PRONTA_ENTREGA', 'SOB_ENCOMENDA']) it(`no catálogo (${disponibilidade})`, () => {
     const catalogoGrid = elemento();
-    const ctx = carregar('index.html', ['escapeHtml', 'fotosDoProduto', 'indiceCircular', 'ehSobEncomenda', 'calcularSinal', 'passaFiltroStatus', 'etiquetaProduto', 'renderizarCatalogo'], {
+    const ctx = carregar('index.html', ['escapeHtml', 'fotosDoProduto', 'indiceCircular', 'ehSobEncomenda', 'calcularSinal', 'passaFiltroStatus', 'etiquetaProduto', 'nomeCard', 'tagsCard', 'botaoMaletaCard', 'renderizarCatalogo'], {
       produtos: [produtoMalicioso({ disponibilidade })],
       maleta: { itens: [] },
       fotoCard: {},
