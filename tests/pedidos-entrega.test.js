@@ -344,13 +344,13 @@ describe('painel: cálculo e filtros dos pedidos', () => {
 });
 
 describe('vitrine: intenção de cada item no carrinho', () => {
-  const FUNCOES = ['escapeHtml', 'calcularSinal', 'itemEhEncomenda', 'resumoMaleta', 'definirIntencao', 'atualizarMaletaUI', 'montarTextoWhatsapp'];
+  const FUNCOES = ['escapeHtml', 'calcularSinal', 'itemEhEncomenda', 'resumoMaleta', 'definirIntencao', 'textoGuiaCatalogo', 'atualizarGuias', 'atualizarMaletaUI', 'montarTextoWhatsapp'];
   function vitrine(itens) {
     const el = () => ({ innerHTML: '', textContent: '', classList: { add() {}, remove() {} } });
     const els = { maletaVazia: el(), maletaItens: el(), maletaFormulario: el(), maletaFooter: el(), maletaTotal: el(), maletaSinal: el() };
     const guardado = {};
     const ctx = carregar('index.html', FUNCOES, {
-      ...els, maleta: { itens }, formatarMoeda, document: { getElementById: el },
+      ...els, maleta: { itens }, filtroStatus: { value: '' }, formatarMoeda, document: { getElementById: el },
       salvarMaleta() { guardado.salvou = (guardado.salvou || 0) + 1; },
     });
     return { ctx, els, guardado };

@@ -19,6 +19,8 @@
       --nix-muted: #a3a3a3;
     }
     * { font-family: 'Inter', sans-serif; }
+    html { scroll-behavior: smooth; }
+    @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
     .font-brand { font-family: 'Cinzel', serif; }
     .chrome-text {
       background: linear-gradient(180deg, #fafafa 0%, #d4d4d4 38%, #8f8f8f 52%, #e5e5e5 65%, #a3a3a3 100%);
@@ -51,6 +53,24 @@
     .btn-maleta.pulso { animation: pulsoMaleta 0.35s ease; }
     @keyframes pulsoMaleta { 0% { transform: scale(0.94); } 60% { transform: scale(1.04); } 100% { transform: scale(1); } }
     @media (prefers-reduced-motion: reduce) { .btn-maleta.pulso { animation: none; } }
+    /* Guias da vitrine: seta que "cutuca" para baixo, ponto que pulsa e filtros em pílula */
+    .guia-seta { animation: guiaSeta 1.6s ease-in-out infinite; }
+    @keyframes guiaSeta { 0%, 100% { transform: translateY(0); opacity: 0.6; } 50% { transform: translateY(6px); opacity: 1; } }
+    .guia-ponto { position: relative; }
+    .guia-ponto::after { content: ''; position: absolute; inset: 0; border-radius: 9999px; background: inherit; animation: guiaPonto 1.8s ease-out infinite; }
+    @keyframes guiaPonto { 0% { transform: scale(1); opacity: 0.7; } 100% { transform: scale(2.6); opacity: 0; } }
+    .guia-cutuca { animation: guiaCutuca 1.4s ease-in-out infinite; }
+    @keyframes guiaCutuca { 0%, 100% { transform: translateX(0); } 50% { transform: translateX(4px); } }
+    .filtro-pilula { touch-action: manipulation; -webkit-tap-highlight-color: transparent; transition: background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease; }
+    .filtro-pilula[aria-pressed="true"] { background: #161616; color: #fff; border-color: #161616; }
+    .hero-atalho { transition: background-color 0.15s ease, border-color 0.15s ease, transform 0.1s ease; }
+    .hero-atalho:active { transform: scale(0.97); }
+    #barraMaleta { transition: transform 0.25s ease, opacity 0.25s ease; }
+    #barraMaleta.escondida { transform: translateY(140%); opacity: 0; pointer-events: none; }
+    @media (prefers-reduced-motion: reduce) {
+      .guia-seta, .guia-ponto::after, .guia-cutuca { animation: none; }
+      #barraMaleta { transition: none; }
+    }
   </style>
 </head>
 <body class="min-h-screen" style="background:var(--nix-bg);color:var(--nix-text)">
@@ -85,18 +105,45 @@
   </header>
 
   <!-- Hero -->
-  <section class="text-white py-20 lg:py-28" style="background:radial-gradient(ellipse 80% 60% at 50% -10%, #3a3a3a 0%, #1c1c1c 55%, #101010 100%)">
+  <section class="text-white py-12 sm:py-20 lg:py-28" style="background:radial-gradient(ellipse 80% 60% at 50% -10%, #3a3a3a 0%, #1c1c1c 55%, #101010 100%)">
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
       <p class="text-xs font-medium uppercase mb-4" style="letter-spacing:0.4em;color:var(--nix-muted)">Nix Glasses</p>
-      <h1 class="font-brand text-4xl sm:text-5xl lg:text-6xl font-bold tracking-wide mb-6 chrome-text">Óculos que definem seu estilo</h1>
+      <h1 class="font-brand text-3xl sm:text-5xl lg:text-6xl font-bold tracking-wide mb-6 chrome-text">Óculos que definem seu estilo</h1>
       <div class="mx-auto mb-8 h-px w-24" style="background:linear-gradient(90deg,transparent,#c9c9c9,transparent)"></div>
-      <p class="text-lg sm:text-xl max-w-2xl mx-auto mb-10" style="color:var(--nix-muted)">Design exclusivo, qualidade premium e proteção UV400. Escolha seu modelo ideal.</p>
-      <a href="#catalogo" class="chrome-btn inline-block px-8 py-3 rounded-full font-semibold transition">Ver Coleção</a>
+      <p class="text-lg sm:text-xl max-w-2xl mx-auto mb-8" style="color:var(--nix-muted)">Design exclusivo, qualidade premium e proteção UV400. Escolha os modelos e prove em casa.</p>
+      <!-- Atalhos: cada um leva ao catálogo já com o filtro escolhido -->
+      <div class="flex flex-col sm:flex-row items-stretch sm:items-center justify-center gap-3 max-w-md sm:max-w-none mx-auto">
+        <a href="#catalogo" data-atalho-filtro="" class="hero-atalho chrome-btn px-8 py-3 rounded-full font-semibold">Coleção <span class="font-normal opacity-70">· todos os modelos</span></a>
+        <a href="#catalogo" data-atalho-filtro="DISPONIVEL" class="hero-atalho px-6 py-3 rounded-full font-semibold border text-white hover:bg-white/10" style="border-color:rgba(255,255,255,0.35)">Disponíveis <span class="font-normal" style="color:var(--nix-muted)">· pronta entrega</span></a>
+        <a href="#catalogo" data-atalho-filtro="SOB_ENCOMENDA" class="hero-atalho px-6 py-3 rounded-full font-semibold border text-white hover:bg-white/10" style="border-color:rgba(255,255,255,0.35)">Sob Encomenda</a>
+      </div>
+      <!-- Como funciona -->
+      <ol class="mt-10 grid grid-cols-3 gap-2 sm:gap-6 max-w-3xl mx-auto text-left sm:text-center">
+        <li class="rounded-xl border p-3 sm:p-4" style="border-color:var(--nix-border);background:rgba(255,255,255,0.03)">
+          <span class="chrome-btn inline-flex w-6 h-6 rounded-full items-center justify-center text-xs font-bold mb-2">1</span>
+          <p class="text-xs sm:text-sm font-semibold text-white">Escolha os modelos</p>
+          <p class="text-[11px] sm:text-xs mt-1" style="color:var(--nix-muted)">Toque em <strong>+ Maleta</strong> nos que quer provar</p>
+        </li>
+        <li class="rounded-xl border p-3 sm:p-4" style="border-color:var(--nix-border);background:rgba(255,255,255,0.03)">
+          <span class="chrome-btn inline-flex w-6 h-6 rounded-full items-center justify-center text-xs font-bold mb-2">2</span>
+          <p class="text-xs sm:text-sm font-semibold text-white">Envie a maleta</p>
+          <p class="text-[11px] sm:text-xs mt-1" style="color:var(--nix-muted)">O pedido segue pelo WhatsApp</p>
+        </li>
+        <li class="rounded-xl border p-3 sm:p-4" style="border-color:var(--nix-border);background:rgba(255,255,255,0.03)">
+          <span class="chrome-btn inline-flex w-6 h-6 rounded-full items-center justify-center text-xs font-bold mb-2">3</span>
+          <p class="text-xs sm:text-sm font-semibold text-white">Prove em casa</p>
+          <p class="text-[11px] sm:text-xs mt-1" style="color:var(--nix-muted)">Fique só com os que amar</p>
+        </li>
+      </ol>
+      <a href="#catalogo" class="mt-8 inline-flex flex-col items-center gap-1 text-xs" style="color:var(--nix-muted)" aria-label="Ir para os modelos">
+        <span>Veja os modelos</span>
+        <svg class="guia-seta w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+      </a>
     </div>
   </section>
 
   <!-- Catálogo -->
-  <section id="catalogo" class="py-16 lg:py-24 bg-white">
+  <section id="catalogo" class="py-16 lg:py-24 bg-white scroll-mt-16">
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
       <div class="flex flex-col gap-4 mb-6 sm:mb-10 sm:flex-row sm:items-center sm:justify-between">
         <div class="flex items-center gap-3">
@@ -105,17 +152,22 @@
           </span>
           <h2 class="text-2xl sm:text-3xl font-bold text-gray-900 text-left">Nossa Coleção</h2>
         </div>
-        <div class="grid grid-cols-2 gap-2 sm:flex sm:items-center sm:gap-4">
-          <select id="filtroStatus" class="w-full sm:w-auto px-3 sm:px-4 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500">
-            <option value="">Todos</option>
-            <option value="DISPONIVEL">Disponíveis</option>
-            <option value="SOB_ENCOMENDA">Sob Encomenda</option>
-            <option value="CONDICIONAL">Em Condicional</option>
-          </select>
+        <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-4">
+          <input type="hidden" id="filtroStatus" value="">
+          <div id="filtroPilulas" class="grid grid-cols-3 gap-1 p-1 rounded-full bg-gray-100" role="group" aria-label="Mostrar">
+            <button type="button" data-filtro="" aria-pressed="true" class="filtro-pilula px-3 py-2 rounded-full text-xs sm:text-sm font-medium text-gray-700 border border-transparent">Coleção <span data-contagem="" class="opacity-60"></span></button>
+            <button type="button" data-filtro="DISPONIVEL" aria-pressed="false" class="filtro-pilula px-3 py-2 rounded-full text-xs sm:text-sm font-medium text-gray-700 border border-transparent">Disponíveis <span data-contagem="DISPONIVEL" class="opacity-60"></span></button>
+            <button type="button" data-filtro="SOB_ENCOMENDA" aria-pressed="false" class="filtro-pilula px-2 py-2 rounded-full text-xs sm:text-sm font-medium text-gray-700 border border-transparent whitespace-nowrap"><span class="sm:hidden">Encomenda</span><span class="hidden sm:inline">Sob Encomenda</span> <span data-contagem="SOB_ENCOMENDA" class="opacity-60"></span></button>
+          </div>
           <select id="filtroFormato" class="w-full sm:w-auto px-3 sm:px-4 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500">
             <option value="">Todos os Formatos</option>
           </select>
         </div>
+      </div>
+      <!-- Orientação: muda com o filtro e com a maleta -->
+      <div id="guiaCatalogo" class="flex items-start gap-3 mb-5 sm:mb-8 rounded-xl border border-orange-200 bg-orange-50 px-4 py-3 text-sm text-gray-800" role="status">
+        <span class="guia-ponto mt-1.5 inline-block w-2.5 h-2.5 shrink-0 rounded-full bg-orange-500" aria-hidden="true"></span>
+        <p id="guiaCatalogoTexto"></p>
       </div>
       <div id="catalogoGrid" class="grid grid-cols-3 gap-2 sm:gap-6">
         <!-- Cards inseridos via JS -->
@@ -127,6 +179,12 @@
       </div>
     </div>
   </section>
+
+  <!-- Atalho para a maleta: aparece quando já há modelos escolhidos -->
+  <button type="button" id="barraMaleta" class="escondida fixed z-40 bottom-4 left-4 right-4 sm:left-auto sm:right-6 sm:w-auto flex items-center justify-between gap-4 rounded-full bg-orange-500 hover:bg-orange-600 text-white pl-5 pr-4 py-3 shadow-xl font-semibold text-sm" aria-label="Abrir minha maleta">
+    <span id="barraMaletaTexto"></span>
+    <span class="inline-flex items-center gap-1">Ver maleta <svg class="guia-cutuca w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M9 5l7 7-7 7"/></svg></span>
+  </button>
 
   <!-- Sobre -->
   <section id="sobre" class="py-16 lg:py-24 border-t" style="background:#1b1b1b;border-color:var(--nix-border)">
@@ -335,7 +393,7 @@
   </div>
 
   <!-- Toast -->
-  <div id="toastContainer" class="fixed bottom-6 right-6 z-[70] space-y-2"></div>
+  <div id="toastContainer" class="fixed bottom-24 right-6 z-[70] space-y-2"></div>
 
   <script>
     // Estado
@@ -452,6 +510,7 @@
         if (!response.ok) throw new Error('Erro ao buscar produtos');
         produtos = await response.json();
         preencherFiltroFormato();
+        atualizarContagemFiltros();
         renderizarCatalogo();
       } catch (error) {
         console.error('Erro ao carregar catálogo:', error);
@@ -501,6 +560,44 @@
       if (!filtro) return true;
       if (filtro === 'SOB_ENCOMENDA') return ehSobEncomenda(p);
       return !ehSobEncomenda(p) && p.status === filtro;
+    }
+
+    // Quantos modelos cada pílula de filtro mostra
+    function contagemFiltros(lista) {
+      const contagem = { '': lista.length };
+      for (const filtro of ['DISPONIVEL', 'SOB_ENCOMENDA']) contagem[filtro] = lista.filter(p => passaFiltroStatus(p, filtro)).length;
+      return contagem;
+    }
+
+    // Texto de orientação acima dos cards: o que o filtro mostra e o próximo passo
+    function textoGuiaCatalogo(filtro, itensNaMaleta) {
+      const passo = itensNaMaleta > 0
+        ? `Você já escolheu ${itensNaMaleta} ${itensNaMaleta === 1 ? 'modelo' : 'modelos'}. Quando terminar, abra a maleta e envie pelo WhatsApp.`
+        : 'Toque em <strong>+ Maleta</strong> nos modelos que quer provar em casa.';
+      const mostra = filtro === 'DISPONIVEL' ? '<strong>Pronta entrega:</strong> vão na maleta e chegam para você provar.'
+        : filtro === 'SOB_ENCOMENDA' ? '<strong>Sob encomenda:</strong> pedimos para você com sinal de 50%.'
+        : '<strong>Coleção completa:</strong> todos os modelos, de pronta entrega e sob encomenda.';
+      return `${mostra} ${passo}`;
+    }
+
+    // Troca o filtro de disponibilidade (pílulas do catálogo e atalhos do topo)
+    function aplicarFiltroStatus(filtro) {
+      filtroStatus.value = filtro;
+      document.querySelectorAll('#filtroPilulas [data-filtro]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.filtro === filtro)));
+      renderizarCatalogo();
+      atualizarGuias();
+    }
+
+    function atualizarContagemFiltros() {
+      const contagem = contagemFiltros(produtos);
+      document.querySelectorAll('#filtroPilulas [data-contagem]').forEach(el => { el.textContent = produtos.length ? `(${contagem[el.dataset.contagem]})` : ''; });
+    }
+
+    function atualizarGuias() {
+      const n = maleta.itens.length;
+      document.getElementById('guiaCatalogoTexto').innerHTML = textoGuiaCatalogo(filtroStatus.value, n);
+      document.getElementById('barraMaletaTexto').textContent = `${n} ${n === 1 ? 'modelo' : 'modelos'} na maleta`;
+      document.getElementById('barraMaleta').classList[n === 0 ? 'add' : 'remove']('escondida');
     }
 
     // Etiqueta do card: encomenda tem a sua; pronta entrega mostra o status
@@ -1199,6 +1296,7 @@
     // Atualizar UI da maleta
     function atualizarMaletaUI() {
       const count = maleta.itens.length;
+      atualizarGuias();
       const countEl = document.getElementById('maletaCount');
       if (count > 0) {
         countEl.textContent = count;
@@ -1570,7 +1668,10 @@
     });
 
     // Filtros
-    filtroStatus.addEventListener('change', renderizarCatalogo);
+    document.querySelectorAll('#filtroPilulas [data-filtro]').forEach(b => b.addEventListener('click', () => aplicarFiltroStatus(b.dataset.filtro)));
+    // Atalhos do topo: o link rola até o catálogo e o filtro já vem escolhido
+    document.querySelectorAll('[data-atalho-filtro]').forEach(a => a.addEventListener('click', () => aplicarFiltroStatus(a.dataset.atalhoFiltro)));
+    document.getElementById('barraMaleta').addEventListener('click', abrirModalMaleta);
     filtroFormato.addEventListener('change', renderizarCatalogo);
   </script>
 </body>
