@@ -191,12 +191,31 @@ describe('acerto', () => {
     const r = await api('POST', '/api/admin/acerto', { body: { comprados: [a.id], devolvidos: [b.id] } });
     assert.equal(r.status, 200);
     assert.equal(r.body.sucesso, true);
+    assert.deepEqual(r.body.comprados, [a.id]);
+    assert.deepEqual(r.body.devolvidos, [b.id]);
+    assert.equal(r.body.total_vendido, 120);
 
     const { rows } = await h.pool.query('SELECT id, status FROM produtos ORDER BY id');
     assert.deepEqual(rows, [
       { id: a.id, status: 'ESGOTADO' },
       { id: b.id, status: 'DISPONIVEL' },
     ]);
+  });
+
+  it('total_vendido soma só o que estava em condicional, sem erro de centavos', async () => {
+    const { body: a } = await criarProduto(base('TV-1', { preco_venda: 0.1 }));
+    const { body: b } = await criarProduto(base('TV-2', { preco_venda: 0.2 }));
+    const { body: c } = await criarProduto(base('TV-3'));
+    await definirStatus(a.id, 'CONDICIONAL');
+    await definirStatus(b.id, 'CONDICIONAL');
+
+    const r = await api('POST', '/api/admin/acerto', { body: { comprados: [a.id, b.id, c.id] } });
+    assert.equal(r.status, 200);
+    assert.equal(r.body.total_vendido, 0.3);
+    assert.deepEqual(r.body.ignorados, [c.id]);
+
+    const s = await api('POST', '/api/admin/acerto', { body: { devolvidos: [a.id] } });
+    assert.equal(s.status, 409);
   });
 
   it('aceita o formato do acerto.html (itens por SKU com bought/returned)', async () => {

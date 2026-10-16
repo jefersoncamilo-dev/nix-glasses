@@ -181,6 +181,8 @@ describe('painel (admin/index.html) escapa dados de produto', () => {
       compradosList,
       devolvidosList,
       formatarMoeda,
+      marcacoesAcerto: new Map([[7, 'comprado']]),
+      Array,
     });
     ctx.renderizarListasAcerto();
     semInjecao(compradosList.innerHTML);

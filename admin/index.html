@@ -217,24 +217,47 @@
 
       <!-- Aba Acerto -->
       <div id="tab-acerto" class="tab-content hidden">
-        <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-6">
+        <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
           <h3 class="text-lg font-semibold text-gray-900">Acerto de Maleta</h3>
-          <div class="flex flex-col sm:flex-row gap-2">
+          <div class="flex flex-wrap gap-2">
             <button id="btnResumoMaleta" type="button" class="bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded-lg font-medium transition-colors">Resumo para WhatsApp</button>
-            <button id="btnTodosVendidos" type="button" class="bg-gray-100 hover:bg-gray-200 text-gray-700 px-4 py-2 rounded-lg font-medium transition-colors">Marcar todos vendidos</button>
-            <button id="btnTodosDevolvidos" type="button" class="bg-gray-100 hover:bg-gray-200 text-gray-700 px-4 py-2 rounded-lg font-medium transition-colors">Marcar todos devolvidos</button>
+            <button id="btnTodosVendidos" type="button" class="bg-green-50 hover:bg-green-100 text-green-700 border border-green-200 px-4 py-2 rounded-lg font-medium transition-colors">Marcar todos vendidos</button>
+            <button id="btnTodosDevolvidos" type="button" class="bg-orange-50 hover:bg-orange-100 text-orange-700 border border-orange-200 px-4 py-2 rounded-lg font-medium transition-colors">Marcar todos devolvidos</button>
+            <button id="btnLimparAcerto" type="button" class="bg-gray-100 hover:bg-gray-200 text-gray-700 px-4 py-2 rounded-lg font-medium transition-colors">Limpar</button>
           </div>
         </div>
-        <p class="text-sm text-gray-500 mb-4">Sem nada marcado, o resumo lista as peças em condicional (modelo, SKU e preço) para enviar à cliente. Com itens marcados, vira o resumo do acerto: com o que ela ficou, o total a pagar e o que voltou.</p>
+        <p class="text-sm text-gray-500 mb-4">Sem nada marcado, o resumo lista as peças em condicional (modelo, SKU e preço) para enviar à cliente. Com itens marcados, vira o fechamento do acerto: com o que ela ficou, o total a pagar e o que voltou ao estoque.</p>
+
+        <!-- Placar do acerto: atualiza a cada marcação -->
+        <div id="placarAcerto" class="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
+          <div class="bg-white rounded-xl border border-gray-200 p-4">
+            <p class="text-xs text-gray-500">Com a cliente</p>
+            <p id="placarCondicional" class="text-2xl font-bold text-gray-900">0</p>
+          </div>
+          <div class="bg-white rounded-xl border border-green-200 p-4">
+            <p class="text-xs text-green-700">Comprados</p>
+            <p id="placarComprados" class="text-2xl font-bold text-green-700">0</p>
+          </div>
+          <div class="bg-white rounded-xl border border-orange-200 p-4">
+            <p class="text-xs text-orange-700">Devolvidos</p>
+            <p id="placarDevolvidos" class="text-2xl font-bold text-orange-700">0</p>
+          </div>
+          <div class="bg-white rounded-xl border border-gray-200 p-4">
+            <p class="text-xs text-gray-500">Total a pagar</p>
+            <p id="placarTotal" class="text-2xl font-bold text-gray-900">R$ 0,00</p>
+          </div>
+        </div>
+
         <div class="grid lg:grid-cols-2 gap-6">
           <!-- Comprados -->
           <div class="bg-white rounded-xl border border-gray-200 p-6">
             <h4 class="text-lg font-semibold text-gray-900 mb-4 flex items-center">
               <svg class="w-5 h-5 mr-2 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
               Itens Comprados (→ ESGOTADO)
+              <span id="badgeComprados" class="ml-auto text-xs font-semibold px-2 py-1 rounded-full bg-green-100 text-green-700">0</span>
             </h4>
             <div id="compradosList" class="space-y-2 max-h-96 overflow-y-auto">
-              <!-- Checkboxes inseridos via JS -->
+              <p class="text-gray-500 text-center py-4">Carregando...</p>
             </div>
           </div>
           <!-- Devolvidos -->
@@ -242,16 +265,23 @@
             <h4 class="text-lg font-semibold text-gray-900 mb-4 flex items-center">
               <svg class="w-5 h-5 mr-2 text-orange-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
               Itens Devolvidos (→ DISPONIVEL)
+              <span id="badgeDevolvidos" class="ml-auto text-xs font-semibold px-2 py-1 rounded-full bg-orange-100 text-orange-700">0</span>
             </h4>
             <div id="devolvidosList" class="space-y-2 max-h-96 overflow-y-auto">
-              <!-- Checkboxes inseridos via JS -->
+              <p class="text-gray-500 text-center py-4">Carregando...</p>
             </div>
           </div>
         </div>
-        <div class="mt-6 flex justify-end">
-          <button id="btnSalvarAcerto" class="bg-orange-500 hover:bg-orange-600 text-white px-6 py-3 rounded-lg font-medium transition-colors flex items-center">
-            <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
-            Salvar Acerto
+        <div class="mt-6">
+          <label for="obsAcerto" class="block text-sm font-medium text-gray-700 mb-1">Observações (opcional)</label>
+          <textarea id="obsAcerto" rows="2" maxlength="2000" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-orange-500" placeholder="Ex.: cliente Ana, pagou no Pix"></textarea>
+        </div>
+        <div class="mt-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+          <p id="pendentesAcerto" class="text-sm text-gray-500"></p>
+          <button id="btnSalvarAcerto" disabled class="bg-orange-500 hover:bg-orange-600 disabled:opacity-50 disabled:cursor-not-allowed text-white px-6 py-3 rounded-lg font-medium transition-colors flex items-center justify-center">
+            <svg id="iconeSalvarAcerto" class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
+            <svg id="spinnerSalvarAcerto" class="w-5 h-5 mr-2 animate-spin hidden" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"/></svg>
+            <span id="textoSalvarAcerto">Salvar Acerto</span>
           </button>
         </div>
       </div>
@@ -655,12 +685,23 @@
     const statusClass = (s) => s === 'DISPONIVEL' ? 'bg-green-100 text-green-700' : s === 'CONDICIONAL' ? 'bg-yellow-100 text-yellow-700' : 'bg-red-100 text-red-700';
 
     // Toast
-    function mostrarToast(msg, tipo = 'success') {
+    // acao opcional: { texto, onClick } vira um botão no toast (que fica mais tempo na tela)
+    function mostrarToast(msg, tipo = 'success', acao = null) {
       const toast = document.createElement('div');
-      toast.className = `toast px-4 py-3 rounded-lg shadow-lg text-white ${tipo === 'success' ? 'bg-green-500' : 'bg-red-500'}`;
-      toast.textContent = msg;
+      toast.className = `toast px-4 py-3 rounded-lg shadow-lg text-white flex items-center gap-3 ${tipo === 'success' ? 'bg-green-500' : 'bg-red-500'}`;
+      const texto = document.createElement('span');
+      texto.textContent = msg;
+      toast.appendChild(texto);
+      if (acao) {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'shrink-0 px-3 py-1 rounded-md bg-white/20 hover:bg-white/30 text-sm font-semibold';
+        btn.textContent = acao.texto;
+        btn.addEventListener('click', () => { toast.remove(); acao.onClick(); });
+        toast.appendChild(btn);
+      }
       toastContainer.appendChild(toast);
-      setTimeout(() => toast.remove(), 3000);
+      setTimeout(() => toast.remove(), acao ? 8000 : 3000);
     }
 
     // Tabs
@@ -1072,7 +1113,7 @@
         preencherFiltroFormato();
         preencherFornecedores();
         renderizarTabela();
-        renderizarListasAcerto();
+        atualizarAcerto();
       } catch (err) {
         console.error(err);
         mostrarToast('Erro ao carregar produtos', 'error');
@@ -1696,41 +1737,97 @@
 
     // Acerto
 
-    // As duas listas mostram os mesmos produtos em CONDICIONAL: o cliente
+    // Marcações do acerto (id -> 'comprado' | 'devolvido'). Ficam fora do DOM
+    // para sobreviver a recarregar a lista ou trocar de aba no meio do atendimento.
+    const marcacoesAcerto = new Map();
+    let salvandoAcerto = false;
+
+    // As duas listas mostram os mesmos produtos em CONDICIONAL: a cliente
     // ou comprou ou devolveu cada um. Marcar em uma lista desmarca na outra.
     function renderizarListasAcerto() {
       const condicionais = todosProdutos.filter(p => p.status === 'CONDICIONAL');
-      const item = (p, nome) => `
-        <label class="flex items-center p-3 bg-gray-50 rounded-lg hover:bg-gray-100 cursor-pointer">
-          <input type="checkbox" name="${nome}" value="${Number(p.id)}" class="w-4 h-4 text-orange-500 border-gray-300 rounded focus:ring-orange-500">
-          <div class="ml-3 flex-1">
-            <p class="font-medium text-gray-900">${escapeHtml(p.nome)}</p>
+      const estilos = {
+        comprados: { marca: 'comprado', ativo: 'bg-green-50 border-green-400', cor: 'text-green-600 focus:ring-green-500', outro: 'devolvido' },
+        devolvidos: { marca: 'devolvido', ativo: 'bg-orange-50 border-orange-400', cor: 'text-orange-500 focus:ring-orange-500', outro: 'comprado' },
+      };
+      const item = (p, nome) => {
+        const e = estilos[nome];
+        const id = Number(p.id);
+        const marca = marcacoesAcerto.get(id);
+        const foto = (Array.isArray(p.fotos) && p.fotos[0]) || p.imagem_url;
+        const fundo = marca === e.marca ? e.ativo : marca === e.outro ? 'bg-gray-50 border-transparent opacity-50' : 'bg-gray-50 border-transparent hover:bg-gray-100';
+        return `
+        <label class="flex items-center p-3 rounded-lg border-2 cursor-pointer transition-colors ${fundo}">
+          <input type="checkbox" name="${nome}" value="${id}" ${marca === e.marca ? 'checked' : ''} class="w-5 h-5 border-gray-300 rounded ${e.cor}">
+          ${foto ? `<img src="${escapeHtml(foto)}" alt="" loading="lazy" onerror="imgFallback(this)" class="ml-3 w-10 h-10 rounded object-cover bg-gray-100">` : ''}
+          <div class="ml-3 flex-1 min-w-0">
+            <p class="font-medium text-gray-900 truncate">${escapeHtml(p.nome)}</p>
             <p class="text-sm text-gray-500">${escapeHtml(p.codigo_sku)} • ${formatarMoeda(p.preco_venda)}</p>
           </div>
         </label>
       `;
+      };
       const vazio = '<p class="text-gray-500 text-center py-4">Nenhum item em condicional</p>';
 
       compradosList.innerHTML = condicionais.map(p => item(p, 'comprados')).join('') || vazio;
       devolvidosList.innerHTML = condicionais.map(p => item(p, 'devolvidos')).join('') || vazio;
     }
 
+    // Separa as peças em condicional conforme as marcações e soma o que ela vai pagar
+    function calcularAcerto(condicionais, marcacoes) {
+      const comprados = condicionais.filter(p => marcacoes.get(Number(p.id)) === 'comprado');
+      const devolvidos = condicionais.filter(p => marcacoes.get(Number(p.id)) === 'devolvido');
+      const pendentes = condicionais.filter(p => !marcacoes.has(Number(p.id)));
+      const total = comprados.reduce((t, p) => t + Math.round(Number(p.preco_venda) * 100), 0) / 100;
+      return { comprados, devolvidos, pendentes, total };
+    }
+
+    // Placar, contadores das listas e estado do botão Salvar
+    function atualizarPainelAcerto() {
+      const condicionais = todosProdutos.filter(p => p.status === 'CONDICIONAL');
+      const a = calcularAcerto(condicionais, marcacoesAcerto);
+      const marcados = a.comprados.length + a.devolvidos.length;
+      document.getElementById('placarCondicional').textContent = condicionais.length;
+      document.getElementById('placarComprados').textContent = a.comprados.length;
+      document.getElementById('placarDevolvidos').textContent = a.devolvidos.length;
+      document.getElementById('placarTotal').textContent = formatarMoeda(a.total);
+      document.getElementById('badgeComprados').textContent = a.comprados.length;
+      document.getElementById('badgeDevolvidos').textContent = a.devolvidos.length;
+      document.getElementById('pendentesAcerto').textContent = !condicionais.length ? ''
+        : a.pendentes.length ? `${a.pendentes.length} peça(s) sem marcar continuam em condicional com a cliente.`
+        : 'Todas as peças foram marcadas.';
+      if (!salvandoAcerto) {
+        btnSalvarAcerto.disabled = marcados === 0;
+        document.getElementById('textoSalvarAcerto').textContent = marcados ? `Salvar Acerto (${marcados})` : 'Salvar Acerto';
+      }
+    }
+
+    function atualizarAcerto() {
+      // Descarta marcações de peças que já saíram de condicional
+      const ids = new Set(todosProdutos.filter(p => p.status === 'CONDICIONAL').map(p => Number(p.id)));
+      for (const id of [...marcacoesAcerto.keys()]) if (!ids.has(id)) marcacoesAcerto.delete(id);
+      renderizarListasAcerto();
+      atualizarPainelAcerto();
+    }
+
     document.getElementById('tab-acerto').addEventListener('change', (e) => {
       const cb = e.target;
-      if (!cb.checked || (cb.name !== 'comprados' && cb.name !== 'devolvidos')) return;
-      const outro = cb.name === 'comprados' ? 'devolvidos' : 'comprados';
-      const par = document.querySelector(`input[name="${outro}"][value="${cb.value}"]`);
-      if (par) par.checked = false;
+      if (cb.name !== 'comprados' && cb.name !== 'devolvidos') return;
+      const id = Number(cb.value);
+      if (cb.checked) marcacoesAcerto.set(id, cb.name === 'comprados' ? 'comprado' : 'devolvido');
+      else marcacoesAcerto.delete(id);
+      atualizarAcerto();
     });
 
     async function carregarAcerto() {
       await carregarProdutos();
     }
 
-    // Texto para o WhatsApp. Sem nada marcado: peças enviadas para a cliente provar.
-    // Com itens marcados: resumo do acerto (o que ela ficou, total a pagar, devolvidos).
+    // Texto para o WhatsApp. Sem nada marcado: conferência das peças enviadas para a cliente provar.
+    // Com itens marcados: fechamento do acerto (o que ela ficou, total a pagar, devolvidos
+    // e, se o acerto for parcial, o que ainda está com ela).
     function montarResumoMaleta(condicionais, comprados, devolvidos) {
-      const moeda = v => formatarMoeda(Number(v)).replace(/\u00a0/g, ' ');
+      const moeda = v => formatarMoeda(Number(v)).replace(/ /g, ' ');
       const linha = (p, i) => `${i + 1}. ${p.nome}\n   SKU: ${p.codigo_sku} | ${moeda(p.preco_venda)}`;
       const soma = lista => lista.reduce((t, p) => t + Math.round(Number(p.preco_venda) * 100), 0) / 100;
       const vendidos = condicionais.filter(p => comprados.includes(p.id));
@@ -1748,27 +1845,38 @@
           'Quando decidir, me responda com o número dos modelos que vai ficar. 😉',
         ].join('\n');
       }
+      const comigo = condicionais.filter(p => !comprados.includes(p.id) && !devolvidos.includes(p.id));
       const partes = ['*Nix Glasses: acerto da maleta* 🕶️'];
       if (vendidos.length) {
         partes.push('', `✅ *Ficou com (${vendidos.length}):*`, ...vendidos.map(linha), '', `*Total a pagar: ${moeda(soma(vendidos))}*`);
+      } else {
+        partes.push('', 'Nenhuma peça ficou com você desta vez, sem valor a pagar.');
       }
       if (voltaram.length) {
         partes.push('', `↩️ *Devolvidos (${voltaram.length}):*`, ...voltaram.map(linha));
+      }
+      if (comigo.length) {
+        partes.push('', `⏳ *Ainda com você (${comigo.length}):*`, ...comigo.map(linha));
       }
       partes.push('', 'Agradecemos a preferência! 💛');
       return partes.join('\n');
     }
 
-    const idsMarcados = nome => Array.from(document.querySelectorAll(`input[name="${nome}"]:checked`)).map(cb => parseInt(cb.value));
+    const idsMarcados = marca => [...marcacoesAcerto].filter(([, m]) => m === marca).map(([id]) => id);
+
+    function abrirResumoMaleta(titulo, texto) {
+      document.getElementById('resumoMaletaTitulo').textContent = titulo;
+      document.getElementById('resumoMaletaTexto').value = texto;
+      abrirModalSimples('modalResumoMaleta');
+    }
 
     document.getElementById('btnResumoMaleta').addEventListener('click', () => {
       const condicionais = todosProdutos.filter(p => p.status === 'CONDICIONAL');
       if (!condicionais.length) return mostrarToast('Nenhum item em condicional', 'error');
-      const comprados = idsMarcados('comprados');
-      const devolvidos = idsMarcados('devolvidos');
-      document.getElementById('resumoMaletaTitulo').textContent = comprados.length || devolvidos.length ? 'Resumo do acerto' : 'Resumo da maleta';
-      document.getElementById('resumoMaletaTexto').value = montarResumoMaleta(condicionais, comprados, devolvidos);
-      abrirModalSimples('modalResumoMaleta');
+      const comprados = idsMarcados('comprado');
+      const devolvidos = idsMarcados('devolvido');
+      abrirResumoMaleta(comprados.length || devolvidos.length ? 'Fechamento do acerto' : 'Conferência da maleta',
+        montarResumoMaleta(condicionais, comprados, devolvidos));
     });
 
     document.getElementById('btnCopiarResumo').addEventListener('click', async () => {
@@ -1788,38 +1896,77 @@
       window.open(`https://wa.me/${tel}?text=${texto}`, '_blank', 'noopener');
     });
 
-    // Baixa rápida: marca todos de um lado (e desmarca do outro)
+    // Baixa rápida: marca todas as peças em condicional de um lado (e tira do outro)
     function marcarTodos(nome) {
-      const outro = nome === 'comprados' ? 'devolvidos' : 'comprados';
-      document.querySelectorAll(`input[name="${nome}"]`).forEach(cb => { cb.checked = true; });
-      document.querySelectorAll(`input[name="${outro}"]`).forEach(cb => { cb.checked = false; });
+      const marca = nome === 'comprados' ? 'comprado' : 'devolvido';
+      const condicionais = todosProdutos.filter(p => p.status === 'CONDICIONAL');
+      if (!condicionais.length) return mostrarToast('Nenhum item em condicional', 'error');
+      condicionais.forEach(p => marcacoesAcerto.set(Number(p.id), marca));
+      atualizarAcerto();
+      mostrarToast(`${condicionais.length} peça(s) marcada(s) como ${nome === 'comprados' ? 'vendidas' : 'devolvidas'}`);
     }
     document.getElementById('btnTodosVendidos').addEventListener('click', () => marcarTodos('comprados'));
     document.getElementById('btnTodosDevolvidos').addEventListener('click', () => marcarTodos('devolvidos'));
+    document.getElementById('btnLimparAcerto').addEventListener('click', () => {
+      marcacoesAcerto.clear();
+      atualizarAcerto();
+    });
+
+    function estadoSalvandoAcerto(ativo) {
+      salvandoAcerto = ativo;
+      btnSalvarAcerto.disabled = ativo;
+      document.getElementById('iconeSalvarAcerto').classList.toggle('hidden', ativo);
+      document.getElementById('spinnerSalvarAcerto').classList.toggle('hidden', !ativo);
+      document.querySelectorAll('#tab-acerto input, #tab-acerto textarea, #tab-acerto button').forEach(el => {
+        if (el !== btnSalvarAcerto) el.disabled = ativo;
+      });
+      if (ativo) document.getElementById('textoSalvarAcerto').textContent = 'Salvando...';
+      else atualizarPainelAcerto();
+    }
 
     btnSalvarAcerto.addEventListener('click', async () => {
-      const comprados = Array.from(document.querySelectorAll('input[name="comprados"]:checked')).map(cb => parseInt(cb.value));
-      const devolvidos = Array.from(document.querySelectorAll('input[name="devolvidos"]:checked')).map(cb => parseInt(cb.value));
+      if (salvandoAcerto) return;
+      const comprados = idsMarcados('comprado');
+      const devolvidos = idsMarcados('devolvido');
 
       if (comprados.length === 0 && devolvidos.length === 0) {
         mostrarToast('Selecione pelo menos um item', 'error');
         return;
       }
 
+      const condicionais = todosProdutos.filter(p => p.status === 'CONDICIONAL');
+      const obs = document.getElementById('obsAcerto');
+      estadoSalvandoAcerto(true);
       try {
         const res = await fetchAdmin('/api/admin/acerto', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ comprados, devolvidos })
+          body: JSON.stringify({ comprados, devolvidos, observacoes: obs.value })
         });
         const data = await res.json().catch(() => ({}));
         if (!res.ok) throw new Error(data.error || 'Erro ao salvar acerto');
-        const ignorados = (data.ignorados || []).length;
-        mostrarToast(ignorados ? `Acerto salvo (${ignorados} item(ns) já não estavam em condicional)` : 'Acerto salvo com sucesso!');
-        carregarProdutos();
+
+        // Fechamento com o que o servidor confirmou, para enviar depois de salvar
+        const vendidos = (data.comprados || []).map(Number);
+        const voltaram = (data.devolvidos || []).map(Number);
+        const ignoradosIds = (data.ignorados || []).map(Number);
+        const resumo = montarResumoMaleta(condicionais.filter(p => !ignoradosIds.includes(Number(p.id))), vendidos, voltaram);
+        const ignorados = ignoradosIds.length;
+        const partes = [];
+        if (vendidos.length) partes.push(`${vendidos.length} vendido(s) (${formatarMoeda(data.total_vendido)})`);
+        if (voltaram.length) partes.push(`${voltaram.length} de volta ao estoque`);
+        mostrarToast(`Acerto salvo: ${partes.join(', ')}.${ignorados ? ` ${ignorados} item(ns) já não estavam em condicional.` : ''}`, 'success',
+          { texto: 'Enviar resumo', onClick: () => abrirResumoMaleta('Fechamento do acerto', resumo) });
+
+        marcacoesAcerto.clear();
+        obs.value = '';
+        document.getElementById('resumoMaletaTelefone').value = '';
+        await carregarProdutos();
       } catch (err) {
         console.error(err);
         mostrarToast(err.message, 'error');
+      } finally {
+        estadoSalvandoAcerto(false);
       }
     });
 

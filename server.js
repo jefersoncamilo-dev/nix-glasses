@@ -1159,14 +1159,16 @@ async function startServer() {
       // Só produtos em CONDICIONAL participam do acerto: evita que um produto
       // já vendido (ESGOTADO) volte para DISPONIVEL por engano.
       let vendidos = [];
+      let totalCentavos = 0;
       if (comprados.length > 0) {
         const r = await client.query(
           `UPDATE produtos SET status = 'ESGOTADO', updated_at = CURRENT_TIMESTAMP
            WHERE id = ANY($1) AND status = 'CONDICIONAL'
-           RETURNING id`,
+           RETURNING id, preco_venda`,
           [comprados]
         );
         vendidos = r.rows.map((row) => row.id);
+        totalCentavos = r.rows.reduce((t, row) => t + Math.round(Number(row.preco_venda) * 100), 0);
       }
 
       let retornados = [];
@@ -1198,7 +1200,8 @@ async function startServer() {
       );
 
       await client.query('COMMIT');
-      res.json({ sucesso: true, success: true, comprados: vendidos, devolvidos: retornados, ignorados });
+      // total_vendido: soma do preço de venda do que realmente foi vendido (para o resumo do acerto)
+      res.json({ sucesso: true, success: true, comprados: vendidos, devolvidos: retornados, ignorados, total_vendido: totalCentavos / 100 });
     } catch (err) {
       if (client) await client.query('ROLLBACK').catch(() => {});
       console.error(err);

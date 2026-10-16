@@ -19,7 +19,7 @@ function extrairFuncao(nome) {
 }
 
 const funcoes = ['escapeHtml', 'linkSeguro', 'botaoLinkFornecedor', 'variacaoCusto', 'htmlVariacao', 'htmlUltimaCompra',
-  'camposDaImportacao', 'associarFotosPorSku', 'montarResumoMaleta'];
+  'camposDaImportacao', 'associarFotosPorSku', 'montarResumoMaleta', 'calcularAcerto'];
 const ctx = vm.createContext({ Number, String, Math, Map, Set, Object, URL, Intl });
 vm.runInContext(`
   const MAX_FOTOS = 4;
@@ -128,6 +128,37 @@ describe('painel: resumo da maleta para WhatsApp', () => {
   it('só devolvidos: sem total a pagar', () => {
     const t = ctx.montarResumoMaleta(pecas, [], [1]);
     assert.doesNotMatch(t, /Total a pagar/);
+    assert.match(t, /sem valor a pagar/);
     assert.match(t, /Devolvidos \(1\)/);
+  });
+
+  it('acerto parcial lista o que ainda está com a cliente', () => {
+    const t = ctx.montarResumoMaleta(pecas, [1], []);
+    assert.match(t, /Total a pagar: R\$ 199,90/);
+    assert.match(t, /Ainda com você \(2\):\*\n1\. Redondo Preto[\s\S]*2\. Gatinho/);
+    assert.doesNotMatch(ctx.montarResumoMaleta(pecas, [1, 2], [3]), /Ainda com você/);
+  });
+});
+
+describe('painel: placar do acerto', () => {
+  const pecas = [
+    { id: 1, preco_venda: '0.10' },
+    { id: 2, preco_venda: '0.20' },
+    { id: 3, preco_venda: '100.00' },
+    { id: 4, preco_venda: '50.00' },
+  ];
+
+  it('separa comprados, devolvidos e pendentes e soma o total sem erro de centavos', () => {
+    const a = ctx.calcularAcerto(pecas, new Map([[1, 'comprado'], [2, 'comprado'], [3, 'devolvido']]));
+    assert.deepEqual(a.comprados.map(p => p.id), [1, 2]);
+    assert.deepEqual(a.devolvidos.map(p => p.id), [3]);
+    assert.deepEqual(a.pendentes.map(p => p.id), [4]);
+    assert.equal(a.total, 0.3);
+  });
+
+  it('sem marcações, tudo fica pendente e o total é zero', () => {
+    const a = ctx.calcularAcerto(pecas, new Map());
+    assert.equal(a.pendentes.length, 4);
+    assert.equal(a.total, 0);
   });
 });
