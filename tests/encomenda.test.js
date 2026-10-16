@@ -100,7 +100,7 @@ function extrairFuncao(html, nome) {
 }
 
 const FUNCOES = ['escapeHtml', 'fotosDoProduto', 'indiceCircular', 'ehSobEncomenda', 'calcularSinal', 'passaFiltroStatus', 'etiquetaProduto',
-  'itemEhEncomenda', 'resumoMaleta', 'renderizarCatalogo', 'toggleMaleta', 'salvarMaleta', 'atualizarMaletaUI', 'montarTextoWhatsapp'];
+  'nomeCard', 'tagsCard', 'botaoMaletaCard', 'atualizarCardMaleta', 'itemEhEncomenda', 'resumoMaleta', 'renderizarCatalogo', 'toggleMaleta', 'salvarMaleta', 'atualizarMaletaUI', 'montarTextoWhatsapp'];
 
 function elemento() {
   return {
@@ -169,7 +169,8 @@ describe('vitrine: produtos Sob Encomenda', () => {
     assert.match(cards[0], /toggleMaleta\(1\)/);
 
     assert.match(cards[1], /bg-blue-100 text-blue-700">SOB ENCOMENDA</);
-    assert.match(cards[1], /50% sinal \+ 50% na entrega/);
+    assert.match(cards[1], /data-selo-sinal[^>]*>Sinal: R\$ 175,13</);
+    assert.doesNotMatch(cards[1], /50% sinal \+ 50% na entrega/);
     assert.match(cards[1], /toggleMaleta\(3\)/);
     assert.match(cards[1], /bg-blue-600/);
     assert.doesNotMatch(cards[1], /encomendarProduto/);

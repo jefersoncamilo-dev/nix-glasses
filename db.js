@@ -77,6 +77,12 @@ async function initTables() {
       ADD COLUMN IF NOT EXISTS tipo VARCHAR(100) NOT NULL DEFAULT ''
     `);
 
+    // Nome curto mostrado no card da vitrine (ex.: "Hexagonal Dubai"); vazio = usa o nome.
+    await client.query(`
+      ALTER TABLE produtos
+      ADD COLUMN IF NOT EXISTS nome_curto VARCHAR(80) NOT NULL DEFAULT ''
+    `);
+
     // Histórico de compras/reposições de cada produto (custo unitário pago ao fornecedor).
     // origem: CADASTRO (custo informado ao cadastrar) ou REPOSICAO (registrada no painel).
     await client.query(`
