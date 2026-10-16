@@ -135,7 +135,7 @@
       <!-- Atalhos: cada um leva ao catálogo já com o filtro escolhido -->
       <div class="flex flex-col sm:flex-row items-stretch sm:items-center justify-center gap-3 max-w-md sm:max-w-none mx-auto">
         <a href="#catalogo" data-atalho-filtro="" aria-pressed="true" class="btn btn-lg btn-contorno-escuro atalho-topo">Coleção <span class="font-normal opacity-70">· todos os modelos</span></a>
-        <a href="#catalogo" data-atalho-filtro="DISPONIVEL" aria-pressed="false" class="btn btn-lg btn-contorno-escuro atalho-topo">Disponíveis <span class="font-normal opacity-70">· pronta entrega</span></a>
+        <a href="#catalogo" data-atalho-filtro="DISPONIVEL" aria-pressed="false" class="btn btn-lg btn-contorno-escuro atalho-topo">Pronta Entrega <span class="font-normal opacity-70">· prove em casa</span></a>
         <a href="#catalogo" data-atalho-filtro="SOB_ENCOMENDA" aria-pressed="false" class="btn btn-lg btn-contorno-escuro atalho-topo">Sob Encomenda <span class="font-normal opacity-70">· encontre seu estilo</span></a>
       </div>
       <!-- Como funciona -->
@@ -175,10 +175,10 @@
         </div>
         <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-4">
           <input type="hidden" id="filtroStatus" value="">
-          <div id="filtroPilulas" class="grid grid-cols-3 gap-1 p-1 rounded-full bg-gray-100" role="group" aria-label="Mostrar">
-            <button type="button" data-filtro="" aria-pressed="true" class="filtro-pilula px-3 py-2 rounded-full text-xs sm:text-sm font-medium text-gray-700 border border-transparent">Coleção <span data-contagem="" class="opacity-60"></span></button>
-            <button type="button" data-filtro="DISPONIVEL" aria-pressed="false" class="filtro-pilula px-3 py-2 rounded-full text-xs sm:text-sm font-medium text-gray-700 border border-transparent">Disponíveis <span data-contagem="DISPONIVEL" class="opacity-60"></span></button>
-            <button type="button" data-filtro="SOB_ENCOMENDA" aria-pressed="false" class="filtro-pilula px-2 py-2 rounded-full text-xs sm:text-sm font-medium text-gray-700 border border-transparent whitespace-nowrap"><span class="sm:hidden">Encomenda</span><span class="hidden sm:inline">Sob Encomenda</span> <span data-contagem="SOB_ENCOMENDA" class="opacity-60"></span></button>
+          <div id="filtroPilulas" class="flex gap-1 p-1 rounded-full bg-gray-100" role="group" aria-label="Mostrar">
+            <button type="button" data-filtro="" aria-pressed="true" class="filtro-pilula flex-auto px-3 py-2 rounded-full text-xs sm:text-sm font-medium text-gray-700 border border-transparent">Coleção <span data-contagem="" class="opacity-60"></span></button>
+            <button type="button" data-filtro="DISPONIVEL" aria-pressed="false" class="filtro-pilula flex-auto px-2 py-2 rounded-full text-xs sm:text-sm font-medium text-gray-700 border border-transparent whitespace-nowrap">Pronta Entrega <span data-contagem="DISPONIVEL" class="opacity-60"></span></button>
+            <button type="button" data-filtro="SOB_ENCOMENDA" aria-pressed="false" class="filtro-pilula flex-auto px-2 py-2 rounded-full text-xs sm:text-sm font-medium text-gray-700 border border-transparent whitespace-nowrap"><span class="sm:hidden">Encomenda</span><span class="hidden sm:inline">Sob Encomenda</span> <span data-contagem="SOB_ENCOMENDA" class="opacity-60"></span></button>
           </div>
           <select id="filtroFormato" class="w-full sm:w-auto px-3 sm:px-4 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500">
             <option value="">Todos os Formatos</option>
@@ -576,7 +576,7 @@
       return Math.round(Number(preco) * 50) / 100;
     }
 
-    // "Disponíveis" mostra só pronta entrega; "Sob Encomenda" mostra só encomendas
+    // "Pronta Entrega" mostra só pronta entrega; "Sob Encomenda" mostra só encomendas
     function passaFiltroStatus(p, filtro) {
       if (!filtro) return true;
       if (filtro === 'SOB_ENCOMENDA') return ehSobEncomenda(p);

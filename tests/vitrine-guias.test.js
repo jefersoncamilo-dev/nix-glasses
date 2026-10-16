@@ -1,4 +1,4 @@
-// Vitrine: atalhos Coleção / Disponíveis / Sob Encomenda, contagem das pílulas
+// Vitrine: atalhos Coleção / Pronta Entrega / Sob Encomenda, contagem das pílulas
 // de filtro e o texto de orientação acima dos cards.
 const { describe, it } = require('node:test');
 const assert = require('node:assert/strict');
@@ -30,15 +30,17 @@ const produtos = [
 ];
 
 describe('vitrine: atalhos e pílulas de filtro', () => {
-  it('o topo tem Coleção, Disponíveis e Sob Encomenda no lugar de "Ver Coleção"', () => {
+  it('o topo tem Coleção, Pronta Entrega e Sob Encomenda no lugar de "Ver Coleção"', () => {
     assert.ok(!html.includes('>Ver Coleção<'));
+    assert.match(html, /data-atalho-filtro="DISPONIVEL"[^>]*>Pronta Entrega </);
+    assert.match(html, /data-atalho-filtro="SOB_ENCOMENDA"[^>]*>Sob Encomenda </);
     for (const filtro of ['""', '"DISPONIVEL"', '"SOB_ENCOMENDA"']) {
       assert.match(html, new RegExp(`data-atalho-filtro=${filtro}`));
       assert.match(html, new RegExp(`data-filtro=${filtro}`));
     }
   });
 
-  it('conta todos na Coleção, só pronta entrega livre em Disponíveis e só encomendas em Sob Encomenda', () => {
+  it('conta todos na Coleção, só pronta entrega livre em Pronta Entrega e só encomendas em Sob Encomenda', () => {
     const c = ctx.contagemFiltros(produtos);
     assert.equal(c[''], 4);
     assert.equal(c.DISPONIVEL, 2);
