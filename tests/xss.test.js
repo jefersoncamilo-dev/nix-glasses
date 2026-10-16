@@ -207,18 +207,25 @@ describe('painel (admin/index.html) escapa clientes e pedidos', () => {
 
   it('nos pedidos', () => {
     const lista = elemento();
-    const ctx = carregar('admin/index.html', ['escapeHtml', 'renderizarPedidos'], {
+    const ctx = carregar('admin/index.html', ['escapeHtml', 'intencaoItemPedido', 'etiquetaIntencao', 'badgeStatusPedido', 'htmlPedido', 'renderizarPedidos'], {
       ...globais,
+      STATUS_PEDIDO: [['NOVO', 'Novo', '']],
       document: { getElementById: () => lista },
     });
     ctx.renderizarPedidos([{
       id: 3, nome: PAYLOAD, telefone: PAYLOAD, email: PAYLOAD, endereco: PAYLOAD, created_at: PAYLOAD, total: '200.00', sinal: '50.00',
-      itens: [{ nome: PAYLOAD, codigo_sku: PAYLOAD, preco: 100, encomenda: true }, { nome: PAYLOAD, codigo_sku: PAYLOAD, preco: 100, encomenda: false }],
+      status: PAYLOAD,
+      itens: [{ nome: PAYLOAD, codigo_sku: PAYLOAD, preco: 100, encomenda: true }, { nome: PAYLOAD, codigo_sku: PAYLOAD, preco: 100, encomenda: false },
+        { nome: PAYLOAD, codigo_sku: PAYLOAD, preco: 100, encomenda: false, intencao: 'COMPRA' }],
+      extras: [{ acessorio_id: 1, nome: PAYLOAD, preco: 10, quantidade: 1 }],
+    }, {
+      id: 4, nome: 'Ana', status: 'NOVO', total: '100.00', itens: [{ nome: 'A', codigo_sku: 'A', preco: 100, encomenda: false }],
     }]);
     semInjecao(lista.innerHTML);
-    assert.match(lista.innerHTML, /data-enviar-maleta="3"/);
+    assert.match(lista.innerHTML, /data-enviar-maleta="4"/);
     assert.match(lista.innerHTML, /SOB ENCOMENDA/);
-    assert.match(lista.innerHTML, /PRONTA ENTREGA/);
+    assert.match(lista.innerHTML, /MALETA/);
+    assert.match(lista.innerHTML, /COMPRA DIRETA/);
   });
 });
 
