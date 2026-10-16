@@ -397,6 +397,7 @@
                   <th class="px-4 sm:px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Pedidos</th>
                   <th class="px-4 sm:px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Total</th>
                   <th class="px-4 sm:px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Último pedido</th>
+                  <th class="px-4 sm:px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Pendências</th>
                   <th class="px-4 sm:px-6 py-3"></th>
                 </tr>
               </thead>
@@ -408,6 +409,8 @@
           <h4 id="tituloPedidos" class="text-lg font-semibold text-gray-900 mb-4"></h4>
           <div id="listaPedidos" class="space-y-4"></div>
         </div>
+        <!-- Perfil 360 da cliente -->
+        <div id="perfilCliente" class="hidden"></div>
       </div>
 
       <!-- Aba Métricas -->
@@ -454,6 +457,19 @@
               </tbody>
             </table>
           </div>
+        </div>
+        <div class="bg-white rounded-xl border border-gray-200 p-6 mt-6">
+          <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-1">
+            <h4 class="text-lg font-semibold text-gray-900">Conversão das Maletas</h4>
+            <select id="periodoMaletas" aria-label="Período" class="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-orange-500">
+              <option value="30">Últimos 30 dias</option>
+              <option value="90" selected>Últimos 90 dias</option>
+              <option value="365">Último ano</option>
+              <option value="">Tudo</option>
+            </select>
+          </div>
+          <p class="text-sm text-gray-500 mb-4">Das peças enviadas nas maletas, quantas a cliente comprou. A conversão conta só as peças já acertadas; as que ainda estão com a cliente aparecem à parte.</p>
+          <div id="relatorioMaletas"></div>
         </div>
         <div class="bg-white rounded-xl border border-gray-200 p-6 mt-6">
           <h4 class="text-lg font-semibold text-gray-900 mb-1">Reposição por Fornecedor</h4>
@@ -908,7 +924,7 @@
         if (target === 'pedidos') carregarPedidosGeral();
         if (target === 'encomendas') carregarEncomendas();
         if (target === 'acessorios') carregarAcessorios();
-        if (target === 'metricas') { carregarMetricas(); carregarResumoFornecedores(); }
+        if (target === 'metricas') { carregarMetricas(); carregarResumoFornecedores(); carregarRelatorioMaletas(); }
         if (target === 'config') carregarWhatsApp();
         sidebar.classList.remove('open');
         sidebarOverlay.classList.add('hidden');
@@ -2276,7 +2292,7 @@
       }
     }
 
-    btnAtualizarMetricas.addEventListener('click', () => { carregarMetricas(); carregarResumoFornecedores(); });
+    btnAtualizarMetricas.addEventListener('click', () => { carregarMetricas(); carregarResumoFornecedores(); carregarRelatorioMaletas(); });
 
     // Clientes e pedidos (pedidos gravados no checkout da vitrine)
     let todosClientes = [];
@@ -2303,6 +2319,17 @@
       return lista.filter(c => String(c.nome || '').toLowerCase().includes(termo) || String(c.email || '').toLowerCase().includes(termo));
     }
 
+    // Etiquetas de pendência na lista de clientes
+    function badgesPendencias(c) {
+      const itens = [
+        [Number(c.maletas_na_rua) || 0, 'maleta(s) com ela', 'bg-yellow-100 text-yellow-800'],
+        [Number(c.pedidos_abertos) || 0, 'pedido(s) em aberto', 'bg-orange-100 text-orange-700'],
+        [Number(c.encomendas_abertas) || 0, 'encomenda(s)', 'bg-blue-100 text-blue-700'],
+      ].filter(([n]) => n > 0);
+      return itens.map(([n, texto, cor]) => `<span class="inline-block mr-1 mb-1 px-2 py-0.5 text-xs font-medium rounded-full ${cor}">${n} ${texto}</span>`).join('') ||
+        '<span class="text-sm text-gray-400">Nenhuma</span>';
+    }
+
     function renderizarClientes(lista) {
       const tbody = document.getElementById('tabelaClientes');
       tbody.innerHTML = lista.map(c => `
@@ -2315,11 +2342,12 @@
           <td class="px-4 sm:px-6 py-4 text-gray-900 font-medium">${Number(c.pedidos) || 0}</td>
           <td class="px-4 sm:px-6 py-4 text-gray-900">${formatarMoeda(Number(c.total_pedidos))}</td>
           <td class="px-4 sm:px-6 py-4 text-sm text-gray-500">${escapeHtml(formatarData(c.ultimo_pedido))}</td>
+          <td class="px-4 sm:px-6 py-4">${badgesPendencias(c)}</td>
           <td class="px-4 sm:px-6 py-4 text-right">
-            <button data-cliente="${Number(c.id)}" class="ver-pedidos text-orange-600 hover:text-orange-700 text-sm font-medium">Ver pedidos</button>
+            <button data-cliente="${Number(c.id)}" class="ver-pedidos text-orange-600 hover:text-orange-700 text-sm font-medium">Ver perfil</button>
           </td>
         </tr>
-      `).join('') || '<tr><td colspan="6" class="px-6 py-8 text-center text-gray-500">Nenhum cliente cadastrado ainda</td></tr>';
+      `).join('') || '<tr><td colspan="7" class="px-6 py-8 text-center text-gray-500">Nenhum cliente cadastrado ainda</td></tr>';
     }
 
     // ---------- Pedidos (vitrine -> NOVO -> em andamento -> entregue) ----------
@@ -2367,6 +2395,7 @@
       const encomendas = itens.filter(i => intencaoItemPedido(i) === 'ENCOMENDA');
       const temFechamento = p.total_final !== null && p.total_final !== undefined;
       const encomendasPedido = Array.isArray(p.encomendas) ? p.encomendas : [];
+      const jaDevolvidos = (Array.isArray(p.ja_devolvidos) ? p.ja_devolvidos : []).map(Number);
       const nota = (i) => {
         const pid = Number(i.produto_id);
         const intencao = intencaoItemPedido(i);
@@ -2376,11 +2405,15 @@
         }
         if (intencao === 'CONDICIONAL' && vendidos.includes(pid)) return '<span class="block text-xs text-green-700">vendida no acerto</span>';
         const tirada = intencao === 'COMPRA' && removidos.includes(pid) ? '<span class="block text-xs text-red-600">tirada do pedido</span>' : '';
+        const recusada = intencao === 'CONDICIONAL' && aberto && jaDevolvidos.includes(pid) && !devolvidos.includes(pid)
+          ? '<span class="block text-xs font-medium text-red-600">Ela já devolveu este modelo numa maleta anterior</span>' : '';
         // Esgotada, sob medida ou a cliente quer outra cor: vira encomenda
-        const encomendar = aberto
+        // Peça da maleta que está com a cliente só vira encomenda depois do acerto
+        const naMaleta = intencao === 'CONDICIONAL' && p.maleta_enviada_em && !devolvidos.includes(pid);
+        const encomendar = aberto && !naMaleta
           ? `<button type="button" data-encomendar-item="${id}" data-produto="${pid}" class="block text-xs font-medium text-blue-700 hover:underline">Encomendar</button>` : '';
         if (intencao === 'CONDICIONAL' && devolvidos.includes(pid)) return '<span class="block text-xs text-gray-500">devolvida</span>' + encomendar;
-        return tirada + encomendar;
+        return recusada + tirada + encomendar;
       };
       const opcoesStatus = STATUS_PEDIDO.filter(s => s[0] !== 'ENTREGUE')
         .map(s => `<option value="${s[0]}" ${s[0] === status ? 'selected' : ''}>${s[1]}</option>`).join('');
@@ -2488,6 +2521,8 @@
         const res = await fetchAdmin('/api/admin/pedidos?cliente=' + encodeURIComponent(filtro));
         if (!res.ok) throw new Error('Erro ao carregar pedidos');
         pedidosAbertos = { filtro, titulo };
+        perfilAtual = null;
+        document.getElementById('perfilCliente').classList.add('hidden');
         document.getElementById('tituloPedidos').textContent = titulo;
         pedidosDoCliente = await res.json();
         renderizarPedidos(pedidosDoCliente);
@@ -2504,18 +2539,18 @@
     async function recarregarPedidos() {
       await carregarPedidosGeral();
       if (pedidosAbertos) await carregarPedidos(pedidosAbertos.filtro, pedidosAbertos.titulo, false);
+      if (perfilAtual) await carregarPerfil(perfilAtual.cliente.id, false);
     }
 
     function acharPedido(id) {
-      return todosPedidos.find(p => Number(p.id) === id) || pedidosDoCliente.find(p => Number(p.id) === id) || null;
+      return todosPedidos.find(p => Number(p.id) === id) || pedidosDoCliente.find(p => Number(p.id) === id) ||
+        (perfilAtual ? perfilAtual.pedidos.find(p => Number(p.id) === id) : null) || null;
     }
 
     document.getElementById('tabelaClientes').addEventListener('click', (e) => {
       const btn = e.target.closest('.ver-pedidos');
       if (!btn) return;
-      const id = Number(btn.dataset.cliente);
-      const c = todosClientes.find(x => x.id === id);
-      carregarPedidos(String(id), 'Pedidos de ' + (c ? (c.nome || c.email) : 'cliente'));
+      carregarPerfil(Number(btn.dataset.cliente));
     });
     function abrirAcertoDoPedido(id) {
       maletaAcerto = String(Number(id));
@@ -2965,6 +3000,7 @@
         fecharModalSimples('modalEncomenda');
         mostrarToast(id ? 'Encomenda salva' : 'Encomenda criada');
         await carregarEncomendas();
+        if (perfilAtual) await carregarPerfil(perfilAtual.cliente.id, false);
       } catch (err) {
         mostrarToast(err.message, 'error');
       }
@@ -2976,9 +3012,10 @@
       mostrarEncomendas();
     });
     document.getElementById('buscaEncomendas').addEventListener('input', mostrarEncomendas);
-    document.getElementById('listaEncomendas').addEventListener('click', async (ev) => {
+    async function aoClicarEncomenda(ev) {
       const editar = ev.target.closest('[data-editar-encomenda]');
-      const acharEnc = (id) => todasEncomendas.find(x => Number(x.id) === Number(id));
+      const acharEnc = (id) => todasEncomendas.find(x => Number(x.id) === Number(id)) ||
+        (perfilAtual ? perfilAtual.encomendas.find(x => Number(x.id) === Number(id)) : undefined);
       if (editar) return abrirModalEncomenda(acharEnc(editar.dataset.editarEncomenda));
       const avisar = ev.target.closest('[data-avisar-encomenda]');
       if (avisar) {
@@ -2997,7 +3034,189 @@
         mostrarToast(err.message, 'error');
       }
       await carregarEncomendas();
+      if (perfilAtual) await carregarPerfil(perfilAtual.cliente.id, false);
+    }
+    document.getElementById('listaEncomendas').addEventListener('click', aoClicarEncomenda);
+
+    // ---------- Perfil 360 da cliente ----------
+    let perfilAtual = null;
+    let abaPerfil = 'pedidos';
+
+    function rotuloResultadoProva(resultado) {
+      if (resultado === 'VENDIDA') return '<span class="px-2 py-0.5 text-xs font-semibold rounded-full bg-green-100 text-green-700">Comprou</span>';
+      if (resultado === 'DEVOLVIDA') return '<span class="px-2 py-0.5 text-xs font-semibold rounded-full bg-red-100 text-red-700">Devolveu</span>';
+      return '<span class="px-2 py-0.5 text-xs font-semibold rounded-full bg-yellow-100 text-yellow-800">Com ela</span>';
+    }
+
+    // Histórico de provas: o que ela já recebeu em maletas, o que comprou e o que devolveu
+    function htmlProvas(provas) {
+      if (!provas.length) return '<p class="text-gray-500">Ela ainda não recebeu nenhuma maleta.</p>';
+      const recusados = [];
+      for (const p of provas) {
+        if (p.resultado === 'DEVOLVIDA' && !recusados.some(r => r.produto_id === p.produto_id)) recusados.push(p);
+      }
+      return `
+        ${recusados.length ? `<div class="mb-4 p-3 rounded-lg bg-red-50 border border-red-200">
+          <p class="text-sm font-semibold text-red-800 mb-2">Modelos que ela devolveu (evite reenviar)</p>
+          <div class="flex flex-wrap gap-2">${recusados.map(r => `<span class="px-2 py-1 text-xs rounded-lg bg-white border border-red-200 text-red-800">${escapeHtml(r.nome)} <span class="text-red-400">${escapeHtml(r.codigo_sku)}</span></span>`).join('')}</div>
+        </div>` : ''}
+        <div class="overflow-x-auto">
+          <table class="w-full min-w-[520px] text-sm">
+            <thead class="bg-gray-50 border-b border-gray-200"><tr>
+              <th class="px-3 py-2 text-left text-xs font-semibold text-gray-500 uppercase">Peça</th>
+              <th class="px-3 py-2 text-left text-xs font-semibold text-gray-500 uppercase">Resultado</th>
+              <th class="px-3 py-2 text-left text-xs font-semibold text-gray-500 uppercase">Maleta</th>
+              <th class="px-3 py-2 text-right text-xs font-semibold text-gray-500 uppercase">Preço</th>
+            </tr></thead>
+            <tbody class="divide-y divide-gray-100">${provas.map(p => `
+              <tr>
+                <td class="px-3 py-2"><div class="flex items-center gap-2">
+                  ${p.imagem_url ? `<img src="${escapeHtml(p.imagem_url)}" alt="" class="w-9 h-9 object-cover rounded" onerror="imgFallback(this)">` : '<div class="w-9 h-9 bg-gray-100 rounded"></div>'}
+                  <span>${escapeHtml(p.nome)} <span class="text-gray-400">${escapeHtml(p.codigo_sku)}</span></span></div></td>
+                <td class="px-3 py-2">${rotuloResultadoProva(p.resultado)}</td>
+                <td class="px-3 py-2 text-gray-500">#${Number(p.pedido_id)} · ${escapeHtml(formatarData(p.data))}</td>
+                <td class="px-3 py-2 text-right">${formatarMoeda(Number(p.preco))}</td>
+              </tr>`).join('')}</tbody>
+          </table>
+        </div>`;
+    }
+
+    function htmlAcertos(acertos) {
+      const nomes = (lista) => (Array.isArray(lista) ? lista : []).map(p => escapeHtml(p.nome)).join(', ') || '-';
+      return acertos.map(a => `
+        <div class="bg-white rounded-xl border border-gray-200 p-4">
+          <p class="font-medium text-gray-900">Acerto #${Number(a.id)} <span class="font-normal text-gray-500">• pedido #${Number(a.pedido_id)} • ${escapeHtml(formatarData(a.created_at))}</span></p>
+          <p class="text-sm text-green-700 mt-1">Comprou: ${nomes(a.comprados)}</p>
+          <p class="text-sm text-gray-600">Devolveu: ${nomes(a.devolvidos)}</p>
+          ${a.observacoes ? `<p class="text-xs text-gray-500 mt-1">Obs.: ${escapeHtml(a.observacoes)}</p>` : ''}
+        </div>`).join('') || '<p class="text-gray-500">Nenhum acerto ainda.</p>';
+    }
+
+    function renderizarPerfil(perfil, aba) {
+      const c = perfil.cliente;
+      const r = perfil.resumo;
+      const abas = [
+        ['pedidos', `Pedidos (${perfil.pedidos.length})`],
+        ['encomendas', `Encomendas (${perfil.encomendas.length})`],
+        ['provas', `Maletas e provas (${perfil.provas.length})`],
+        ['acertos', `Acertos (${perfil.acertos.length})`],
+      ];
+      const conteudo = aba === 'encomendas' ? `<div data-lista-encomendas class="grid lg:grid-cols-2 gap-4">${perfil.encomendas.map(htmlEncomenda).join('') || '<p class="text-gray-500">Nenhuma encomenda.</p>'}</div>`
+        : aba === 'provas' ? htmlProvas(perfil.provas)
+        : aba === 'acertos' ? `<div class="space-y-3">${htmlAcertos(perfil.acertos)}</div>`
+        : `<div data-lista-pedidos class="space-y-4">${perfil.pedidos.map(htmlPedido).join('') || '<p class="text-gray-500">Nenhum pedido.</p>'}</div>`;
+      document.getElementById('perfilCliente').innerHTML = `
+        <div class="bg-white rounded-xl border border-gray-200 p-4 sm:p-6 mb-4">
+          <div class="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
+            <div>
+              <h4 class="text-xl font-bold text-gray-900">${escapeHtml(c.nome || 'Sem nome')}</h4>
+              <p class="text-sm text-gray-500">${escapeHtml(c.email)} • cliente desde ${escapeHtml(formatarData(c.created_at))}</p>
+            </div>
+            <button type="button" data-fechar-perfil class="self-start px-3 py-1.5 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 text-sm font-medium">Fechar perfil</button>
+          </div>
+          <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 mt-4">
+            <div class="rounded-lg bg-gray-50 p-3"><p class="text-xs text-gray-500">Pedidos</p><p class="text-xl font-bold text-gray-900">${Number(r.pedidos) || 0}</p></div>
+            <div class="rounded-lg bg-gray-50 p-3"><p class="text-xs text-gray-500">Comprado (entregues)</p><p class="text-xl font-bold text-gray-900">${formatarMoeda(Number(r.total_comprado))}</p></div>
+            <div class="rounded-lg bg-gray-50 p-3"><p class="text-xs text-gray-500">Peças provadas</p><p class="text-xl font-bold text-gray-900">${Number(r.enviadas) || 0} <span class="text-sm font-normal text-gray-500">${Number(r.vendidas) || 0} compradas · ${Number(r.devolvidas) || 0} devolvidas</span></p></div>
+            <div class="rounded-lg bg-gray-50 p-3"><p class="text-xs text-gray-500">Conversão nas maletas</p><p class="text-xl font-bold text-gray-900">${r.taxa === null || r.taxa === undefined ? '-' : `${Number(r.taxa).toLocaleString('pt-BR')}%`}</p></div>
+          </div>
+          ${perfil.pendencias.length ? `<div class="mt-4 space-y-2">${perfil.pendencias.map(p => `
+            <p class="text-sm px-3 py-2 rounded-lg ${p.tipo === 'MALETA' ? 'bg-yellow-50 text-yellow-900 border border-yellow-200' : p.tipo === 'PEDIDO' ? 'bg-orange-50 text-orange-900 border border-orange-200' : 'bg-blue-50 text-blue-900 border border-blue-200'}">⚠ ${escapeHtml(p.texto)}</p>`).join('')}</div>`
+            : '<p class="mt-4 text-sm text-green-700">Nenhuma pendência com esta cliente.</p>'}
+        </div>
+        <div class="flex flex-wrap gap-2 mb-4" role="tablist">${abas.map(([valor, rotulo]) => `
+          <button type="button" role="tab" data-aba-perfil="${valor}" aria-selected="${valor === aba}" class="px-3 py-1.5 rounded-full text-sm font-medium border ${valor === aba ? 'bg-orange-500 text-white border-orange-500' : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'}">${escapeHtml(rotulo)}</button>`).join('')}</div>
+        ${conteudo}`;
+    }
+
+    async function carregarPerfil(id, rolar = true) {
+      try {
+        const res = await fetchAdmin(`/api/admin/clientes/${Number(id)}/perfil`);
+        if (!res.ok) throw new Error('Erro ao carregar o perfil');
+        if (!perfilAtual || perfilAtual.cliente.id !== Number(id)) abaPerfil = 'pedidos';
+        perfilAtual = await res.json();
+        pedidosAbertos = null;
+        document.getElementById('painelPedidos').classList.add('hidden');
+        renderizarPerfil(perfilAtual, abaPerfil);
+        const painel = document.getElementById('perfilCliente');
+        painel.classList.remove('hidden');
+        if (rolar) painel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      } catch (err) {
+        console.error(err);
+        mostrarToast('Erro ao carregar o perfil da cliente', 'error');
+      }
+    }
+
+    const painelPerfil = document.getElementById('perfilCliente');
+    painelPerfil.addEventListener('click', (e) => {
+      const aba = e.target.closest('[data-aba-perfil]');
+      if (aba && perfilAtual) {
+        abaPerfil = aba.dataset.abaPerfil;
+        return renderizarPerfil(perfilAtual, abaPerfil);
+      }
+      if (e.target.closest('[data-fechar-perfil]')) {
+        perfilAtual = null;
+        painelPerfil.classList.add('hidden');
+        return;
+      }
+      if (e.target.closest('[data-lista-encomendas]')) return aoClicarEncomenda(e);
+      if (e.target.closest('[data-lista-pedidos]')) return aoClicarPedido(e);
     });
+    painelPerfil.addEventListener('change', aoMudarSelectStatus);
+
+    // ---------- Relatório de conversão das maletas ----------
+    function htmlRelatorioMaletas(r) {
+      const t = r.total;
+      const pct = (v) => (v === null || v === undefined ? '-' : `${Number(v).toLocaleString('pt-BR')}%`);
+      const avulsas = r.sem_pedido && r.sem_pedido.acertos ? `<p class="text-xs text-gray-500 mt-3">Acertos sem pedido no período: ${Number(r.sem_pedido.vendidas)} vendida(s) e ${Number(r.sem_pedido.devolvidas)} devolvida(s) (fora da conta acima).</p>` : '';
+      return `
+        <div class="grid grid-cols-2 lg:grid-cols-5 gap-3 mb-4">
+          <div class="rounded-lg bg-gray-50 p-3"><p class="text-xs text-gray-500">Maletas</p><p class="text-xl font-bold text-gray-900">${r.maletas.length}</p></div>
+          <div class="rounded-lg bg-gray-50 p-3"><p class="text-xs text-gray-500">Peças enviadas</p><p class="text-xl font-bold text-gray-900">${Number(t.enviadas)}</p></div>
+          <div class="rounded-lg bg-green-50 p-3"><p class="text-xs text-green-700">Vendidas</p><p class="text-xl font-bold text-green-700">${Number(t.vendidas)} <span class="text-sm font-normal">${formatarMoeda(Number(t.valor_vendido))}</span></p></div>
+          <div class="rounded-lg bg-orange-50 p-3"><p class="text-xs text-orange-700">Devolvidas · com clientes</p><p class="text-xl font-bold text-orange-700">${Number(t.devolvidas)} · ${Number(t.com_cliente)}</p></div>
+          <div class="rounded-lg bg-gray-900 p-3"><p class="text-xs text-gray-300">Conversão</p><p class="text-xl font-bold text-white">${pct(t.taxa)}</p></div>
+        </div>
+        <div class="overflow-x-auto">
+          <table class="w-full min-w-[640px] text-sm">
+            <thead class="bg-gray-50 border-b border-gray-200"><tr>
+              <th class="px-3 py-2 text-left text-xs font-semibold text-gray-500 uppercase">Maleta</th>
+              <th class="px-3 py-2 text-left text-xs font-semibold text-gray-500 uppercase">Cliente</th>
+              <th class="px-3 py-2 text-left text-xs font-semibold text-gray-500 uppercase">Enviadas</th>
+              <th class="px-3 py-2 text-left text-xs font-semibold text-gray-500 uppercase">Vendidas</th>
+              <th class="px-3 py-2 text-left text-xs font-semibold text-gray-500 uppercase">Devolvidas</th>
+              <th class="px-3 py-2 text-left text-xs font-semibold text-gray-500 uppercase">Com ela</th>
+              <th class="px-3 py-2 text-left text-xs font-semibold text-gray-500 uppercase">Conversão</th>
+            </tr></thead>
+            <tbody class="divide-y divide-gray-100">${r.maletas.map(m => `
+              <tr>
+                <td class="px-3 py-2">#${Number(m.pedido_id)} <span class="text-gray-400">${escapeHtml(formatarData(m.enviada_em))}</span></td>
+                <td class="px-3 py-2">${escapeHtml(m.nome || '-')}</td>
+                <td class="px-3 py-2">${Number(m.enviadas)}</td>
+                <td class="px-3 py-2 text-green-700">${Number(m.vendidas)} <span class="text-gray-400">${formatarMoeda(Number(m.valor_vendido))}</span></td>
+                <td class="px-3 py-2">${Number(m.devolvidas)}</td>
+                <td class="px-3 py-2 ${Number(m.com_cliente) ? 'text-yellow-700 font-medium' : ''}">${Number(m.com_cliente)}</td>
+                <td class="px-3 py-2 font-medium">${pct(m.taxa)}</td>
+              </tr>`).join('') || '<tr><td colspan="7" class="px-3 py-4 text-center text-gray-500">Nenhuma maleta enviada no período</td></tr>'}</tbody>
+          </table>
+        </div>
+        ${r.produtos.length ? `<h5 class="text-sm font-semibold text-gray-900 mt-5 mb-2">Modelos mais enviados</h5>
+        <div class="flex flex-wrap gap-2">${r.produtos.map(p => `<span class="px-2 py-1 text-xs rounded-lg bg-gray-50 border border-gray-200">${escapeHtml(p.nome)} <span class="text-gray-400">${escapeHtml(p.codigo_sku)}</span> · ${Number(p.enviadas)} env. · <span class="text-green-700">${Number(p.vendidas)} vend.</span> · <span class="text-red-600">${Number(p.devolvidas)} dev.</span></span>`).join('')}</div>` : ''}
+        ${avulsas}`;
+    }
+
+    async function carregarRelatorioMaletas() {
+      const alvo = document.getElementById('relatorioMaletas');
+      const dias = document.getElementById('periodoMaletas').value;
+      try {
+        const res = await fetchAdmin('/api/admin/relatorios/maletas' + (dias ? `?dias=${encodeURIComponent(dias)}` : ''));
+        if (!res.ok) throw new Error();
+        alvo.innerHTML = htmlRelatorioMaletas(await res.json());
+      } catch {
+        alvo.innerHTML = '<p class="text-red-600">Erro ao carregar o relatório</p>';
+      }
+    }
+    document.getElementById('periodoMaletas').addEventListener('change', carregarRelatorioMaletas);
 
     // ---------- Acessórios ----------
     async function carregarAcessorios() {

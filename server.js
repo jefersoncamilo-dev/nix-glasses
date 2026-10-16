@@ -581,6 +581,62 @@ function intencaoDoItem(item) {
 const STATUS_PEDIDO = ['NOVO', 'EM_ANDAMENTO', 'ENTREGUE', 'CANCELADO'];
 const STATUS_ENCOMENDA = ['AGUARDANDO_FABRICANTE', 'EM_TRANSITO', 'PRONTO_ENTREGA', 'ENTREGUE', 'CANCELADA'];
 
+// Peças que foram provadas numa maleta e o que aconteceu com cada uma: VENDIDA ou
+// DEVOLVIDA (pelos acertos do pedido) ou COM_CLIENTE (ainda em condicional ligada ao
+// pedido). Peça que nunca saiu (já estava indisponível ao enviar) não conta.
+function resultadoMaleta(itens, vendidos, devolvidos, naRua) {
+  return (Array.isArray(itens) ? itens : []).map(i => {
+    const id = Number(i.produto_id);
+    const resultado = vendidos.includes(id) ? 'VENDIDA' : devolvidos.includes(id) ? 'DEVOLVIDA'
+      : naRua.includes(id) && intencaoDoItem(i) === 'CONDICIONAL' ? 'COM_CLIENTE' : null;
+    return { produto_id: id, nome: i.nome, codigo_sku: i.codigo_sku, preco: Number(i.preco) || 0, resultado };
+  }).filter(p => p.resultado);
+}
+
+// Conversão de um conjunto de peças provadas. taxa = vendidas / peças já acertadas
+// (as que ainda estão com a cliente não contam contra).
+function resumoConversao(pecas) {
+  const conta = r => pecas.filter(p => p.resultado === r).length;
+  const vendidas = conta('VENDIDA');
+  const devolvidas = conta('DEVOLVIDA');
+  const acertadas = vendidas + devolvidas;
+  return {
+    enviadas: pecas.length,
+    vendidas,
+    devolvidas,
+    com_cliente: conta('COM_CLIENTE'),
+    valor_vendido: pecas.filter(p => p.resultado === 'VENDIDA').reduce((t, p) => t + Math.round(p.preco * 100), 0) / 100,
+    taxa: acertadas ? Math.round((vendidas / acertadas) * 1000) / 10 : null,
+  };
+}
+
+// Alertas do perfil da cliente: maleta com ela, pedido aguardando entrega, encomenda pendente
+function pendenciasDoCliente(pedidos, maletas, encomendas, agora = Date.now()) {
+  const dias = (d) => Math.max(0, Math.floor((agora - new Date(d).getTime()) / 86400000));
+  const ha = (d) => (dias(d) === 0 ? 'desde hoje' : `há ${dias(d)} dia(s)`);
+  const lista = [];
+  for (const m of maletas) {
+    if (m.com_cliente > 0) {
+      lista.push({ tipo: 'MALETA', ref: m.pedido_id, dias: dias(m.enviada_em), desde: m.enviada_em,
+        texto: `Maleta do pedido #${m.pedido_id} com a cliente ${ha(m.enviada_em)}: ${m.com_cliente} peça(s) sem acerto` });
+    }
+  }
+  for (const p of pedidos) {
+    if (p.status === 'NOVO' || p.status === 'EM_ANDAMENTO') {
+      lista.push({ tipo: 'PEDIDO', ref: p.id, dias: dias(p.created_at), desde: p.created_at,
+        texto: `Pedido #${p.id} ${p.status === 'NOVO' ? 'novo, ainda não atendido' : 'aguardando entrega'} ${ha(p.created_at)}` });
+    }
+  }
+  const rotulos = { AGUARDANDO_FABRICANTE: 'aguardando fabricante', EM_TRANSITO: 'em trânsito', PRONTO_ENTREGA: 'pronta para entrega' };
+  for (const e of encomendas) {
+    if (rotulos[e.status]) {
+      lista.push({ tipo: 'ENCOMENDA', ref: e.id, dias: dias(e.created_at), desde: e.created_at,
+        texto: `Encomenda #${e.id} (${e.modelo}) ${rotulos[e.status]}` });
+    }
+  }
+  return lista.sort((a, b) => b.dias - a.dias);
+}
+
 // Totais do pedido a partir dos itens gravados (depois de um item virar encomenda)
 function totaisDoPedido(itens) {
   const c = v => Math.round(Number(v) * 100);
@@ -1160,7 +1216,12 @@ async function startServer() {
         `SELECT c.id, c.email, c.nome, c.created_at,
                 COUNT(p.id)::int AS pedidos,
                 COALESCE(SUM(p.total), 0) AS total_pedidos,
-                MAX(p.created_at) AS ultimo_pedido
+                MAX(p.created_at) AS ultimo_pedido,
+                COUNT(p.id) FILTER (WHERE p.status IN ('NOVO', 'EM_ANDAMENTO'))::int AS pedidos_abertos,
+                (SELECT COUNT(*)::int FROM encomendas e WHERE e.cliente_id = c.id
+                   AND e.status IN ('AGUARDANDO_FABRICANTE', 'EM_TRANSITO', 'PRONTO_ENTREGA')) AS encomendas_abertas,
+                (SELECT COUNT(DISTINCT pr.pedido_condicional_id)::int FROM produtos pr JOIN pedidos p3 ON p3.id = pr.pedido_condicional_id
+                   WHERE pr.status = 'CONDICIONAL' AND p3.cliente_id = c.id) AS maletas_na_rua
          FROM clientes c
          LEFT JOIN pedidos p ON p.cliente_id = c.id
          GROUP BY c.id
@@ -1195,13 +1256,30 @@ async function startServer() {
     }
     const where = condicoes.length ? `WHERE ${condicoes.join(' AND ')}` : '';
     try {
-      const { rows } = await pool.query(
+      res.json(await listarPedidos(pool, where, params));
+    } catch (err) {
+      console.error(err);
+      res.status(500).json({ error: 'Erro ao buscar pedidos' });
+    }
+  }
+
+  // Pedidos com o que o painel precisa (acertos, encomendas e o que a mesma cliente já
+  // devolveu em maletas anteriores: ja_devolvidos, para não reenviar modelo recusado)
+  async function listarPedidos(db, where, params) {
+    const { rows } = await db.query(
         `SELECT p.id, p.cliente_id, p.nome, p.telefone, p.email, p.endereco, p.itens, p.status,
                 p.total_prova, p.total_compra, p.total_encomendas, p.sinal, p.total, p.maleta_enviada_em, p.created_at,
                 p.itens_removidos, p.extras, p.desconto_tipo, p.desconto_valor, p.total_final, p.entregue_em, p.updated_at,
                 COALESCE(ac.vendidos, '{}') AS vendidos_acerto, COALESCE(ac.devolvidos, '{}') AS devolvidos_acerto,
                 COALESCE((SELECT json_agg(json_build_object('id', e.id, 'produto_id', e.produto_id, 'status', e.status) ORDER BY e.id)
-                          FROM encomendas e WHERE e.pedido_id = p.id), '[]') AS encomendas
+                          FROM encomendas e WHERE e.pedido_id = p.id), '[]') AS encomendas,
+                COALESCE((SELECT array_agg(DISTINCT x) FROM pedidos p2
+                          JOIN acertos a4 ON a4.pedido_id = p2.id
+                          CROSS JOIN LATERAL unnest(a4.devolvidos) x
+                          WHERE p2.id <> p.id AND (
+                            (p.cliente_id IS NOT NULL AND p2.cliente_id = p.cliente_id) OR
+                            (length(regexp_replace(p.telefone, '\\D', '', 'g')) >= 8 AND
+                             regexp_replace(p2.telefone, '\\D', '', 'g') = regexp_replace(p.telefone, '\\D', '', 'g')))), '{}') AS ja_devolvidos
          FROM pedidos p
          LEFT JOIN LATERAL (
            SELECT (SELECT array_agg(DISTINCT x) FROM acertos a2, unnest(a2.comprados) x WHERE a2.pedido_id = p.id) AS vendidos,
@@ -1212,10 +1290,108 @@ async function startServer() {
          LIMIT 200`,
         params
       );
-      res.json(rows);
+    return rows;
+  }
+
+  // Maletas enviadas (pedidos com maleta_enviada_em) e o resultado de cada peça
+  async function carregarMaletas(db, where, params) {
+    const pedidos = (await db.query(
+      `SELECT p.id, p.cliente_id, p.nome, p.telefone, p.itens, p.status, p.maleta_enviada_em
+       FROM pedidos p WHERE p.maleta_enviada_em IS NOT NULL ${where ? 'AND ' + where : ''}
+       ORDER BY p.maleta_enviada_em DESC, p.id DESC LIMIT 500`, params)).rows;
+    const ids = pedidos.map(p => p.id);
+    const acertos = (await db.query('SELECT pedido_id, comprados, devolvidos FROM acertos WHERE pedido_id = ANY($1)', [ids])).rows;
+    const naRua = (await db.query(
+      `SELECT id, pedido_condicional_id FROM produtos WHERE status = 'CONDICIONAL' AND pedido_condicional_id = ANY($1)`, [ids])).rows;
+    return pedidos.map(p => {
+      const doPedido = acertos.filter(a => a.pedido_id === p.id);
+      const pecas = resultadoMaleta(p.itens,
+        doPedido.flatMap(a => a.comprados.map(Number)),
+        doPedido.flatMap(a => a.devolvidos.map(Number)),
+        naRua.filter(r => r.pedido_condicional_id === p.id).map(r => r.id));
+      return { pedido_id: p.id, cliente_id: p.cliente_id, nome: p.nome, status: p.status, enviada_em: p.maleta_enviada_em, pecas, ...resumoConversao(pecas) };
+    });
+  }
+
+  // Admin: perfil 360 da cliente (pedidos, encomendas, maletas, acertos, histórico de
+  // provas e pendências)
+  async function handlePerfilCliente(req, res) {
+    if (!/^\d{1,9}$/.test(req.params.id)) return res.status(400).json({ error: 'Cliente inválido' });
+    const id = Number(req.params.id);
+    try {
+      const cli = (await pool.query('SELECT id, email, nome, created_at FROM clientes WHERE id = $1', [id])).rows[0];
+      if (!cli) return res.status(404).json({ error: 'Cliente não encontrada' });
+      const pedidos = await listarPedidos(pool, 'WHERE p.cliente_id = $1', [id]);
+      const encomendas = (await pool.query(
+        `SELECT ${CAMPOS_ENCOMENDA} FROM encomendas
+         WHERE cliente_id = $1 OR pedido_id IN (SELECT id FROM pedidos WHERE cliente_id = $1)
+         ORDER BY created_at DESC, id DESC`, [id])).rows;
+      const maletas = await carregarMaletas(pool, 'p.cliente_id = $1', [id]);
+      const acertos = (await pool.query(
+        `SELECT a.id, a.pedido_id, a.observacoes, a.created_at,
+                COALESCE((SELECT json_agg(json_build_object('id', pr.id, 'nome', pr.nome, 'codigo_sku', pr.codigo_sku, 'preco', pr.preco_venda) ORDER BY pr.id)
+                          FROM produtos pr WHERE pr.id = ANY(a.comprados)), '[]') AS comprados,
+                COALESCE((SELECT json_agg(json_build_object('id', pr.id, 'nome', pr.nome, 'codigo_sku', pr.codigo_sku) ORDER BY pr.id)
+                          FROM produtos pr WHERE pr.id = ANY(a.devolvidos)), '[]') AS devolvidos
+         FROM acertos a JOIN pedidos p ON p.id = a.pedido_id
+         WHERE p.cliente_id = $1 ORDER BY a.created_at DESC, a.id DESC`, [id])).rows;
+      // Histórico de provas: cada peça que ela recebeu numa maleta, com o resultado e a foto atual
+      const provas = maletas.flatMap(m => m.pecas.map(pc => ({ ...pc, pedido_id: m.pedido_id, data: m.enviada_em })));
+      const fotos = new Map((await pool.query('SELECT id, imagem_url FROM produtos WHERE id = ANY($1)', [provas.map(p => p.produto_id)])).rows
+        .map(r => [r.id, r.imagem_url]));
+      for (const p of provas) p.imagem_url = fotos.get(p.produto_id) || null;
+      const entregues = pedidos.filter(p => p.status === 'ENTREGUE');
+      res.json({
+        cliente: cli,
+        resumo: {
+          pedidos: pedidos.length,
+          entregues: entregues.length,
+          total_comprado: entregues.reduce((t, p) => t + Math.round(Number(p.total_final ?? 0) * 100), 0) / 100,
+          ...resumoConversao(provas),
+        },
+        pendencias: pendenciasDoCliente(pedidos, maletas, encomendas),
+        pedidos,
+        encomendas,
+        maletas,
+        acertos,
+        provas,
+      });
     } catch (err) {
       console.error(err);
-      res.status(500).json({ error: 'Erro ao buscar pedidos' });
+      res.status(500).json({ error: 'Erro ao montar o perfil da cliente' });
+    }
+  }
+
+  // Admin: relatório de conversão das maletas (?dias=30|90|365; sem = tudo)
+  async function handleRelatorioMaletas(req, res) {
+    const { dias } = req.query;
+    if (dias !== undefined && !['30', '90', '365'].includes(dias)) return res.status(400).json({ error: 'Período inválido' });
+    const params = dias ? [Number(dias)] : [];
+    const periodo = (col) => (dias ? `${col} >= CURRENT_TIMESTAMP - make_interval(days => $1)` : '');
+    try {
+      const maletas = await carregarMaletas(pool, periodo('p.maleta_enviada_em'), params);
+      const avulsos = (await pool.query(
+        `SELECT COALESCE(SUM(cardinality(comprados)), 0)::int AS vendidas, COALESCE(SUM(cardinality(devolvidos)), 0)::int AS devolvidas,
+                COUNT(*)::int AS acertos
+         FROM acertos WHERE pedido_id IS NULL ${dias ? 'AND ' + periodo('created_at') : ''}`, params)).rows[0];
+      // Modelos que mais voltam e que mais vendem nas maletas
+      const porProduto = new Map();
+      for (const pc of maletas.flatMap(m => m.pecas)) {
+        const atual = porProduto.get(pc.produto_id) || { produto_id: pc.produto_id, nome: pc.nome, codigo_sku: pc.codigo_sku, enviadas: 0, vendidas: 0, devolvidas: 0 };
+        atual.enviadas++;
+        if (pc.resultado === 'VENDIDA') atual.vendidas++;
+        if (pc.resultado === 'DEVOLVIDA') atual.devolvidas++;
+        porProduto.set(pc.produto_id, atual);
+      }
+      res.json({
+        total: resumoConversao(maletas.flatMap(m => m.pecas)),
+        maletas: maletas.map(({ pecas, ...m }) => m),
+        sem_pedido: avulsos,
+        produtos: [...porProduto.values()].sort((a, b) => b.enviadas - a.enviadas || b.vendidas - a.vendidas).slice(0, 20),
+      });
+    } catch (err) {
+      console.error(err);
+      res.status(500).json({ error: 'Erro ao montar o relatório' });
     }
   }
 
@@ -1977,6 +2153,8 @@ async function startServer() {
   app.get('/api/admin/metrics', requireAdmin, handleMetrics);
   app.get('/api/admin/clientes', requireAdmin, handleListClientes);
   app.get('/api/admin/pedidos', requireAdmin, handleListPedidos);
+  app.get('/api/admin/clientes/:id/perfil', requireAdmin, handlePerfilCliente);
+  app.get('/api/admin/relatorios/maletas', requireAdmin, handleRelatorioMaletas);
   app.post('/api/admin/pedidos/:id/enviar-maleta', requireAdmin, handleEnviarMaleta);
   app.patch('/api/admin/pedidos/:id/status', requireAdmin, handleStatusPedido);
   app.put('/api/admin/pedidos/:id/fechamento', requireAdmin, handleFechamentoPedido);
