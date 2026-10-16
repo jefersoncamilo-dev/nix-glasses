@@ -225,10 +225,10 @@
         </div>
       </div>
       <div id="maletaFooter" class="hidden p-4 sm:p-6 border-t border-gray-200 bg-gray-50 rounded-b-2xl flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div class="flex items-baseline justify-between sm:block">
+        <div class="flex flex-wrap items-baseline justify-between gap-x-2 sm:block">
           <p class="text-sm text-gray-500">Total</p>
           <p id="maletaTotal" class="text-xl sm:text-2xl font-bold text-gray-900">R$ 0,00</p>
-          <p id="maletaSinal" class="hidden text-xs font-medium text-blue-700"></p>
+          <p id="maletaSinal" class="hidden w-full text-right sm:text-left text-xs font-medium text-blue-700"></p>
         </div>
         <button id="finalizarPedido" class="w-full sm:w-auto bg-orange-500 hover:bg-orange-600 text-white px-6 sm:px-8 py-3 rounded-full text-sm sm:text-base font-semibold transition-colors">Finalizar Pedido no WhatsApp</button>
       </div>
@@ -409,9 +409,12 @@
     }
     window.imgFallback = imgFallback;
 
-    // Higieniza número do WhatsApp: remove tudo que não for dígito antes de gerar https://wa.me/
+    // Higieniza número do WhatsApp: remove tudo que não for dígito antes de gerar https://wa.me/.
+    // Número brasileiro sem o 55 (DDD + 8 ou 9 dígitos) ganha o código do país,
+    // senão o wa.me abre a conversa com um número de outro país.
     function sanitizeWhatsapp(num) {
-      return String(num || '').replace(/\D/g, '');
+      const digitos = String(num || '').replace(/\D/g, '');
+      return digitos.length === 10 || digitos.length === 11 ? '55' + digitos : digitos;
     }
 
     // Formatação de moeda
@@ -422,7 +425,8 @@
       const toast = document.createElement('div');
       toast.className = `toast px-4 py-3 rounded-lg shadow-lg text-white ${tipo === 'success' ? 'bg-green-500' : 'bg-red-500'}`;
       toast.textContent = mensagem;
-      toastContainer.appendChild(toast);
+      // Um aviso por vez: no celular os avisos empilhados cobriam os cards
+      toastContainer.replaceChildren(toast);
       setTimeout(() => toast.remove(), 3000);
     }
 
@@ -574,7 +578,7 @@
             <div class="absolute top-1.5 right-1.5 sm:top-3 sm:right-3">
               <span class="px-1.5 sm:px-2 py-0.5 sm:py-1 text-[9px] sm:text-xs font-medium rounded-full ${etiqueta.classe}">${escapeHtml(etiqueta.texto)}</span>
             </div>
-            <div data-selo-maleta class="${jaNaMaleta ? '' : 'hidden '}absolute top-1.5 left-1.5 sm:top-3 sm:left-3 bg-orange-500 text-white px-1.5 sm:px-2 py-0.5 sm:py-1 text-[9px] sm:text-xs font-medium rounded-full">Na Maleta</div>
+            <div data-selo-maleta class="${jaNaMaleta ? '' : 'hidden '}absolute bottom-1.5 left-1.5 sm:bottom-3 sm:left-3 bg-orange-500 text-white px-1.5 sm:px-2 py-0.5 sm:py-1 text-[9px] sm:text-xs font-medium rounded-full">Na Maleta</div>
           </div>
           <div class="p-2 sm:p-4 flex-1 flex flex-col">
             <h3 class="font-semibold text-gray-900 text-xs sm:text-base leading-snug mb-0.5 line-clamp-2 break-words" title="${escapeHtml(produto.nome)}">${escapeHtml(nomeCard(produto))}</h3>
@@ -1053,7 +1057,7 @@
         maletaFooter.classList.remove('hidden');
 
         maletaItens.innerHTML = maleta.itens.map((item, idx) => `
-          <div class="flex items-center space-3 p-3 rounded-lg ${itemEhEncomenda(item) ? 'bg-blue-50 border border-blue-200' : 'bg-gray-50'}">
+          <div class="flex items-center gap-3 p-3 rounded-lg ${itemEhEncomenda(item) ? 'bg-blue-50 border border-blue-200' : 'bg-gray-50'}">
             ${item.imagem ? `<img src="${escapeHtml(item.imagem)}" alt="${escapeHtml(item.nome)}" class="w-16 h-16 object-cover rounded" onerror="imgFallback(this)">` : '<div class="w-16 h-16 bg-gray-200 rounded flex items-center justify-center"><svg class="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg></div>'}
             <div class="flex-1 min-w-0">
               ${itemEhEncomenda(item) ? '<span class="inline-block mb-1 px-2 py-0.5 text-[10px] font-semibold rounded-full bg-blue-600 text-white">SOB ENCOMENDA</span>' : ''}
@@ -1359,11 +1363,14 @@
         const numeroLimpo = sanitizeWhatsapp(whatsappNumero);
         const url = `https://wa.me/${numeroLimpo}?text=${encodeURIComponent(mensagem)}`;
         
-        // 3. Limpa maleta e abre WhatsApp
+        // 3. Limpa maleta (contador e botões dos cards também) e abre WhatsApp
         localStorage.removeItem('nix_maleta');
         maleta = { itens: [] };
         fecharModalMaleta();
-        window.open(url, '_blank');
+        atualizarMaletaUI();
+        renderizarCatalogo();
+        // Depois do await o Safari do iPhone bloqueia a nova aba: aí abre na mesma
+        if (!window.open(url, '_blank')) window.location.href = url;
         mostrarToast('Pedido encaminhado para o WhatsApp!');
       } catch (err) {
         console.error('Erro ao finalizar pedido:', err);
