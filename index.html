@@ -53,27 +53,29 @@
     @media (prefers-reduced-motion: reduce) { .btn-maleta.pulso { animation: none; } }
     /* Botões padronizados da vitrine: mesma forma (pílula), altura, fonte e estados.
        Tamanhos: .btn (44px, área de toque), .btn-sm (cards) e .btn-lg (topo).
-       Cores: primário (laranja), encomenda (azul), na-maleta (verde claro), secundário
-       (contorno claro), contorno-escuro (sobre fundo escuro), chrome e whatsapp. */
+       Cores: primário (prateado, como o "Coleção"), encomenda (grafite), na-maleta
+       (contorno prateado), secundário (contorno claro) e contorno-escuro (sobre fundo escuro).
+       Os atalhos do topo e as pílulas do catálogo ficam prateados quando escolhidos. */
     .btn { display: inline-flex; align-items: center; justify-content: center; gap: 0.5rem; min-height: 44px; padding: 0 1.25rem; border: 1px solid transparent; border-radius: 9999px; font-size: 0.875rem; font-weight: 600; line-height: 1.2; text-align: center; cursor: pointer; touch-action: manipulation; -webkit-tap-highlight-color: transparent; transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease, filter 0.15s ease, transform 0.1s ease; }
     .btn:active { transform: scale(0.97); }
-    .btn:focus-visible { outline: 2px solid #f97316; outline-offset: 2px; }
+    .btn:focus-visible { outline: 2px solid #8f8f8f; outline-offset: 2px; }
     .btn:disabled, .btn[aria-disabled="true"] { opacity: 0.6; cursor: not-allowed; transform: none; }
     .btn-sm { min-height: 36px; padding: 0 0.375rem; gap: 0.25rem; font-size: 0.75rem; white-space: nowrap; }
     .btn-lg { min-height: 48px; padding: 0 2rem; font-size: 1rem; }
     @media (min-width: 640px) { .btn-sm { padding: 0 0.75rem; font-size: 0.875rem; } }
-    .btn-primario { background: #f97316; color: #fff; }
-    .btn-primario:hover:not(:disabled) { background: #ea580c; }
-    .btn-encomenda { background: #2563eb; color: #fff; }
-    .btn-encomenda:hover:not(:disabled) { background: #1d4ed8; }
-    .btn-na-maleta { background: #f0fdf4; color: #15803d; border-color: #86efac; }
-    .btn-na-maleta:hover:not(:disabled) { background: #dcfce7; }
+    /* Primário: o prateado do botão "Coleção" do topo */
+    .btn-primario, .btn.atalho-topo[aria-pressed="true"]:not(:disabled), .filtro-pilula[aria-pressed="true"] { background: linear-gradient(180deg, #f5f5f5 0%, #c9c9c9 45%, #9a9a9a 55%, #d7d7d7 100%); color: #161616; border-color: rgba(0,0,0,0.12); box-shadow: 0 1px 2px rgba(0,0,0,0.25), inset 0 1px 0 rgba(255,255,255,0.7); }
+    .btn-primario:hover:not(:disabled), .atalho-topo[aria-pressed="true"]:hover { filter: brightness(1.08); }
+    /* Encomenda: grafite com brilho prateado na borda */
+    .btn-encomenda { background: linear-gradient(180deg, #3a3a3a 0%, #1c1c1c 100%); color: #f5f5f5; border-color: #8f8f8f; box-shadow: 0 1px 2px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.15); }
+    .btn-encomenda:hover:not(:disabled) { filter: brightness(1.25); }
+    /* Já na maleta: contorno prateado, fundo claro */
+    .btn-na-maleta { background: #fafafa; color: #161616; border-color: #a3a3a3; }
+    .btn-na-maleta:hover:not(:disabled) { background: #f0f0f0; }
     .btn-secundario { background: #fff; color: #1f2937; border-color: #d1d5db; }
     .btn-secundario:hover:not(:disabled) { background: #f9fafb; }
     .btn-contorno-escuro { background: transparent; color: #fff; border-color: rgba(255,255,255,0.35); }
     .btn-contorno-escuro:hover:not(:disabled) { background: rgba(255,255,255,0.1); }
-    .btn-whatsapp { background: #22c55e; color: #fff; }
-    .btn-whatsapp:hover:not(:disabled) { background: #16a34a; }
     @media (prefers-reduced-motion: reduce) { .btn { transition: none; } .btn:active { transform: none; } }
     /* Guias da vitrine: seta que "cutuca" para baixo, ponto que pulsa e filtros em pílula */
     .guia-seta { animation: guiaSeta 1.6s ease-in-out infinite; }
@@ -84,7 +86,6 @@
     .guia-cutuca { animation: guiaCutuca 1.4s ease-in-out infinite; }
     @keyframes guiaCutuca { 0%, 100% { transform: translateX(0); } 50% { transform: translateX(4px); } }
     .filtro-pilula { touch-action: manipulation; -webkit-tap-highlight-color: transparent; transition: background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease; }
-    .filtro-pilula[aria-pressed="true"] { background: #161616; color: #fff; border-color: #161616; }
     #barraMaleta { transition: transform 0.25s ease, opacity 0.25s ease; }
     #barraMaleta.escondida { transform: translateY(140%); opacity: 0; pointer-events: none; }
     @media (prefers-reduced-motion: reduce) {
@@ -133,9 +134,9 @@
       <p class="text-lg sm:text-xl max-w-2xl mx-auto mb-8" style="color:var(--nix-muted)">Design exclusivo, qualidade premium e proteção UV400. Escolha os modelos e prove em casa.</p>
       <!-- Atalhos: cada um leva ao catálogo já com o filtro escolhido -->
       <div class="flex flex-col sm:flex-row items-stretch sm:items-center justify-center gap-3 max-w-md sm:max-w-none mx-auto">
-        <a href="#catalogo" data-atalho-filtro="" class="btn btn-lg chrome-btn">Coleção <span class="font-normal opacity-70">· todos os modelos</span></a>
-        <a href="#catalogo" data-atalho-filtro="DISPONIVEL" class="btn btn-lg btn-contorno-escuro">Disponíveis <span class="font-normal" style="color:var(--nix-muted)">· pronta entrega</span></a>
-        <a href="#catalogo" data-atalho-filtro="SOB_ENCOMENDA" class="btn btn-lg btn-contorno-escuro">Sob Encomenda</a>
+        <a href="#catalogo" data-atalho-filtro="" aria-pressed="true" class="btn btn-lg btn-contorno-escuro atalho-topo">Coleção <span class="font-normal opacity-70">· todos os modelos</span></a>
+        <a href="#catalogo" data-atalho-filtro="DISPONIVEL" aria-pressed="false" class="btn btn-lg btn-contorno-escuro atalho-topo">Disponíveis <span class="font-normal opacity-70">· pronta entrega</span></a>
+        <a href="#catalogo" data-atalho-filtro="SOB_ENCOMENDA" aria-pressed="false" class="btn btn-lg btn-contorno-escuro atalho-topo">Sob Encomenda <span class="font-normal opacity-70">· encontre seu estilo</span></a>
       </div>
       <!-- Como funciona -->
       <ol class="mt-10 grid grid-cols-3 gap-2 sm:gap-6 max-w-3xl mx-auto text-left sm:text-center">
@@ -231,7 +232,7 @@
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
       <h2 class="font-brand text-3xl font-bold text-white tracking-wide mb-4">Fale Conosco</h2>
       <p class="mb-8 max-w-2xl mx-auto" style="color:var(--nix-muted)">Dúvidas, sugestões ou quer ser um revendedor? Estamos à disposição.</p>
-      <a id="whatsappLink" href="#" class="btn btn-lg btn-whatsapp">
+      <a id="whatsappLink" href="#" class="btn btn-lg btn-primario">
         <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.466-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.472.099-.174.05-.372-.025-.521-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.372-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.076 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.402h-.004a9.87 9.87 0 01-5.031-1.378 3.43 3.43 0 01-.947-2.327c-.273-.731-.47-1.39-.47-2.308 0-1.853 1.598-3.22 3.435-3.683.338-.082.68-.112 1.023-.112.354 0 .696.032 1.038.111 1.955.482 3.44 1.934 3.683 3.717 0 .904-.21 1.565-.48 2.296a3.58 3.58 0 01-.927 2.225 9.87 9.87 0 01-5.034 1.416z"/></svg>
         Falar no WhatsApp
       </a>
@@ -394,7 +395,7 @@
         </label>
       </div>
       <div class="px-4 flex flex-wrap items-center gap-2">
-        <button type="button" id="fotoProvador" class="btn chrome-btn flex-1 min-w-[8rem]">Tirar foto</button>
+        <button type="button" id="fotoProvador" class="btn btn-secundario flex-1 min-w-[8rem]">Tirar foto</button>
         <button type="button" id="maletaProvador" class="btn btn-primario flex-1 min-w-[8rem]">Adicionar à Maleta</button>
       </div>
       <p id="tamanhoProvador" class="px-4 pt-2 text-xs" style="color:var(--nix-muted)"></p>
@@ -604,6 +605,7 @@
     function aplicarFiltroStatus(filtro) {
       filtroStatus.value = filtro;
       document.querySelectorAll('#filtroPilulas [data-filtro]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.filtro === filtro)));
+      document.querySelectorAll('[data-atalho-filtro]').forEach(a => a.setAttribute('aria-pressed', String(a.dataset.atalhoFiltro === filtro)));
       renderizarCatalogo();
       atualizarGuias();
     }

@@ -60,6 +60,12 @@ describe('vitrine: atalhos e pílulas de filtro', () => {
     }
   });
 
+  it('o botão principal é prateado como o "Coleção" e o atalho escolhido fica prateado', () => {
+    assert.match(html, /\.btn-primario, \.btn\.atalho-topo\[aria-pressed="true"\][^{]*\{ background: linear-gradient\(180deg, #f5f5f5/);
+    assert.match(html, /data-atalho-filtro="" aria-pressed="true"/);
+    assert.match(html, /querySelectorAll\('\[data-atalho-filtro\]'\)\.forEach\(a => a\.setAttribute\('aria-pressed'/);
+  });
+
   it('as animações de orientação param com prefers-reduced-motion', () => {
     const bloco = html.match(/@media \(prefers-reduced-motion: reduce\) \{\s*\.guia-seta[^}]*\}/);
     assert.ok(bloco, 'faltou desligar as animações de guia');
