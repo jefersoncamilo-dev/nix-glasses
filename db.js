@@ -187,6 +187,44 @@ async function initTables() {
       ADD COLUMN IF NOT EXISTS pedido_id INTEGER REFERENCES pedidos(id) ON DELETE SET NULL
     `);
 
+    // Pedidos no painel: status (NOVO ao chegar da vitrine) e fechamento na entrega
+    // (itens que a cliente desistiu, desconto em R$ ou %, acessórios extras).
+    // total_compra: itens marcados como "Compra direta" no carrinho.
+    const temStatus = (await client.query(
+      `SELECT 1 FROM information_schema.columns WHERE table_name = 'pedidos' AND column_name = 'status'`
+    )).rows.length > 0;
+    await client.query(`
+      ALTER TABLE pedidos
+      ADD COLUMN IF NOT EXISTS status VARCHAR(20) NOT NULL DEFAULT 'NOVO',
+      ADD COLUMN IF NOT EXISTS total_compra DECIMAL(10,2) NOT NULL DEFAULT 0,
+      ADD COLUMN IF NOT EXISTS itens_removidos INTEGER[] NOT NULL DEFAULT '{}',
+      ADD COLUMN IF NOT EXISTS extras JSONB NOT NULL DEFAULT '[]',
+      ADD COLUMN IF NOT EXISTS desconto_tipo VARCHAR(12) NOT NULL DEFAULT '',
+      ADD COLUMN IF NOT EXISTS desconto_valor DECIMAL(10,2) NOT NULL DEFAULT 0,
+      ADD COLUMN IF NOT EXISTS total_final DECIMAL(10,2),
+      ADD COLUMN IF NOT EXISTS entregue_em TIMESTAMP,
+      ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    `);
+    // Só na primeira vez: pedidos que já tiveram maleta enviada estão em andamento
+    if (!temStatus) {
+      await client.query(`UPDATE pedidos SET status = 'EM_ANDAMENTO' WHERE maleta_enviada_em IS NOT NULL`);
+    }
+    await client.query('CREATE INDEX IF NOT EXISTS pedidos_status_idx ON pedidos (status, created_at DESC)');
+
+    // Estoque de acessórios (flanelas, estojos, líquidos), contado em unidades.
+    // Entram no fechamento do pedido e dão baixa aqui.
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS acessorios (
+        id SERIAL PRIMARY KEY,
+        nome VARCHAR(100) NOT NULL,
+        preco_venda DECIMAL(10,2) NOT NULL DEFAULT 0,
+        estoque INTEGER NOT NULL DEFAULT 0 CHECK (estoque >= 0),
+        ativo BOOLEAN NOT NULL DEFAULT true,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
     await client.query(`
       CREATE TABLE IF NOT EXISTS configuracoes (
         chave VARCHAR(100) PRIMARY KEY,

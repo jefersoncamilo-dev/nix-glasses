@@ -23,6 +23,8 @@
     .toast { animation: slideIn 0.3s ease; }
     @keyframes slideIn { from { opacity: 0; transform: translateY(-20px); } to { opacity: 1; transform: translateY(0); } }
     .modal-overlay { backdrop-filter: blur(4px); }
+    /* Contador do menu fora do textContent (o título da página usa o texto do menu) */
+    .badge-contagem::after { content: attr(data-n); }
   </style>
 </head>
 <body class="bg-gray-50 min-h-screen flex">
@@ -40,9 +42,18 @@
         <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/></svg>
         Produtos
       </a>
+      <a href="#" data-tab="pedidos" class="tab-btn flex items-center px-4 py-3 text-gray-700 rounded-lg hover:bg-gray-100 font-medium">
+        <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z"/></svg>
+        Pedidos
+        <span id="badgeNovosPedidos" data-n="0" title="Pedidos novos" class="badge-contagem hidden ml-auto text-xs font-semibold px-2 py-0.5 rounded-full bg-orange-500 text-white"></span>
+      </a>
       <a href="#" data-tab="lote" class="tab-btn flex items-center px-4 py-3 text-gray-700 rounded-lg hover:bg-gray-100 font-medium">
         <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h18M3 14h18M10 3v18M5 3h14a2 2 0 012 2v14a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2z"/></svg>
         Cadastro em Lote
+      </a>
+      <a href="#" data-tab="acessorios" class="tab-btn flex items-center px-4 py-3 text-gray-700 rounded-lg hover:bg-gray-100 font-medium">
+        <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4"/></svg>
+        Acessórios
       </a>
       <a href="#" data-tab="clientes" class="tab-btn flex items-center px-4 py-3 text-gray-700 rounded-lg hover:bg-gray-100 font-medium">
         <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"/></svg>
@@ -212,6 +223,64 @@
             <button type="button" data-abrir-fotos-sku class="shrink-0 px-3 py-1.5 bg-orange-500 hover:bg-orange-600 text-white rounded-lg text-xs font-medium">Enviar fotos de todos por SKU</button>
           </div>
           <ul id="loteCriadosLista" class="divide-y divide-gray-100"></ul>
+        </div>
+      </div>
+
+      <!-- Aba Pedidos: tudo o que chegou da vitrine, do NOVO até a entrega -->
+      <div id="tab-pedidos" class="tab-content hidden">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
+          <h3 class="text-lg font-semibold text-gray-900">Pedidos</h3>
+          <div class="flex flex-col sm:flex-row gap-2">
+            <input type="text" id="buscaPedidos" placeholder="Buscar por nome, telefone ou nº..." class="w-full sm:w-72 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500">
+            <button id="btnAtualizarPedidos" class="bg-gray-100 hover:bg-gray-200 text-gray-700 px-4 py-2 rounded-lg font-medium transition-colors">Atualizar</button>
+          </div>
+        </div>
+        <div id="filtrosStatusPedido" class="flex flex-wrap gap-2 mb-4"></div>
+        <p class="text-sm text-gray-500 mb-4">Cada item mostra o que a cliente escolheu no carrinho: <strong>Compra direta</strong>, <strong>Maleta</strong> (para provar) ou <strong>Encomenda</strong>. Na entrega, use <strong>Fechar na entrega</strong> para tirar itens, dar desconto e somar acessórios.</p>
+        <div id="listaPedidosGeral" class="space-y-4"></div>
+      </div>
+
+      <!-- Aba Acessórios: estoque próprio de itens de apoio -->
+      <div id="tab-acessorios" class="tab-content hidden">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
+          <h3 class="text-lg font-semibold text-gray-900">Acessórios</h3>
+        </div>
+        <p class="text-sm text-gray-500 mb-4">Flanelas, estojos, líquidos limpadores e outros itens de apoio. Entram no fechamento do pedido e dão baixa aqui automaticamente.</p>
+        <form id="formAcessorio" class="bg-white rounded-xl border border-gray-200 p-4 mb-6 grid grid-cols-1 sm:grid-cols-5 gap-3 items-end">
+          <input type="hidden" id="acessorioId">
+          <div class="sm:col-span-2">
+            <label for="acessorioNome" class="block text-sm font-medium text-gray-700 mb-1">Nome *</label>
+            <input type="text" id="acessorioNome" maxlength="100" required class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500" placeholder="Ex.: Flanela de microfibra">
+          </div>
+          <div>
+            <label for="acessorioPreco" class="block text-sm font-medium text-gray-700 mb-1">Preço (R$) *</label>
+            <input type="text" inputmode="decimal" id="acessorioPreco" required class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500" placeholder="15,00">
+          </div>
+          <div>
+            <label for="acessorioEstoque" class="block text-sm font-medium text-gray-700 mb-1">Estoque (un.)</label>
+            <input type="number" min="0" step="1" id="acessorioEstoque" value="0" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500">
+          </div>
+          <div class="flex gap-2">
+            <button type="submit" id="btnSalvarAcessorio" class="flex-1 bg-orange-500 hover:bg-orange-600 text-white px-4 py-2 rounded-lg font-medium">Adicionar</button>
+            <button type="button" id="btnCancelarAcessorio" class="hidden px-3 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50">Cancelar</button>
+          </div>
+          <label class="sm:col-span-5 inline-flex items-center gap-2 text-sm text-gray-700"><input type="checkbox" id="acessorioAtivo" checked class="rounded text-orange-500 focus:ring-orange-500"> Ativo (aparece no fechamento dos pedidos)</label>
+        </form>
+        <div class="bg-white rounded-xl border border-gray-200 overflow-hidden">
+          <div class="overflow-x-auto">
+            <table class="w-full min-w-[520px]">
+              <thead class="bg-gray-50 border-b border-gray-200">
+                <tr>
+                  <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Acessório</th>
+                  <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Preço</th>
+                  <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Estoque</th>
+                  <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Situação</th>
+                  <th class="px-4 py-3"></th>
+                </tr>
+              </thead>
+              <tbody id="tabelaAcessorios" class="divide-y divide-gray-200"></tbody>
+            </table>
+          </div>
         </div>
       </div>
 
@@ -613,6 +682,48 @@
     </div>
   </div>
 
+  <!-- Modal Fechamento do pedido na entrega -->
+  <div id="modalFechamento" class="fixed inset-0 modal-overlay bg-black/50 hidden z-50 flex items-center justify-center p-4">
+    <div class="bg-white rounded-2xl max-w-2xl w-full max-h-[92vh] overflow-hidden flex flex-col">
+      <div class="flex items-center justify-between p-4 sm:p-6 border-b border-gray-200">
+        <h3 id="fechamentoTitulo" class="text-xl font-bold text-gray-900">Fechar pedido</h3>
+        <button type="button" data-fechar-modal="modalFechamento" class="p-2 text-gray-500 hover:text-gray-700 rounded-lg hover:bg-gray-100" aria-label="Fechar"><svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg></button>
+      </div>
+      <div class="p-4 sm:p-6 overflow-y-auto flex-1 space-y-5">
+        <div>
+          <h4 class="text-sm font-semibold text-gray-900 mb-2">Itens do pedido</h4>
+          <ul id="fechamentoItens" class="divide-y divide-gray-100 border border-gray-200 rounded-lg"></ul>
+        </div>
+        <div>
+          <h4 class="text-sm font-semibold text-gray-900 mb-2">Acessórios extras</h4>
+          <div class="flex flex-col sm:flex-row gap-2 mb-2">
+            <select id="fechamentoAcessorio" class="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500"></select>
+            <input type="number" id="fechamentoQtd" min="1" max="99" value="1" class="w-full sm:w-20 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500" aria-label="Quantidade">
+            <button type="button" id="btnAddAcessorio" class="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg font-medium">Adicionar</button>
+          </div>
+          <ul id="fechamentoExtras" class="divide-y divide-gray-100"></ul>
+        </div>
+        <div>
+          <h4 class="text-sm font-semibold text-gray-900 mb-2">Desconto</h4>
+          <div class="flex gap-2">
+            <select id="fechamentoDescontoTipo" class="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500">
+              <option value="">Sem desconto</option>
+              <option value="VALOR">Em R$</option>
+              <option value="PERCENTUAL">Em %</option>
+            </select>
+            <input type="text" inputmode="decimal" id="fechamentoDescontoValor" placeholder="0" class="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500" aria-label="Valor do desconto">
+          </div>
+        </div>
+        <div id="fechamentoResumo" class="bg-gray-50 rounded-xl p-4 text-sm space-y-1"></div>
+        <p id="fechamentoAviso" class="hidden text-sm text-yellow-800 bg-yellow-50 border border-yellow-200 rounded-lg p-3"></p>
+      </div>
+      <div class="p-4 border-t border-gray-200 flex flex-col sm:flex-row sm:justify-end gap-2">
+        <button type="button" id="btnSalvarFechamento" class="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 font-medium">Salvar sem concluir</button>
+        <button type="button" id="btnConcluirEntrega" class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg font-medium">Concluir entrega</button>
+      </div>
+    </div>
+  </div>
+
   <datalist id="listaFornecedores"></datalist>
 
   <!-- Toast -->
@@ -723,6 +834,8 @@
         if (target === 'acerto') carregarAcerto();
         if (target === 'lote') iniciarLote();
         if (target === 'clientes') carregarClientes();
+        if (target === 'pedidos') carregarPedidosGeral();
+        if (target === 'acessorios') carregarAcessorios();
         if (target === 'metricas') { carregarMetricas(); carregarResumoFornecedores(); }
         if (target === 'config') carregarWhatsApp();
         sidebar.classList.remove('open');
@@ -1537,7 +1650,7 @@
       document.body.style.overflow = '';
     }
     document.querySelectorAll('[data-fechar-modal]').forEach(btn => btn.addEventListener('click', () => fecharModalSimples(btn.dataset.fecharModal)));
-    ['modalReposicao', 'modalFotosSku', 'modalResumoMaleta'].forEach(id => {
+    ['modalReposicao', 'modalFotosSku', 'modalResumoMaleta', 'modalFechamento'].forEach(id => {
       const el = document.getElementById(id);
       el.addEventListener('click', (e) => { if (e.target === el) fecharModalSimples(id); });
     });
@@ -2137,17 +2250,62 @@
       `).join('') || '<tr><td colspan="6" class="px-6 py-8 text-center text-gray-500">Nenhum cliente cadastrado ainda</td></tr>';
     }
 
-    function renderizarPedidos(lista) {
-      document.getElementById('listaPedidos').innerHTML = lista.map(p => {
-        const itens = Array.isArray(p.itens) ? p.itens : [];
-        const encomendas = itens.filter(i => i.encomenda === true);
-        const prova = itens.length - encomendas.length;
-        const id = Number(p.id);
-        return `
-        <div class="bg-white rounded-xl border border-gray-200 p-4 sm:p-6">
+    // ---------- Pedidos (vitrine -> NOVO -> em andamento -> entregue) ----------
+    const STATUS_PEDIDO = [
+      ['NOVO', 'Novo', 'bg-orange-100 text-orange-700'],
+      ['EM_ANDAMENTO', 'Em andamento', 'bg-yellow-100 text-yellow-800'],
+      ['ENTREGUE', 'Entregue', 'bg-green-100 text-green-700'],
+      ['CANCELADO', 'Cancelado', 'bg-gray-200 text-gray-600'],
+    ];
+
+    // Intenção escolhida no carrinho. Pedidos antigos (sem o campo): encomenda ou maleta.
+    function intencaoItemPedido(i) {
+      if (i && i.encomenda === true) return 'ENCOMENDA';
+      return i && (i.intencao === 'COMPRA' || i.intencao === 'CONDICIONAL') ? i.intencao : 'CONDICIONAL';
+    }
+
+    function etiquetaIntencao(intencao) {
+      const base = 'ml-1 px-2 py-0.5 text-xs font-medium rounded-full';
+      if (intencao === 'COMPRA') return `<span class="${base} bg-purple-100 text-purple-700">COMPRA DIRETA</span>`;
+      if (intencao === 'ENCOMENDA') return `<span class="${base} bg-blue-100 text-blue-700">SOB ENCOMENDA</span>`;
+      return `<span class="${base} bg-green-100 text-green-700">MALETA</span>`;
+    }
+
+    function badgeStatusPedido(status) {
+      const s = STATUS_PEDIDO.find(x => x[0] === status) || [status, String(status || 'NOVO'), 'bg-gray-100 text-gray-700'];
+      return `<span class="px-2 py-0.5 text-xs font-semibold rounded-full ${s[2]}">${escapeHtml(s[1])}</span>`;
+    }
+
+    // Card de um pedido, usado na aba Pedidos e nos pedidos de cada cliente
+    function htmlPedido(p) {
+      const itens = Array.isArray(p.itens) ? p.itens : [];
+      const id = Number(p.id);
+      const status = p.status || 'NOVO';
+      const aberto = status === 'NOVO' || status === 'EM_ANDAMENTO';
+      const vendidos = (Array.isArray(p.vendidos_acerto) ? p.vendidos_acerto : []).map(Number);
+      const devolvidos = (Array.isArray(p.devolvidos_acerto) ? p.devolvidos_acerto : []).map(Number);
+      const removidos = (Array.isArray(p.itens_removidos) ? p.itens_removidos : []).map(Number);
+      const extras = Array.isArray(p.extras) ? p.extras : [];
+      const prova = itens.filter(i => intencaoItemPedido(i) === 'CONDICIONAL').length;
+      const encomendas = itens.filter(i => intencaoItemPedido(i) === 'ENCOMENDA');
+      const temFechamento = p.total_final !== null && p.total_final !== undefined;
+      const nota = (i) => {
+        const pid = Number(i.produto_id);
+        const intencao = intencaoItemPedido(i);
+        if (intencao === 'CONDICIONAL' && vendidos.includes(pid)) return '<span class="block text-xs text-green-700">vendida no acerto</span>';
+        if (intencao === 'CONDICIONAL' && devolvidos.includes(pid)) return '<span class="block text-xs text-gray-500">devolvida</span>';
+        if (intencao === 'COMPRA' && removidos.includes(pid)) return '<span class="block text-xs text-red-600">tirada do pedido</span>';
+        return '';
+      };
+      const opcoesStatus = STATUS_PEDIDO.filter(s => s[0] !== 'ENTREGUE')
+        .map(s => `<option value="${s[0]}" ${s[0] === status ? 'selected' : ''}>${s[1]}</option>`).join('');
+      return `
+        <div class="bg-white rounded-xl border ${status === 'NOVO' ? 'border-orange-300' : 'border-gray-200'} p-4 sm:p-6">
           <div class="flex flex-col sm:flex-row sm:justify-between gap-1 mb-3">
-            <p class="font-semibold text-gray-900">Pedido #${Number(p.id)} <span class="font-normal text-gray-500">• ${escapeHtml(formatarData(p.created_at))}</span></p>
-            <p class="font-semibold text-gray-900">${formatarMoeda(Number(p.total))}</p>
+            <p class="font-semibold text-gray-900">Pedido #${id} ${badgeStatusPedido(status)} <span class="font-normal text-gray-500">• ${escapeHtml(formatarData(p.created_at))}</span></p>
+            <p class="font-semibold text-gray-900">${temFechamento
+              ? `${formatarMoeda(Number(p.total_final))} <span class="font-normal text-xs text-gray-500">total final</span>`
+              : formatarMoeda(Number(p.total))}</p>
           </div>
           <p class="text-sm text-gray-700">${escapeHtml(p.nome || '-')} • ${escapeHtml(p.telefone || '-')}${p.email ? ' • ' + escapeHtml(p.email) : ''}</p>
           ${p.endereco ? `<p class="text-sm text-gray-500 mb-3">${escapeHtml(p.endereco)}</p>` : '<div class="mb-3"></div>'}
@@ -2156,22 +2314,87 @@
               <li class="py-2 flex justify-between gap-3 text-sm">
                 <span>
                   ${escapeHtml(i.nome)} <span class="text-gray-400">${escapeHtml(i.codigo_sku)}</span>
-                  ${i.encomenda === true
-                    ? '<span class="ml-1 px-2 py-0.5 text-xs font-medium rounded-full bg-blue-100 text-blue-700">SOB ENCOMENDA</span>'
-                    : '<span class="ml-1 px-2 py-0.5 text-xs font-medium rounded-full bg-green-100 text-green-700">PRONTA ENTREGA</span>'}
+                  ${etiquetaIntencao(intencaoItemPedido(i))}
+                  ${nota(i)}
                 </span>
                 <span class="text-gray-900 whitespace-nowrap">${formatarMoeda(Number(i.preco))}</span>
               </li>`).join('')}
+            ${extras.map(e => `
+              <li class="py-2 flex justify-between gap-3 text-sm">
+                <span>${Number(e.quantidade) || 0}× ${escapeHtml(e.nome)} <span class="ml-1 px-2 py-0.5 text-xs font-medium rounded-full bg-gray-100 text-gray-700">ACESSÓRIO</span></span>
+                <span class="text-gray-900 whitespace-nowrap">${formatarMoeda(Number(e.preco) * (Number(e.quantidade) || 0))}</span>
+              </li>`).join('')}
           </ul>
           ${encomendas.length ? `<p class="text-sm text-blue-700 mt-2">Sinal das encomendas (50%): ${formatarMoeda(Number(p.sinal))}</p>` : ''}
-          ${prova ? `<div class="mt-3 flex flex-wrap items-center gap-2">
-            ${p.maleta_enviada_em
+          ${p.desconto_tipo ? `<p class="text-sm text-gray-600 mt-1">Desconto: ${p.desconto_tipo === 'PERCENTUAL' ? `${Number(p.desconto_valor)}%` : formatarMoeda(Number(p.desconto_valor))}</p>` : ''}
+          <div class="mt-3 flex flex-wrap items-center gap-2">
+            ${aberto && prova ? (p.maleta_enviada_em
               ? `<span class="text-sm text-yellow-700">Maleta enviada em ${escapeHtml(formatarData(p.maleta_enviada_em))}</span>
                  <button type="button" data-acerto-pedido="${id}" class="px-3 py-1.5 border border-orange-300 text-orange-700 rounded-lg hover:bg-orange-50 text-sm font-medium">Fazer acerto</button>`
-              : `<button type="button" data-enviar-maleta="${id}" class="px-3 py-1.5 bg-orange-500 hover:bg-orange-600 text-white rounded-lg text-sm font-medium">Enviar maleta (${prova} peça(s) em condicional)</button>`}
-          </div>` : ''}
+              : `<button type="button" data-enviar-maleta="${id}" class="px-3 py-1.5 bg-orange-500 hover:bg-orange-600 text-white rounded-lg text-sm font-medium">Enviar maleta (${prova} peça(s) em condicional)</button>`) : ''}
+            ${aberto ? `<button type="button" data-fechar-pedido="${id}" class="px-3 py-1.5 bg-green-600 hover:bg-green-700 text-white rounded-lg text-sm font-medium">Fechar na entrega</button>
+              <select data-status-pedido="${id}" aria-label="Status do pedido" class="px-2 py-1.5 border border-gray-300 rounded-lg text-sm">${opcoesStatus}</select>` : ''}
+            ${status === 'ENTREGUE' ? `<span class="text-sm text-green-700">Entregue em ${escapeHtml(formatarData(p.entregue_em))}</span>
+              <button type="button" data-fechar-pedido="${id}" class="px-3 py-1.5 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 text-sm font-medium">Ver fechamento</button>` : ''}
+            ${status === 'CANCELADO' ? `<button type="button" data-reabrir-pedido="${id}" class="px-3 py-1.5 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 text-sm font-medium">Reabrir pedido</button>` : ''}
+          </div>
         </div>`;
-      }).join('') || '<p class="text-gray-500">Nenhum pedido registrado.</p>';
+    }
+
+    function renderizarPedidos(lista) {
+      document.getElementById('listaPedidos').innerHTML = lista.map(htmlPedido).join('') || '<p class="text-gray-500">Nenhum pedido registrado.</p>';
+    }
+
+    // Filtro da aba Pedidos: ABERTOS (novo + em andamento), um status ou TODOS; busca por nome, telefone, e-mail ou nº
+    function filtrarPedidos(lista, filtro, busca) {
+      const termo = String(busca || '').trim().toLowerCase().replace(/^#/, '');
+      const digitos = termo.replace(/\D/g, '');
+      return lista.filter(p => {
+        const status = p.status || 'NOVO';
+        const passaStatus = filtro === 'TODOS' || (filtro === 'ABERTOS' ? status === 'NOVO' || status === 'EM_ANDAMENTO' : status === filtro);
+        if (!passaStatus) return false;
+        if (!termo) return true;
+        return String(p.id) === termo || String(p.nome || '').toLowerCase().includes(termo) ||
+          String(p.email || '').toLowerCase().includes(termo) ||
+          (digitos.length >= 3 && String(p.telefone || '').replace(/\D/g, '').includes(digitos));
+      });
+    }
+
+    function renderizarFiltrosPedido(lista, filtro) {
+      const conta = (f) => filtrarPedidos(lista, f, '').length;
+      const opcoes = [['ABERTOS', 'Abertos'], ...STATUS_PEDIDO.map(s => [s[0], s[1]]), ['TODOS', 'Todos']];
+      document.getElementById('filtrosStatusPedido').innerHTML = opcoes.map(([valor, rotulo]) => `
+        <button type="button" data-filtro-pedido="${valor}" aria-pressed="${valor === filtro}" class="px-3 py-1.5 rounded-full text-sm font-medium border ${valor === filtro ? 'bg-orange-500 text-white border-orange-500' : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'}">${rotulo} <span class="opacity-75">${conta(valor)}</span></button>`).join('');
+    }
+
+    function renderizarListaPedidos(lista) {
+      document.getElementById('listaPedidosGeral').innerHTML = lista.map(htmlPedido).join('') ||
+        '<p class="text-gray-500">Nenhum pedido aqui.</p>';
+    }
+
+    let todosPedidos = [];
+    let pedidosDoCliente = [];
+    let filtroPedido = 'ABERTOS';
+
+    function mostrarPedidosGeral() {
+      renderizarFiltrosPedido(todosPedidos, filtroPedido);
+      renderizarListaPedidos(filtrarPedidos(todosPedidos, filtroPedido, document.getElementById('buscaPedidos').value));
+      const novos = todosPedidos.filter(p => p.status === 'NOVO').length;
+      const badge = document.getElementById('badgeNovosPedidos');
+      badge.dataset.n = String(novos);
+      badge.classList[novos ? 'remove' : 'add']('hidden');
+    }
+
+    async function carregarPedidosGeral() {
+      try {
+        const res = await fetchAdmin('/api/admin/pedidos');
+        if (!res.ok) throw new Error('Erro ao carregar pedidos');
+        todosPedidos = await res.json();
+        mostrarPedidosGeral();
+      } catch (err) {
+        console.error(err);
+        mostrarToast('Erro ao carregar pedidos', 'error');
+      }
     }
 
     let pedidosAbertos = null;
@@ -2181,7 +2404,8 @@
         if (!res.ok) throw new Error('Erro ao carregar pedidos');
         pedidosAbertos = { filtro, titulo };
         document.getElementById('tituloPedidos').textContent = titulo;
-        renderizarPedidos(await res.json());
+        pedidosDoCliente = await res.json();
+        renderizarPedidos(pedidosDoCliente);
         const painel = document.getElementById('painelPedidos');
         painel.classList.remove('hidden');
         if (rolar) painel.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -2189,6 +2413,16 @@
         console.error(err);
         mostrarToast('Erro ao carregar pedidos', 'error');
       }
+    }
+
+    // Depois de mexer num pedido: atualiza a aba Pedidos e a lista do cliente aberta
+    async function recarregarPedidos() {
+      await carregarPedidosGeral();
+      if (pedidosAbertos) await carregarPedidos(pedidosAbertos.filtro, pedidosAbertos.titulo, false);
+    }
+
+    function acharPedido(id) {
+      return todosPedidos.find(p => Number(p.id) === id) || pedidosDoCliente.find(p => Number(p.id) === id) || null;
     }
 
     document.getElementById('tabelaClientes').addEventListener('click', (e) => {
@@ -2205,10 +2439,33 @@
       document.querySelector('.tab-btn[data-tab="acerto"]').click();
     }
 
-    // Enviar maleta: as peças de pronta entrega do pedido vão para condicional, ligadas a ele
-    document.getElementById('listaPedidos').addEventListener('click', async (e) => {
+    async function mudarStatusPedido(id, status) {
+      try {
+        const res = await fetchAdmin(`/api/admin/pedidos/${id}/status`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ status })
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.error || 'Erro ao mudar o status');
+        mostrarToast(`Pedido #${id}: ${(STATUS_PEDIDO.find(s => s[0] === data.status) || [, data.status])[1]}`);
+        if (status === 'CANCELADO') carregarAcessorios();
+      } catch (err) {
+        console.error(err);
+        mostrarToast(err.message, 'error');
+      }
+      await recarregarPedidos();
+    }
+
+    // Cliques nos cards de pedido (aba Pedidos e pedidos do cliente)
+    async function aoClicarPedido(e) {
       const acerto = e.target.closest('[data-acerto-pedido]');
       if (acerto) return abrirAcertoDoPedido(acerto.dataset.acertoPedido);
+      const fechar = e.target.closest('[data-fechar-pedido]');
+      if (fechar) return abrirFechamento(Number(fechar.dataset.fecharPedido));
+      const reabrir = e.target.closest('[data-reabrir-pedido]');
+      if (reabrir) return mudarStatusPedido(Number(reabrir.dataset.reabrirPedido), 'NOVO');
+      // Enviar maleta: as peças "para provar" do pedido vão para condicional, ligadas a ele
       const btn = e.target.closest('[data-enviar-maleta]');
       if (!btn || btn.disabled) return;
       const id = Number(btn.dataset.enviarMaleta);
@@ -2226,7 +2483,298 @@
         console.error(err);
         mostrarToast(err.message, 'error');
       }
-      if (pedidosAbertos) await carregarPedidos(pedidosAbertos.filtro, pedidosAbertos.titulo, false);
+      await recarregarPedidos();
+    }
+
+    function aoMudarSelectStatus(e) {
+      const sel = e.target.closest('[data-status-pedido]');
+      if (!sel) return;
+      const id = Number(sel.dataset.statusPedido);
+      if (sel.value === 'CANCELADO' && !confirm(`Cancelar o pedido #${id}? Os acessórios lançados voltam ao estoque.`)) {
+        const p = acharPedido(id);
+        sel.value = p ? p.status : 'NOVO';
+        return;
+      }
+      mudarStatusPedido(id, sel.value);
+    }
+
+    ['listaPedidos', 'listaPedidosGeral'].forEach(idLista => {
+      const lista = document.getElementById(idLista);
+      lista.addEventListener('click', aoClicarPedido);
+      lista.addEventListener('change', aoMudarSelectStatus);
+    });
+    document.getElementById('filtrosStatusPedido').addEventListener('click', (e) => {
+      const btn = e.target.closest('[data-filtro-pedido]');
+      if (!btn) return;
+      filtroPedido = btn.dataset.filtroPedido;
+      mostrarPedidosGeral();
+    });
+    document.getElementById('buscaPedidos').addEventListener('input', mostrarPedidosGeral);
+    document.getElementById('btnAtualizarPedidos').addEventListener('click', carregarPedidosGeral);
+
+    // ---------- Fechamento do pedido na entrega ----------
+    // Cobrados: compra direta que a cliente levou + peças da maleta vendidas no acerto
+    // (o servidor faz a mesma conta e é quem vale).
+    function itensCobradosFechamento(pedido, removidos) {
+      const vendidos = (Array.isArray(pedido.vendidos_acerto) ? pedido.vendidos_acerto : []).map(Number);
+      return (Array.isArray(pedido.itens) ? pedido.itens : []).filter(i => {
+        const intencao = intencaoItemPedido(i);
+        const id = Number(i.produto_id);
+        if (intencao === 'COMPRA') return !removidos.has(id);
+        return intencao === 'CONDICIONAL' && vendidos.includes(id);
+      });
+    }
+
+    // Mesma conta do servidor (calcularFechamento), em centavos
+    function calcularFechamentoPedido(itens, extras, desconto) {
+      const c = v => Math.round(Number(v) * 100);
+      const subtotalItens = itens.reduce((t, i) => t + c(i.preco), 0);
+      const totalExtras = extras.reduce((t, e) => t + c(e.preco) * Number(e.quantidade), 0);
+      const subtotal = subtotalItens + totalExtras;
+      let valorDesconto = 0;
+      if (desconto && desconto.tipo === 'VALOR') valorDesconto = c(desconto.valor);
+      if (desconto && desconto.tipo === 'PERCENTUAL') valorDesconto = Math.round(subtotal * Number(desconto.valor) / 100);
+      valorDesconto = Math.min(Math.max(valorDesconto, 0), subtotal);
+      return {
+        subtotal_itens: subtotalItens / 100,
+        total_extras: totalExtras / 100,
+        subtotal: subtotal / 100,
+        desconto: valorDesconto / 100,
+        total: (subtotal - valorDesconto) / 100,
+      };
+    }
+
+    let fechamento = null;
+    let acessoriosCache = [];
+
+    function lerDescontoFechamento() {
+      const tipo = document.getElementById('fechamentoDescontoTipo').value;
+      const valor = Number(String(document.getElementById('fechamentoDescontoValor').value || '0').replace(',', '.'));
+      return tipo ? { tipo, valor: Number.isFinite(valor) ? valor : 0 } : null;
+    }
+
+    function renderizarFechamento() {
+      const { pedido, removidos, extras } = fechamento;
+      const id = Number(pedido.id);
+      const entregue = pedido.status === 'ENTREGUE';
+      const vendidos = (Array.isArray(pedido.vendidos_acerto) ? pedido.vendidos_acerto : []).map(Number);
+      const devolvidos = (Array.isArray(pedido.devolvidos_acerto) ? pedido.devolvidos_acerto : []).map(Number);
+      const naRua = todosProdutos.filter(p => p.status === 'CONDICIONAL' && Number(p.pedido_condicional_id) === id);
+      const itens = Array.isArray(pedido.itens) ? pedido.itens : [];
+
+      document.getElementById('fechamentoItens').innerHTML = itens.map(i => {
+        const pid = Number(i.produto_id);
+        const intencao = intencaoItemPedido(i);
+        let controle = '';
+        if (intencao === 'COMPRA') {
+          controle = `<label class="inline-flex items-center gap-2 text-xs text-gray-600"><input type="checkbox" data-levou="${pid}" ${removidos.has(pid) ? '' : 'checked'} ${entregue ? 'disabled' : ''} class="rounded text-orange-500 focus:ring-orange-500"> levou</label>`;
+        } else if (intencao === 'CONDICIONAL') {
+          controle = vendidos.includes(pid) ? '<span class="text-xs text-green-700">vendida no acerto</span>'
+            : devolvidos.includes(pid) ? '<span class="text-xs text-gray-500">devolvida (não cobra)</span>'
+            : naRua.some(p => Number(p.id) === pid) ? '<span class="text-xs text-yellow-700">com a cliente: faça o acerto</span>'
+            : '<span class="text-xs text-gray-500">não cobra sem acerto</span>';
+        } else {
+          controle = '<span class="text-xs text-blue-700">encomenda: sinal à parte</span>';
+        }
+        return `
+          <li class="px-3 py-2 flex items-center justify-between gap-3 text-sm">
+            <span class="min-w-0">${escapeHtml(i.nome)} ${etiquetaIntencao(intencao)}<span class="block">${controle}</span></span>
+            <span class="whitespace-nowrap ${intencao === 'COMPRA' && removidos.has(pid) ? 'line-through text-gray-400' : 'text-gray-900'}">${formatarMoeda(Number(i.preco))}</span>
+          </li>`;
+      }).join('');
+
+      const lista = [...extras.values()];
+      document.getElementById('fechamentoExtras').innerHTML = lista.map(e => `
+        <li class="py-2 flex items-center justify-between gap-3 text-sm">
+          <span>${Number(e.quantidade)}× ${escapeHtml(e.nome)} <span class="text-gray-400">${formatarMoeda(Number(e.preco))} cada</span></span>
+          <span class="flex items-center gap-2 whitespace-nowrap">${formatarMoeda(Number(e.preco) * Number(e.quantidade))}
+            <button type="button" data-remover-extra="${Number(e.acessorio_id)}" class="text-red-500 hover:text-red-700 text-xs font-medium">remover</button></span>
+        </li>`).join('') || '<li class="py-2 text-sm text-gray-500">Nenhum acessório lançado.</li>';
+
+      const opcoes = acessoriosCache.filter(a => a.ativo);
+      document.getElementById('fechamentoAcessorio').innerHTML = opcoes.length
+        ? opcoes.map(a => `<option value="${Number(a.id)}" ${Number(a.estoque) > 0 ? '' : 'disabled'}>${escapeHtml(a.nome)} · ${formatarMoeda(Number(a.preco_venda))} (${Number(a.estoque)} em estoque)</option>`).join('')
+        : '<option value="">Cadastre acessórios na aba Acessórios</option>';
+
+      const conta = calcularFechamentoPedido(itensCobradosFechamento(pedido, removidos), lista, lerDescontoFechamento());
+      const encomendas = itens.filter(i => intencaoItemPedido(i) === 'ENCOMENDA');
+      document.getElementById('fechamentoResumo').innerHTML = `
+        <div class="flex justify-between"><span class="text-gray-600">Peças</span><span>${formatarMoeda(conta.subtotal_itens)}</span></div>
+        <div class="flex justify-between"><span class="text-gray-600">Acessórios</span><span>${formatarMoeda(conta.total_extras)}</span></div>
+        <div class="flex justify-between"><span class="text-gray-600">Desconto</span><span class="text-red-600">- ${formatarMoeda(conta.desconto)}</span></div>
+        <div class="flex justify-between border-t border-gray-200 pt-2 mt-1 text-base font-bold"><span>Total final</span><span>${formatarMoeda(conta.total)}</span></div>
+        ${encomendas.length ? `<p class="text-xs text-blue-700 pt-1">Encomendas não entram aqui (sinal de 50%: ${formatarMoeda(Number(pedido.sinal))}).</p>` : ''}`;
+
+      const aviso = document.getElementById('fechamentoAviso');
+      aviso.textContent = naRua.length && !entregue ? `A maleta ainda tem ${naRua.length} peça(s) com a cliente. Faça o acerto antes de concluir a entrega (pode salvar o fechamento agora).` : '';
+      aviso.classList[aviso.textContent ? 'remove' : 'add']('hidden');
+      const concluir = document.getElementById('btnConcluirEntrega');
+      concluir.classList[entregue ? 'add' : 'remove']('hidden');
+      concluir.disabled = naRua.length > 0 || fechamento.salvando;
+      concluir.classList[concluir.disabled ? 'add' : 'remove']('opacity-50');
+      const salvar = document.getElementById('btnSalvarFechamento');
+      salvar.textContent = entregue ? 'Salvar alterações' : 'Salvar sem concluir';
+      salvar.disabled = !!fechamento.salvando;
+    }
+
+    async function abrirFechamento(id) {
+      const pedido = acharPedido(id);
+      if (!pedido) return;
+      // Produtos atualizados: dizem quais peças da maleta ainda estão com a cliente
+      await Promise.all([carregarAcessorios(), carregarProdutos()]);
+      fechamento = {
+        pedido,
+        removidos: new Set((Array.isArray(pedido.itens_removidos) ? pedido.itens_removidos : []).map(Number)),
+        extras: new Map((Array.isArray(pedido.extras) ? pedido.extras : []).map(e => [Number(e.acessorio_id), { ...e, acessorio_id: Number(e.acessorio_id), quantidade: Number(e.quantidade) }])),
+        salvando: false,
+      };
+      document.getElementById('fechamentoTitulo').textContent = `${pedido.status === 'ENTREGUE' ? 'Fechamento do' : 'Fechar'} pedido #${id}${pedido.nome ? ' · ' + pedido.nome : ''}`;
+      document.getElementById('fechamentoDescontoTipo').value = pedido.desconto_tipo || '';
+      document.getElementById('fechamentoDescontoValor').value = pedido.desconto_tipo ? String(Number(pedido.desconto_valor)).replace('.', ',') : '';
+      document.getElementById('fechamentoQtd').value = '1';
+      renderizarFechamento();
+      abrirModalSimples('modalFechamento');
+    }
+
+    document.getElementById('fechamentoItens').addEventListener('change', (e) => {
+      const cb = e.target.closest('[data-levou]');
+      if (!cb || !fechamento) return;
+      const pid = Number(cb.dataset.levou);
+      if (cb.checked) fechamento.removidos.delete(pid);
+      else fechamento.removidos.add(pid);
+      renderizarFechamento();
+    });
+    document.getElementById('fechamentoExtras').addEventListener('click', (e) => {
+      const btn = e.target.closest('[data-remover-extra]');
+      if (!btn || !fechamento) return;
+      fechamento.extras.delete(Number(btn.dataset.removerExtra));
+      renderizarFechamento();
+    });
+    document.getElementById('btnAddAcessorio').addEventListener('click', () => {
+      if (!fechamento) return;
+      const id = Number(document.getElementById('fechamentoAcessorio').value);
+      const qtd = Math.trunc(Number(document.getElementById('fechamentoQtd').value));
+      const a = acessoriosCache.find(x => Number(x.id) === id);
+      if (!a || !(qtd > 0)) return mostrarToast('Escolha um acessório e a quantidade', 'error');
+      const atual = fechamento.extras.get(id);
+      const jaLancado = (fechamento.pedido.extras || []).find(e => Number(e.acessorio_id) === id);
+      const disponivel = Number(a.estoque) + (jaLancado ? Number(jaLancado.quantidade) : 0);
+      const nova = (atual ? atual.quantidade : 0) + qtd;
+      if (nova > disponivel) return mostrarToast(`Só há ${Number(a.estoque)} ${a.nome} em estoque`, 'error');
+      fechamento.extras.set(id, atual ? { ...atual, quantidade: nova } : { acessorio_id: id, nome: a.nome, preco: Number(a.preco_venda), quantidade: nova });
+      document.getElementById('fechamentoQtd').value = '1';
+      renderizarFechamento();
+    });
+    ['fechamentoDescontoTipo', 'fechamentoDescontoValor'].forEach(idCampo =>
+      document.getElementById(idCampo).addEventListener('input', () => { if (fechamento) renderizarFechamento(); }));
+
+    async function salvarFechamento(concluir) {
+      if (!fechamento || fechamento.salvando) return;
+      const id = Number(fechamento.pedido.id);
+      if (concluir && !confirm(`Concluir a entrega do pedido #${id}? As peças de compra direta que ela levou saem do estoque.`)) return;
+      const desconto = lerDescontoFechamento();
+      fechamento.salvando = true;
+      renderizarFechamento();
+      try {
+        const res = await fetchAdmin(`/api/admin/pedidos/${id}/fechamento`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            removidos: [...fechamento.removidos],
+            desconto,
+            extras: [...fechamento.extras.values()].map(e => ({ acessorio_id: e.acessorio_id, quantidade: e.quantidade })),
+            concluir,
+          })
+        });
+        const data = await res.json().catch(() => ({}));
+        const faltam = (data.indisponiveis || []).map(i => i.nome).join(', ');
+        if (!res.ok) throw new Error(`${data.error || 'Erro ao salvar o fechamento'}${faltam ? `: ${faltam}` : ''}`);
+        mostrarToast(`${concluir ? 'Entrega concluída' : 'Fechamento salvo'}: pedido #${id}, total ${formatarMoeda(Number(data.total_final))}`);
+        fechamento = null;
+        fecharModalSimples('modalFechamento');
+        await Promise.all([recarregarPedidos(), carregarProdutos(), carregarAcessorios()]);
+      } catch (err) {
+        console.error(err);
+        mostrarToast(err.message, 'error');
+        if (fechamento) {
+          fechamento.salvando = false;
+          renderizarFechamento();
+        }
+      }
+    }
+    document.getElementById('btnSalvarFechamento').addEventListener('click', () => salvarFechamento(false));
+    document.getElementById('btnConcluirEntrega').addEventListener('click', () => salvarFechamento(true));
+
+    // ---------- Acessórios ----------
+    async function carregarAcessorios() {
+      try {
+        const res = await fetchAdmin('/api/admin/acessorios');
+        if (!res.ok) throw new Error('Erro ao carregar acessórios');
+        acessoriosCache = await res.json();
+        renderizarAcessorios(acessoriosCache);
+      } catch (err) {
+        console.error(err);
+        mostrarToast('Erro ao carregar acessórios', 'error');
+      }
+    }
+
+    function renderizarAcessorios(lista) {
+      document.getElementById('tabelaAcessorios').innerHTML = lista.map(a => `
+        <tr class="hover:bg-gray-50 ${a.ativo ? '' : 'opacity-60'}">
+          <td class="px-4 py-3 font-medium text-gray-900">${escapeHtml(a.nome)}</td>
+          <td class="px-4 py-3 text-gray-700">${formatarMoeda(Number(a.preco_venda))}</td>
+          <td class="px-4 py-3 font-medium ${Number(a.estoque) > 0 ? 'text-gray-900' : 'text-red-600'}">${Number(a.estoque) || 0} un.</td>
+          <td class="px-4 py-3 text-sm">${a.ativo ? '<span class="px-2 py-0.5 rounded-full bg-green-100 text-green-700">Ativo</span>' : '<span class="px-2 py-0.5 rounded-full bg-gray-100 text-gray-600">Inativo</span>'}</td>
+          <td class="px-4 py-3 text-right"><button type="button" data-editar-acessorio="${Number(a.id)}" class="text-orange-600 hover:text-orange-700 text-sm font-medium">Editar</button></td>
+        </tr>`).join('') || '<tr><td colspan="5" class="px-4 py-6 text-center text-gray-500">Nenhum acessório cadastrado ainda</td></tr>';
+    }
+
+    function limparFormAcessorio() {
+      document.getElementById('formAcessorio').reset();
+      document.getElementById('acessorioId').value = '';
+      document.getElementById('acessorioAtivo').checked = true;
+      document.getElementById('btnSalvarAcessorio').textContent = 'Adicionar';
+      document.getElementById('btnCancelarAcessorio').classList.add('hidden');
+    }
+
+    document.getElementById('tabelaAcessorios').addEventListener('click', (e) => {
+      const btn = e.target.closest('[data-editar-acessorio]');
+      if (!btn) return;
+      const a = acessoriosCache.find(x => Number(x.id) === Number(btn.dataset.editarAcessorio));
+      if (!a) return;
+      document.getElementById('acessorioId').value = String(a.id);
+      document.getElementById('acessorioNome').value = a.nome;
+      document.getElementById('acessorioPreco').value = String(Number(a.preco_venda)).replace('.', ',');
+      document.getElementById('acessorioEstoque').value = String(a.estoque);
+      document.getElementById('acessorioAtivo').checked = !!a.ativo;
+      document.getElementById('btnSalvarAcessorio').textContent = 'Salvar';
+      document.getElementById('btnCancelarAcessorio').classList.remove('hidden');
+      document.getElementById('acessorioNome').focus();
+    });
+    document.getElementById('btnCancelarAcessorio').addEventListener('click', limparFormAcessorio);
+    document.getElementById('formAcessorio').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const id = document.getElementById('acessorioId').value;
+      const body = {
+        nome: document.getElementById('acessorioNome').value,
+        preco_venda: document.getElementById('acessorioPreco').value,
+        estoque: Number(document.getElementById('acessorioEstoque').value || 0),
+        ativo: document.getElementById('acessorioAtivo').checked,
+      };
+      try {
+        const res = await fetchAdmin(id ? `/api/admin/acessorios/${Number(id)}` : '/api/admin/acessorios', {
+          method: id ? 'PUT' : 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body)
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.error || 'Erro ao salvar acessório');
+        mostrarToast(id ? 'Acessório salvo' : 'Acessório adicionado');
+        limparFormAcessorio();
+        await carregarAcessorios();
+      } catch (err) {
+        mostrarToast(err.message, 'error');
+      }
     });
 
     document.getElementById('buscaClientes').addEventListener('input', (e) => renderizarClientes(filtrarClientes(todosClientes, e.target.value)));
@@ -2268,6 +2816,7 @@
         return;
       }
       carregarProdutos();
+      carregarPedidosGeral();
     });
   </script>
 </body>

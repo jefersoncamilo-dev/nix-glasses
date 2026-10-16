@@ -193,8 +193,8 @@ describe('painel: maleta no acerto', () => {
 
   it('pedido com maleta enviada mostra "Fazer acerto" no lugar de "Enviar maleta"', () => {
     const lista = { innerHTML: '' };
-    const ctx = carregar(['escapeHtml', 'renderizarPedidos'], {
-      document: { getElementById: () => lista }, formatarMoeda: v => `R$ ${v}`, formatarData: v => String(v),
+    const ctx = carregar(['escapeHtml', 'intencaoItemPedido', 'etiquetaIntencao', 'badgeStatusPedido', 'htmlPedido', 'renderizarPedidos'], {
+      document: { getElementById: () => lista }, formatarMoeda: v => `R$ ${v}`, formatarData: v => String(v), STATUS_PEDIDO: [],
     });
     const itens = [{ nome: 'A', codigo_sku: 'A', preco: 1, encomenda: false }];
     ctx.renderizarPedidos([{ id: 4, itens, total: 1, maleta_enviada_em: '2026-10-16' }]);
@@ -202,5 +202,12 @@ describe('painel: maleta no acerto', () => {
     assert.doesNotMatch(lista.innerHTML, /data-enviar-maleta/);
     ctx.renderizarPedidos([{ id: 5, itens: [{ ...itens[0], encomenda: true }], total: 1 }]);
     assert.doesNotMatch(lista.innerHTML, /data-enviar-maleta|data-acerto-pedido/);
+    // Compra direta não vai para a maleta; pedido entregue ou cancelado não tem mais ações de maleta
+    ctx.renderizarPedidos([{ id: 6, itens: [{ ...itens[0], intencao: 'COMPRA' }], total: 1 }]);
+    assert.doesNotMatch(lista.innerHTML, /data-enviar-maleta/);
+    assert.match(lista.innerHTML, /data-fechar-pedido="6"/);
+    ctx.renderizarPedidos([{ id: 7, itens, total: 1, status: 'CANCELADO' }]);
+    assert.doesNotMatch(lista.innerHTML, /data-enviar-maleta|data-fechar-pedido/);
+    assert.match(lista.innerHTML, /data-reabrir-pedido="7"/);
   });
 });

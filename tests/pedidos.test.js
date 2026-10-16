@@ -58,13 +58,14 @@ describe('checkout grava o pedido', () => {
     assert.equal(p.telefone, '(11) 99999-0000');
     assert.equal(p.endereco, 'Rua A, 10 - Centro - São Paulo (apto 2) CEP 01001-000');
     assert.deepEqual(p.itens, [
-      { produto_id: e, nome: 'Óculos P-2', codigo_sku: 'P-2', preco: 300.01, encomenda: true, sinal: 150.01 },
-      { produto_id: a, nome: 'Óculos P-1', codigo_sku: 'P-1', preco: 199.99, encomenda: false, sinal: 0 },
+      { produto_id: e, nome: 'Óculos P-2', codigo_sku: 'P-2', preco: 300.01, encomenda: true, sinal: 150.01, intencao: 'ENCOMENDA' },
+      { produto_id: a, nome: 'Óculos P-1', codigo_sku: 'P-1', preco: 199.99, encomenda: false, sinal: 0, intencao: 'CONDICIONAL' },
     ]);
     assert.equal(p.total_prova, '199.99');
     assert.equal(p.total_encomendas, '300.01');
     assert.equal(p.sinal, '150.01');
     assert.equal(p.total, '500.00');
+    assert.equal(p.status, 'NOVO');
   });
 
   it('sem login (ou com token inválido) grava o pedido sem conta', async () => {

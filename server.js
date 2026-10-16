@@ -533,16 +533,20 @@ async function registrarCompraCadastro(db, produto) {
 
 // Monta o pedido a partir das linhas de produtos do banco (preço e encomenda
 // nunca vêm do navegador). Sinal = 50% por item, arredondado como na vitrine.
-function montarPedido(produtos, contato) {
+// intencoes: Map produto_id -> 'COMPRA' | 'CONDICIONAL' escolhido no carrinho.
+// Sob encomenda é sempre ENCOMENDA; pronta entrega sem escolha vai para a maleta.
+function montarPedido(produtos, contato, intencoes = new Map()) {
   const c = contato && typeof contato === 'object' ? contato : {};
   const centavos = v => Math.round(Number(v) * 100);
   const itens = produtos.map(p => {
     const encomenda = p.disponibilidade === 'SOB_ENCOMENDA';
     const preco = centavos(p.preco_venda) / 100;
-    return { produto_id: p.id, nome: p.nome, codigo_sku: p.codigo_sku, preco, encomenda, sinal: encomenda ? Math.round(preco * 50) / 100 : 0 };
+    const intencao = encomenda ? 'ENCOMENDA' : intencoes.get(p.id) === 'COMPRA' ? 'COMPRA' : 'CONDICIONAL';
+    return { produto_id: p.id, nome: p.nome, codigo_sku: p.codigo_sku, preco, encomenda, sinal: encomenda ? Math.round(preco * 50) / 100 : 0, intencao };
   });
   const soma = (lista, campo) => lista.reduce((t, i) => t + centavos(i[campo]), 0) / 100;
-  const prova = itens.filter(i => !i.encomenda);
+  const prova = itens.filter(i => i.intencao === 'CONDICIONAL');
+  const compras = itens.filter(i => i.intencao === 'COMPRA');
   const encomendas = itens.filter(i => i.encomenda);
   const rua = textoCurto(c.rua, 150);
   const numero = textoCurto(c.numero, 20);
@@ -559,9 +563,71 @@ function montarPedido(produtos, contato) {
     endereco: endereco.trim(),
     itens,
     totalProva: soma(prova, 'preco'),
+    totalCompra: soma(compras, 'preco'),
     totalEncomendas: soma(encomendas, 'preco'),
     sinal: soma(encomendas, 'sinal'),
     total: soma(itens, 'preco'),
+  };
+}
+
+// Intenção de um item gravado no pedido. Pedidos antigos (sem o campo): encomenda
+// ou peça para provar na maleta.
+const INTENCOES = ['COMPRA', 'CONDICIONAL', 'ENCOMENDA'];
+function intencaoDoItem(item) {
+  if (item && item.encomenda === true) return 'ENCOMENDA';
+  return item && INTENCOES.includes(item.intencao) ? item.intencao : 'CONDICIONAL';
+}
+
+const STATUS_PEDIDO = ['NOVO', 'EM_ANDAMENTO', 'ENTREGUE', 'CANCELADO'];
+const TIPOS_DESCONTO = ['VALOR', 'PERCENTUAL'];
+const MAX_EXTRAS = 30;
+const MAX_QTD_EXTRA = 99;
+
+// Desconto do fechamento: { tipo: 'VALOR'|'PERCENTUAL', valor } ou nada. null = inválido.
+function lerDesconto(d) {
+  if (d === undefined || d === null || d === '') return { tipo: '', valor: 0 };
+  if (typeof d !== 'object' || Array.isArray(d)) return null;
+  if (!d.tipo) return { tipo: '', valor: 0 };
+  if (!TIPOS_DESCONTO.includes(d.tipo)) return null;
+  const valor = typeof d.valor === 'number' ? d.valor : Number(String(d.valor ?? '').replace(',', '.'));
+  if (!Number.isFinite(valor) || valor < 0) return null;
+  if (d.tipo === 'PERCENTUAL' && valor > 100) return null;
+  if (valor > 1e7) return null;
+  return { tipo: valor ? d.tipo : '', valor: Math.round(valor * 100) / 100 };
+}
+
+// Acessórios do fechamento: [{ acessorio_id, quantidade }] somando ids repetidos. null = inválido.
+function lerExtras(lista) {
+  if (lista === undefined || lista === null) return new Map();
+  if (!Array.isArray(lista) || lista.length > MAX_EXTRAS) return null;
+  const qtd = new Map();
+  for (const e of lista) {
+    const id = Number(e && e.acessorio_id);
+    const q = Number(e && e.quantidade);
+    if (!Number.isInteger(id) || id <= 0 || id >= 2 ** 31 || !Number.isInteger(q) || q <= 0) return null;
+    qtd.set(id, (qtd.get(id) || 0) + q);
+    if (qtd.get(id) > MAX_QTD_EXTRA) return null;
+  }
+  return qtd;
+}
+
+// Valor final do pedido na entrega, em centavos para não perder arredondamento.
+// itens: [{ preco }] cobrados; extras: [{ preco, quantidade }]; desconto sobre o subtotal.
+function calcularFechamento(itens, extras, desconto) {
+  const c = v => Math.round(Number(v) * 100);
+  const subtotalItens = itens.reduce((t, i) => t + c(i.preco), 0);
+  const totalExtras = extras.reduce((t, e) => t + c(e.preco) * Number(e.quantidade), 0);
+  const subtotal = subtotalItens + totalExtras;
+  let valorDesconto = 0;
+  if (desconto && desconto.tipo === 'VALOR') valorDesconto = c(desconto.valor);
+  if (desconto && desconto.tipo === 'PERCENTUAL') valorDesconto = Math.round(subtotal * Number(desconto.valor) / 100);
+  valorDesconto = Math.min(Math.max(valorDesconto, 0), subtotal);
+  return {
+    subtotal_itens: subtotalItens / 100,
+    total_extras: totalExtras / 100,
+    subtotal: subtotal / 100,
+    desconto: valorDesconto / 100,
+    total: (subtotal - valorDesconto) / 100,
   };
 }
 
@@ -1003,8 +1069,10 @@ async function startServer() {
   }
 
   async function handleMaletaCheckout(req, res) {
-    const { produtoIds, productIds, ids, contato } = req.body || {};
-    const list = produtoIds || productIds || ids;
+    const { produtoIds, productIds, ids, itens, contato } = req.body || {};
+    // itens: [{ id, intencao }] com a escolha de cada item no carrinho (Compra direta ou Maleta)
+    const comIntencao = Array.isArray(itens) ? itens.filter(i => i && typeof i === 'object') : [];
+    const list = produtoIds || productIds || ids || (Array.isArray(itens) ? itens.map(i => i && i.id) : undefined);
 
     if (!Array.isArray(list) || list.length === 0 || list.length > MAX_ITENS_PEDIDO) {
       return res.status(400).json({ error: 'Array de IDs de produtos é obrigatório' });
@@ -1013,6 +1081,9 @@ async function startServer() {
       return res.status(400).json({ error: 'IDs de produtos inválidos' });
     }
     const idsOk = [...new Set(list.map(Number))];
+    const intencoes = new Map(comIntencao
+      .filter(i => i.intencao === 'COMPRA' || i.intencao === 'CONDICIONAL')
+      .map(i => [Number(i.id), i.intencao]));
     const clienteId = clienteDoToken(req);
 
     let client;
@@ -1035,14 +1106,14 @@ async function startServer() {
           (await client.query('SELECT id, email FROM clientes WHERE id = $1', [clienteId])).rows;
         const ordem = new Map(idsOk.map((id, i) => [id, i]));
         const linhas = [...result.rows].sort((a, b) => ordem.get(a.id) - ordem.get(b.id));
-        const p = montarPedido(linhas, contato);
+        const p = montarPedido(linhas, contato, intencoes);
         const { rows } = await client.query(
-          `INSERT INTO pedidos (cliente_id, nome, telefone, email, endereco, itens, total_prova, total_encomendas, sinal, total)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING id`,
+          `INSERT INTO pedidos (cliente_id, nome, telefone, email, endereco, itens, total_prova, total_compra, total_encomendas, sinal, total)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) RETURNING id, status`,
           [dono[0] ? dono[0].id : null, p.nome, p.telefone, dono[0] ? dono[0].email : '', p.endereco,
-            JSON.stringify(p.itens), p.totalProva, p.totalEncomendas, p.sinal, p.total]
+            JSON.stringify(p.itens), p.totalProva, p.totalCompra, p.totalEncomendas, p.sinal, p.total]
         );
-        pedido = { id: rows[0].id };
+        pedido = { id: rows[0].id, status: rows[0].status };
       }
 
       await client.query('COMMIT');
@@ -1080,22 +1151,38 @@ async function startServer() {
   }
 
   // Admin: pedidos (todos, de um cliente com ?cliente=<id> ou sem conta com ?cliente=sem-conta)
+  // ?status=NOVO|EM_ANDAMENTO|ENTREGUE|CANCELADO filtra pelo status do pedido.
+  // vendidos_acerto/devolvidos_acerto: peças da maleta deste pedido já acertadas.
   async function handleListPedidos(req, res) {
     const filtro = req.query.cliente;
-    let where = '';
+    const status = req.query.status;
+    const condicoes = [];
     const params = [];
     if (filtro === 'sem-conta') {
-      where = 'WHERE p.cliente_id IS NULL';
+      condicoes.push('p.cliente_id IS NULL');
     } else if (filtro !== undefined) {
       if (typeof filtro !== 'string' || !/^\d{1,9}$/.test(filtro)) return res.status(400).json({ error: 'Cliente inválido' });
-      where = 'WHERE p.cliente_id = $1';
       params.push(Number(filtro));
+      condicoes.push(`p.cliente_id = $${params.length}`);
     }
+    if (status !== undefined) {
+      if (!STATUS_PEDIDO.includes(status)) return res.status(400).json({ error: 'Status inválido' });
+      params.push(status);
+      condicoes.push(`p.status = $${params.length}`);
+    }
+    const where = condicoes.length ? `WHERE ${condicoes.join(' AND ')}` : '';
     try {
       const { rows } = await pool.query(
-        `SELECT p.id, p.cliente_id, p.nome, p.telefone, p.email, p.endereco, p.itens,
-                p.total_prova, p.total_encomendas, p.sinal, p.total, p.maleta_enviada_em, p.created_at
-         FROM pedidos p ${where}
+        `SELECT p.id, p.cliente_id, p.nome, p.telefone, p.email, p.endereco, p.itens, p.status,
+                p.total_prova, p.total_compra, p.total_encomendas, p.sinal, p.total, p.maleta_enviada_em, p.created_at,
+                p.itens_removidos, p.extras, p.desconto_tipo, p.desconto_valor, p.total_final, p.entregue_em, p.updated_at,
+                COALESCE(ac.vendidos, '{}') AS vendidos_acerto, COALESCE(ac.devolvidos, '{}') AS devolvidos_acerto
+         FROM pedidos p
+         LEFT JOIN LATERAL (
+           SELECT (SELECT array_agg(DISTINCT x) FROM acertos a2, unnest(a2.comprados) x WHERE a2.pedido_id = p.id) AS vendidos,
+                  (SELECT array_agg(DISTINCT x) FROM acertos a3, unnest(a3.devolvidos) x WHERE a3.pedido_id = p.id) AS devolvidos
+         ) ac ON true
+         ${where}
          ORDER BY p.created_at DESC, p.id DESC
          LIMIT 200`,
         params
@@ -1119,17 +1206,21 @@ async function startServer() {
     try {
       client = await pool.connect();
       await client.query('BEGIN');
-      const { rows } = await client.query('SELECT id, itens FROM pedidos WHERE id = $1 FOR UPDATE', [pedidoId]);
+      const { rows } = await client.query('SELECT id, itens, status FROM pedidos WHERE id = $1 FOR UPDATE', [pedidoId]);
       if (!rows.length) {
         await client.query('ROLLBACK');
         return res.status(404).json({ error: 'Pedido não encontrado' });
       }
+      if (rows[0].status === 'CANCELADO' || rows[0].status === 'ENTREGUE') {
+        await client.query('ROLLBACK');
+        return res.status(409).json({ error: `Pedido ${rows[0].status === 'CANCELADO' ? 'cancelado' : 'já entregue'}` });
+      }
       const prova = (Array.isArray(rows[0].itens) ? rows[0].itens : [])
-        .filter((i) => i && i.encomenda !== true && Number.isInteger(Number(i.produto_id)));
+        .filter((i) => i && intencaoDoItem(i) === 'CONDICIONAL' && Number.isInteger(Number(i.produto_id)));
       const ids = [...new Set(prova.map((i) => Number(i.produto_id)))];
       if (!ids.length) {
         await client.query('ROLLBACK');
-        return res.status(400).json({ error: 'Este pedido não tem peças de pronta entrega' });
+        return res.status(400).json({ error: 'Este pedido não tem peças para provar na maleta' });
       }
 
       const enviados = (await client.query(
@@ -1152,18 +1243,278 @@ async function startServer() {
       }
 
       const atualizado = await client.query(
-        `UPDATE pedidos SET maleta_enviada_em = COALESCE(maleta_enviada_em, CURRENT_TIMESTAMP)
-         WHERE id = $1 RETURNING maleta_enviada_em`,
+        `UPDATE pedidos SET maleta_enviada_em = COALESCE(maleta_enviada_em, CURRENT_TIMESTAMP),
+                status = CASE WHEN status = 'NOVO' THEN 'EM_ANDAMENTO' ELSE status END, updated_at = CURRENT_TIMESTAMP
+         WHERE id = $1 RETURNING maleta_enviada_em, status`,
         [pedidoId]
       );
       await client.query('COMMIT');
-      res.json({ enviados, na_maleta: naMaleta, indisponiveis, maleta_enviada_em: atualizado.rows[0].maleta_enviada_em });
+      res.json({ enviados, na_maleta: naMaleta, indisponiveis, maleta_enviada_em: atualizado.rows[0].maleta_enviada_em, status: atualizado.rows[0].status });
     } catch (err) {
       if (client) await client.query('ROLLBACK').catch(() => {});
       console.error(err);
       res.status(500).json({ error: 'Erro ao enviar a maleta' });
     } finally {
       if (client) client.release();
+    }
+  }
+
+  function lerIdPedido(req, res) {
+    const { id } = req.params;
+    if (!/^\d{1,9}$/.test(id) || Number(id) === 0) {
+      res.status(400).json({ error: 'Pedido inválido' });
+      return null;
+    }
+    return Number(id);
+  }
+
+  // Peças da maleta deste pedido que ainda estão com a cliente
+  async function pecasNaRua(db, pedidoId) {
+    const { rows } = await db.query(
+      `SELECT id FROM produtos WHERE status = 'CONDICIONAL' AND pedido_condicional_id = $1`, [pedidoId]);
+    return rows.length;
+  }
+
+  // Devolve ao estoque os acessórios lançados no fechamento do pedido
+  async function devolverExtras(db, extras) {
+    for (const e of Array.isArray(extras) ? extras : []) {
+      const q = Number(e && e.quantidade);
+      if (Number.isInteger(q) && q > 0) {
+        await db.query('UPDATE acessorios SET estoque = estoque + $2, updated_at = CURRENT_TIMESTAMP WHERE id = $1', [Number(e.acessorio_id), q]);
+      }
+    }
+  }
+
+  // Admin: muda o status do pedido. ENTREGUE só pelo fechamento (que dá baixa no estoque).
+  // Cancelar devolve os acessórios ao estoque; com peças da maleta na rua, faça o acerto antes.
+  async function handleStatusPedido(req, res) {
+    const pedidoId = lerIdPedido(req, res);
+    if (pedidoId === null) return;
+    const novo = req.body && req.body.status;
+    if (!['NOVO', 'EM_ANDAMENTO', 'CANCELADO'].includes(novo)) {
+      return res.status(400).json({ error: 'Status inválido (para entregar, use o fechamento do pedido)' });
+    }
+    let client;
+    try {
+      client = await pool.connect();
+      await client.query('BEGIN');
+      const { rows } = await client.query('SELECT id, status, extras FROM pedidos WHERE id = $1 FOR UPDATE', [pedidoId]);
+      if (!rows.length) {
+        await client.query('ROLLBACK');
+        return res.status(404).json({ error: 'Pedido não encontrado' });
+      }
+      const atual = rows[0];
+      if (atual.status === 'ENTREGUE') {
+        await client.query('ROLLBACK');
+        return res.status(409).json({ error: 'Pedido já entregue não muda de status' });
+      }
+      if (novo === 'CANCELADO' && atual.status !== 'CANCELADO') {
+        if (await pecasNaRua(client, pedidoId)) {
+          await client.query('ROLLBACK');
+          return res.status(409).json({ error: 'A maleta deste pedido ainda está com a cliente: faça o acerto antes de cancelar' });
+        }
+        await devolverExtras(client, atual.extras);
+        await client.query(`UPDATE pedidos SET extras = '[]', total_final = NULL WHERE id = $1`, [pedidoId]);
+      }
+      const r = await client.query(
+        'UPDATE pedidos SET status = $2, updated_at = CURRENT_TIMESTAMP WHERE id = $1 RETURNING id, status',
+        [pedidoId, novo]
+      );
+      await client.query('COMMIT');
+      res.json(r.rows[0]);
+    } catch (err) {
+      if (client) await client.query('ROLLBACK').catch(() => {});
+      console.error(err);
+      res.status(500).json({ error: 'Erro ao mudar o status do pedido' });
+    } finally {
+      if (client) client.release();
+    }
+  }
+
+  // Admin: fechamento do pedido na entrega. Cobra os itens de compra direta que a
+  // cliente levou e as peças da maleta vendidas no acerto, mais os acessórios extras
+  // (que dão baixa no estoque deles), com desconto em R$ ou %. Pode salvar quantas
+  // vezes quiser; concluir=true marca ENTREGUE e dá baixa (ESGOTADO) nas peças de compra direta.
+  async function handleFechamentoPedido(req, res) {
+    const pedidoId = lerIdPedido(req, res);
+    if (pedidoId === null) return;
+    const body = req.body || {};
+    const removidosRaw = body.removidos === undefined || body.removidos === null ? [] : body.removidos;
+    if (!Array.isArray(removidosRaw) || removidosRaw.length > MAX_ITENS_PEDIDO ||
+        !removidosRaw.every(id => Number.isInteger(Number(id)) && Number(id) > 0 && Number(id) < 2 ** 31)) {
+      return res.status(400).json({ error: 'Itens removidos inválidos' });
+    }
+    const desconto = lerDesconto(body.desconto);
+    if (desconto === null) return res.status(400).json({ error: 'Desconto inválido (valor em R$ ou percentual de 0 a 100)' });
+    const novosExtras = lerExtras(body.extras);
+    if (novosExtras === null) return res.status(400).json({ error: 'Acessórios inválidos' });
+    const concluir = body.concluir === true;
+
+    let client;
+    const falhar = async (status, payload) => {
+      await client.query('ROLLBACK');
+      res.status(status).json(payload);
+    };
+    try {
+      client = await pool.connect();
+      await client.query('BEGIN');
+      const { rows } = await client.query('SELECT * FROM pedidos WHERE id = $1 FOR UPDATE', [pedidoId]);
+      if (!rows.length) return falhar(404, { error: 'Pedido não encontrado' });
+      const pedido = rows[0];
+      if (pedido.status === 'CANCELADO') return falhar(409, { error: 'Pedido cancelado: reabra antes de fechar' });
+      const jaEntregue = pedido.status === 'ENTREGUE';
+
+      const itens = Array.isArray(pedido.itens) ? pedido.itens : [];
+      const compras = itens.filter(i => intencaoDoItem(i) === 'COMPRA');
+      const idsCompra = compras.map(i => Number(i.produto_id));
+      const removidosPedidos = [...new Set(removidosRaw.map(Number))];
+      if (!jaEntregue && removidosPedidos.some(id => !idsCompra.includes(id))) {
+        return falhar(400, { error: 'Só itens de compra direta podem ser tirados do pedido' });
+      }
+      // Depois de entregue a baixa já foi feita: os itens levados não mudam mais
+      const removidos = jaEntregue ? (pedido.itens_removidos || []).map(Number) : removidosPedidos;
+
+      const vendidosAcerto = (await client.query(
+        `SELECT DISTINCT x AS id FROM acertos a, unnest(a.comprados) x WHERE a.pedido_id = $1`, [pedidoId]
+      )).rows.map(r => Number(r.id));
+      const cobrados = itens.filter(i => {
+        const intencao = intencaoDoItem(i);
+        const id = Number(i.produto_id);
+        if (intencao === 'COMPRA') return !removidos.includes(id);
+        return intencao === 'CONDICIONAL' && vendidosAcerto.includes(id);
+      });
+
+      // Acessórios: aplica no estoque só a diferença para o que já estava lançado
+      const anteriores = new Map();
+      for (const e of Array.isArray(pedido.extras) ? pedido.extras : []) {
+        anteriores.set(Number(e.acessorio_id), e);
+      }
+      const todosIds = [...new Set([...anteriores.keys(), ...novosExtras.keys()])];
+      const estoque = new Map((await client.query(
+        'SELECT id, nome, preco_venda, estoque, ativo FROM acessorios WHERE id = ANY($1) ORDER BY id FOR UPDATE', [todosIds]
+      )).rows.map(a => [a.id, a]));
+      const extras = [];
+      for (const id of todosIds) {
+        const antes = anteriores.has(id) ? Number(anteriores.get(id).quantidade) || 0 : 0;
+        const depois = novosExtras.get(id) || 0;
+        const a = estoque.get(id);
+        if (!a) {
+          if (depois > antes) return falhar(400, { error: 'Acessório não encontrado' });
+          continue; // acessório apagado do banco: só sai do pedido
+        }
+        const delta = depois - antes;
+        if (delta > 0 && !a.ativo && antes === 0) return falhar(400, { error: `Acessório inativo: ${a.nome}` });
+        if (delta > 0 && a.estoque < delta) {
+          return falhar(409, { error: `Estoque insuficiente de ${a.nome} (restam ${a.estoque})` });
+        }
+        if (delta !== 0) {
+          await client.query('UPDATE acessorios SET estoque = estoque - $2, updated_at = CURRENT_TIMESTAMP WHERE id = $1', [id, delta]);
+        }
+        if (depois > 0) {
+          // Preço de quando entrou no pedido; acessório novo no pedido usa o preço atual
+          const preco = anteriores.has(id) ? Number(anteriores.get(id).preco) : Number(a.preco_venda);
+          extras.push({ acessorio_id: id, nome: a.nome, preco, quantidade: depois });
+        }
+      }
+
+      const fechamento = calcularFechamento(cobrados, extras, desconto);
+
+      if (concluir && !jaEntregue) {
+        if (await pecasNaRua(client, pedidoId)) {
+          return falhar(409, { error: 'A maleta deste pedido ainda está com a cliente: faça o acerto antes de concluir a entrega' });
+        }
+        const levar = idsCompra.filter(id => !removidos.includes(id));
+        if (levar.length) {
+          const baixados = (await client.query(
+            `UPDATE produtos SET status = 'ESGOTADO', pedido_condicional_id = NULL, updated_at = CURRENT_TIMESTAMP
+             WHERE id = ANY($1) AND (status = 'DISPONIVEL' OR (status = 'CONDICIONAL' AND pedido_condicional_id = $2))
+             RETURNING id`,
+            [levar, pedidoId]
+          )).rows.map(r => r.id);
+          const indisponiveis = compras
+            .filter(i => levar.includes(Number(i.produto_id)) && !baixados.includes(Number(i.produto_id)))
+            .map(i => ({ produto_id: Number(i.produto_id), nome: i.nome, codigo_sku: i.codigo_sku }));
+          if (indisponiveis.length) {
+            return falhar(409, { error: 'Peças que já não estão disponíveis (tire do pedido ou encomende)', indisponiveis });
+          }
+        }
+      }
+
+      const r = await client.query(
+        `UPDATE pedidos SET itens_removidos = $2, extras = $3, desconto_tipo = $4, desconto_valor = $5, total_final = $6,
+                status = CASE WHEN $7 THEN 'ENTREGUE' ELSE status END,
+                entregue_em = CASE WHEN $7 THEN COALESCE(entregue_em, CURRENT_TIMESTAMP) ELSE entregue_em END,
+                updated_at = CURRENT_TIMESTAMP
+         WHERE id = $1
+         RETURNING id, status, itens_removidos, extras, desconto_tipo, desconto_valor, total_final, entregue_em`,
+        [pedidoId, removidos, JSON.stringify(extras), desconto.tipo, desconto.valor, fechamento.total, concluir]
+      );
+      await client.query('COMMIT');
+      res.json({ ...r.rows[0], fechamento });
+    } catch (err) {
+      if (client) await client.query('ROLLBACK').catch(() => {});
+      console.error(err);
+      res.status(500).json({ error: 'Erro ao salvar o fechamento do pedido' });
+    } finally {
+      if (client) client.release();
+    }
+  }
+
+  // ---------- Acessórios (estoque próprio, em unidades) ----------
+  function lerAcessorio(body) {
+    const b = body || {};
+    const nome = textoCurto(b.nome, 100);
+    if (!nome) return { erro: 'Nome do acessório é obrigatório' };
+    const preco = typeof b.preco_venda === 'number' ? b.preco_venda : Number(String(b.preco_venda ?? '').trim().replace(',', '.'));
+    if (b.preco_venda === '' || !Number.isFinite(preco) || preco < 0 || preco > 1e6) return { erro: 'Preço inválido' };
+    const estoque = Number(b.estoque ?? 0);
+    if (!Number.isInteger(estoque) || estoque < 0 || estoque > 100000) return { erro: 'Estoque inválido (unidades inteiras, 0 ou mais)' };
+    const ativo = b.ativo === undefined ? true : b.ativo === true || b.ativo === 'true';
+    return { nome, preco, estoque, ativo };
+  }
+
+  async function handleListAcessorios(req, res) {
+    try {
+      const { rows } = await pool.query(
+        'SELECT id, nome, preco_venda, estoque, ativo, updated_at FROM acessorios ORDER BY ativo DESC, nome, id');
+      res.json(rows);
+    } catch (err) {
+      console.error(err);
+      res.status(500).json({ error: 'Erro ao buscar acessórios' });
+    }
+  }
+
+  async function handleCreateAcessorio(req, res) {
+    const a = lerAcessorio(req.body);
+    if (a.erro) return res.status(400).json({ error: a.erro });
+    try {
+      const { rows } = await pool.query(
+        `INSERT INTO acessorios (nome, preco_venda, estoque, ativo) VALUES ($1, $2, $3, $4)
+         RETURNING id, nome, preco_venda, estoque, ativo, updated_at`,
+        [a.nome, Math.round(a.preco * 100) / 100, a.estoque, a.ativo]
+      );
+      res.status(201).json(rows[0]);
+    } catch (err) {
+      console.error(err);
+      res.status(500).json({ error: 'Erro ao cadastrar acessório' });
+    }
+  }
+
+  async function handleUpdateAcessorio(req, res) {
+    if (!/^\d{1,9}$/.test(req.params.id)) return res.status(400).json({ error: 'Acessório inválido' });
+    const a = lerAcessorio(req.body);
+    if (a.erro) return res.status(400).json({ error: a.erro });
+    try {
+      const { rows } = await pool.query(
+        `UPDATE acessorios SET nome = $2, preco_venda = $3, estoque = $4, ativo = $5, updated_at = CURRENT_TIMESTAMP
+         WHERE id = $1 RETURNING id, nome, preco_venda, estoque, ativo, updated_at`,
+        [Number(req.params.id), a.nome, Math.round(a.preco * 100) / 100, a.estoque, a.ativo]
+      );
+      if (!rows.length) return res.status(404).json({ error: 'Acessório não encontrado' });
+      res.json(rows[0]);
+    } catch (err) {
+      console.error(err);
+      res.status(500).json({ error: 'Erro ao salvar acessório' });
     }
   }
 
@@ -1430,6 +1781,11 @@ async function startServer() {
   app.get('/api/admin/clientes', requireAdmin, handleListClientes);
   app.get('/api/admin/pedidos', requireAdmin, handleListPedidos);
   app.post('/api/admin/pedidos/:id/enviar-maleta', requireAdmin, handleEnviarMaleta);
+  app.patch('/api/admin/pedidos/:id/status', requireAdmin, handleStatusPedido);
+  app.put('/api/admin/pedidos/:id/fechamento', requireAdmin, handleFechamentoPedido);
+  app.get('/api/admin/acessorios', requireAdmin, handleListAcessorios);
+  app.post('/api/admin/acessorios', requireAdmin, handleCreateAcessorio);
+  app.put('/api/admin/acessorios/:id', requireAdmin, handleUpdateAcessorio);
 
   // ---------- Aliases EN (compatibilidade front-end em inglês) ----------
   app.get('/api/products', handleListPublicos);
