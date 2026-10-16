@@ -176,8 +176,9 @@ describe('painel (admin/index.html) escapa dados de produto', () => {
   it('nas listas do acerto', () => {
     const compradosList = elemento();
     const devolvidosList = elemento();
-    const ctx = carregar('admin/index.html', ['escapeHtml', 'renderizarListasAcerto'], {
+    const ctx = carregar('admin/index.html', ['escapeHtml', 'condicionaisDoAcerto', 'renderizarListasAcerto'], {
       todosProdutos: [produtoMalicioso()],
+      maletaAcerto: '',
       compradosList,
       devolvidosList,
       formatarMoeda,
@@ -215,6 +216,7 @@ describe('painel (admin/index.html) escapa clientes e pedidos', () => {
       itens: [{ nome: PAYLOAD, codigo_sku: PAYLOAD, preco: 100, encomenda: true }, { nome: PAYLOAD, codigo_sku: PAYLOAD, preco: 100, encomenda: false }],
     }]);
     semInjecao(lista.innerHTML);
+    assert.match(lista.innerHTML, /data-enviar-maleta="3"/);
     assert.match(lista.innerHTML, /SOB ENCOMENDA/);
     assert.match(lista.innerHTML, /PRONTA ENTREGA/);
   });

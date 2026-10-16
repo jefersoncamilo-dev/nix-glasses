@@ -226,6 +226,10 @@
             <button id="btnLimparAcerto" type="button" class="bg-gray-100 hover:bg-gray-200 text-gray-700 px-4 py-2 rounded-lg font-medium transition-colors">Limpar</button>
           </div>
         </div>
+        <div class="mb-4">
+          <label for="maletaAcerto" class="block text-sm font-medium text-gray-700 mb-1">Maleta</label>
+          <select id="maletaAcerto" class="w-full sm:w-auto sm:min-w-[320px] px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500"></select>
+        </div>
         <p class="text-sm text-gray-500 mb-4">Sem nada marcado, o resumo lista as peças em condicional (modelo, SKU e preço) para enviar à cliente. Com itens marcados, vira o fechamento do acerto: com o que ela ficou, o total a pagar e o que voltou ao estoque.</p>
 
         <!-- Placar do acerto: atualiza a cada marcação -->
@@ -1744,11 +1748,51 @@
     // para sobreviver a recarregar a lista ou trocar de aba no meio do atendimento.
     const marcacoesAcerto = new Map();
     let salvandoAcerto = false;
+    // Maleta escolhida no acerto: '' (todas as peças em condicional), id do pedido ou 'avulsas'
+    let maletaAcerto = '';
+    let pedidosMaleta = new Map();
+
+    // Peças em condicional da maleta escolhida (do pedido, sem pedido ou todas)
+    function condicionaisDoAcerto() {
+      return todosProdutos.filter(p => p.status === 'CONDICIONAL' && (!maletaAcerto
+        || (maletaAcerto === 'avulsas' ? !p.pedido_condicional_id : Number(p.pedido_condicional_id) === Number(maletaAcerto))));
+    }
+
+    // Opções do seletor: uma por pedido com peças em condicional, mais as peças sem pedido
+    function opcoesMaleta(produtos, pedidos) {
+      const todas = produtos.filter(p => p.status === 'CONDICIONAL');
+      const grupos = new Map();
+      todas.forEach(p => {
+        const k = p.pedido_condicional_id ? String(Number(p.pedido_condicional_id)) : 'avulsas';
+        grupos.set(k, (grupos.get(k) || 0) + 1);
+      });
+      const opcoes = [{ valor: '', texto: `Todas as peças em condicional (${todas.length})` }];
+      for (const [k, n] of grupos) {
+        if (k === 'avulsas') continue;
+        const ped = pedidos.get(Number(k));
+        opcoes.push({ valor: k, texto: `Pedido #${k} · ${ped ? (ped.nome || ped.telefone || 'cliente') : 'cliente'} (${n} peça(s))` });
+      }
+      if (grupos.has('avulsas') && grupos.size > 1) opcoes.push({ valor: 'avulsas', texto: `Sem pedido (${grupos.get('avulsas')} peça(s))` });
+      return opcoes;
+    }
+
+    function renderizarSeletorMaleta() {
+      const opcoes = opcoesMaleta(todosProdutos, pedidosMaleta);
+      if (!opcoes.some(o => o.valor === maletaAcerto)) maletaAcerto = '';
+      document.getElementById('maletaAcerto').innerHTML = opcoes
+        .map(o => `<option value="${escapeHtml(o.valor)}"${o.valor === maletaAcerto ? ' selected' : ''}>${escapeHtml(o.texto)}</option>`).join('');
+    }
+
+    // WhatsApp da cliente do pedido escolhido (vazio sem pedido)
+    function telefoneDaMaleta() {
+      const ped = maletaAcerto && maletaAcerto !== 'avulsas' ? pedidosMaleta.get(Number(maletaAcerto)) : null;
+      return ped ? ped.telefone || '' : '';
+    }
 
     // As duas listas mostram os mesmos produtos em CONDICIONAL: a cliente
     // ou comprou ou devolveu cada um. Marcar em uma lista desmarca na outra.
     function renderizarListasAcerto() {
-      const condicionais = todosProdutos.filter(p => p.status === 'CONDICIONAL');
+      const condicionais = condicionaisDoAcerto();
       const estilos = {
         comprados: { marca: 'comprado', ativo: 'bg-green-50 border-green-400', cor: 'text-green-600 focus:ring-green-500', outro: 'devolvido' },
         devolvidos: { marca: 'devolvido', ativo: 'bg-orange-50 border-orange-400', cor: 'text-orange-500 focus:ring-orange-500', outro: 'comprado' },
@@ -1787,7 +1831,7 @@
 
     // Placar, contadores das listas e estado do botão Salvar
     function atualizarPainelAcerto() {
-      const condicionais = todosProdutos.filter(p => p.status === 'CONDICIONAL');
+      const condicionais = condicionaisDoAcerto();
       const a = calcularAcerto(condicionais, marcacoesAcerto);
       const marcados = a.comprados.length + a.devolvidos.length;
       document.getElementById('placarCondicional').textContent = condicionais.length;
@@ -1806,8 +1850,9 @@
     }
 
     function atualizarAcerto() {
+      renderizarSeletorMaleta();
       // Descarta marcações de peças que já saíram de condicional
-      const ids = new Set(todosProdutos.filter(p => p.status === 'CONDICIONAL').map(p => Number(p.id)));
+      const ids = new Set(condicionaisDoAcerto().map(p => Number(p.id)));
       for (const id of [...marcacoesAcerto.keys()]) if (!ids.has(id)) marcacoesAcerto.delete(id);
       renderizarListasAcerto();
       atualizarPainelAcerto();
@@ -1822,9 +1867,27 @@
       atualizarAcerto();
     });
 
-    async function carregarAcerto() {
-      await carregarProdutos();
+    async function carregarPedidosMaleta() {
+      try {
+        const res = await fetchAdmin('/api/admin/pedidos');
+        if (!res.ok) throw new Error('Erro ao carregar pedidos');
+        pedidosMaleta = new Map((await res.json()).map(p => [Number(p.id), p]));
+      } catch (err) {
+        console.error(err);
+      }
     }
+
+    async function carregarAcerto() {
+      await Promise.all([carregarProdutos(), carregarPedidosMaleta()]);
+      atualizarAcerto();
+    }
+
+    document.getElementById('maletaAcerto').addEventListener('change', (e) => {
+      maletaAcerto = e.target.value;
+      marcacoesAcerto.clear();
+      document.getElementById('resumoMaletaTelefone').value = telefoneDaMaleta();
+      atualizarAcerto();
+    });
 
     // Texto para o WhatsApp. Sem nada marcado: conferência das peças enviadas para a cliente provar.
     // Com itens marcados: fechamento do acerto (o que ela ficou, total a pagar, devolvidos
@@ -1875,12 +1938,12 @@
     }
 
     document.getElementById('btnResumoMaleta').addEventListener('click', () => {
-      const condicionais = todosProdutos.filter(p => p.status === 'CONDICIONAL');
+      const condicionais = condicionaisDoAcerto();
       if (!condicionais.length) return mostrarToast('Nenhum item em condicional', 'error');
       const comprados = idsMarcados('comprado');
       const devolvidos = idsMarcados('devolvido');
       abrirResumoMaleta(comprados.length || devolvidos.length ? 'Fechamento do acerto' : 'Conferência da maleta',
-        montarResumoMaleta(condicionais, comprados, devolvidos));
+        montarResumoMaleta(condicionais, comprados, devolvidos), telefoneDaMaleta() || undefined);
     });
 
     document.getElementById('btnCopiarResumo').addEventListener('click', async () => {
@@ -1903,7 +1966,7 @@
     // Baixa rápida: marca todas as peças em condicional de um lado (e tira do outro)
     function marcarTodos(nome) {
       const marca = nome === 'comprados' ? 'comprado' : 'devolvido';
-      const condicionais = todosProdutos.filter(p => p.status === 'CONDICIONAL');
+      const condicionais = condicionaisDoAcerto();
       if (!condicionais.length) return mostrarToast('Nenhum item em condicional', 'error');
       condicionais.forEach(p => marcacoesAcerto.set(Number(p.id), marca));
       atualizarAcerto();
@@ -1921,7 +1984,7 @@
       btnSalvarAcerto.disabled = ativo;
       document.getElementById('iconeSalvarAcerto').classList.toggle('hidden', ativo);
       document.getElementById('spinnerSalvarAcerto').classList.toggle('hidden', !ativo);
-      document.querySelectorAll('#tab-acerto input, #tab-acerto textarea, #tab-acerto button').forEach(el => {
+      document.querySelectorAll('#tab-acerto input, #tab-acerto textarea, #tab-acerto select, #tab-acerto button').forEach(el => {
         if (el !== btnSalvarAcerto) el.disabled = ativo;
       });
       if (ativo) document.getElementById('textoSalvarAcerto').textContent = 'Salvando...';
@@ -1938,16 +2001,17 @@
         return;
       }
 
-      const condicionais = todosProdutos.filter(p => p.status === 'CONDICIONAL');
+      const condicionais = condicionaisDoAcerto();
       const obs = document.getElementById('obsAcerto');
       // O campo é limpo depois de salvar; o "Enviar resumo" do aviso reaproveita o número
-      const telefone = document.getElementById('resumoMaletaTelefone').value;
+      const telefone = document.getElementById('resumoMaletaTelefone').value || telefoneDaMaleta();
+      const pedidoId = maletaAcerto && maletaAcerto !== 'avulsas' ? Number(maletaAcerto) : null;
       estadoSalvandoAcerto(true);
       try {
         const res = await fetchAdmin('/api/admin/acerto', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ comprados, devolvidos, observacoes: obs.value })
+          body: JSON.stringify({ comprados, devolvidos, observacoes: obs.value, pedido_id: pedidoId })
         });
         const data = await res.json().catch(() => ({}));
         if (!res.ok) throw new Error(data.error || 'Erro ao salvar acerto');
@@ -2077,6 +2141,8 @@
       document.getElementById('listaPedidos').innerHTML = lista.map(p => {
         const itens = Array.isArray(p.itens) ? p.itens : [];
         const encomendas = itens.filter(i => i.encomenda === true);
+        const prova = itens.length - encomendas.length;
+        const id = Number(p.id);
         return `
         <div class="bg-white rounded-xl border border-gray-200 p-4 sm:p-6">
           <div class="flex flex-col sm:flex-row sm:justify-between gap-1 mb-3">
@@ -2098,19 +2164,27 @@
               </li>`).join('')}
           </ul>
           ${encomendas.length ? `<p class="text-sm text-blue-700 mt-2">Sinal das encomendas (50%): ${formatarMoeda(Number(p.sinal))}</p>` : ''}
+          ${prova ? `<div class="mt-3 flex flex-wrap items-center gap-2">
+            ${p.maleta_enviada_em
+              ? `<span class="text-sm text-yellow-700">Maleta enviada em ${escapeHtml(formatarData(p.maleta_enviada_em))}</span>
+                 <button type="button" data-acerto-pedido="${id}" class="px-3 py-1.5 border border-orange-300 text-orange-700 rounded-lg hover:bg-orange-50 text-sm font-medium">Fazer acerto</button>`
+              : `<button type="button" data-enviar-maleta="${id}" class="px-3 py-1.5 bg-orange-500 hover:bg-orange-600 text-white rounded-lg text-sm font-medium">Enviar maleta (${prova} peça(s) em condicional)</button>`}
+          </div>` : ''}
         </div>`;
       }).join('') || '<p class="text-gray-500">Nenhum pedido registrado.</p>';
     }
 
-    async function carregarPedidos(filtro, titulo) {
+    let pedidosAbertos = null;
+    async function carregarPedidos(filtro, titulo, rolar = true) {
       try {
         const res = await fetchAdmin('/api/admin/pedidos?cliente=' + encodeURIComponent(filtro));
         if (!res.ok) throw new Error('Erro ao carregar pedidos');
+        pedidosAbertos = { filtro, titulo };
         document.getElementById('tituloPedidos').textContent = titulo;
         renderizarPedidos(await res.json());
         const painel = document.getElementById('painelPedidos');
         painel.classList.remove('hidden');
-        painel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        if (rolar) painel.scrollIntoView({ behavior: 'smooth', block: 'start' });
       } catch (err) {
         console.error(err);
         mostrarToast('Erro ao carregar pedidos', 'error');
@@ -2124,6 +2198,37 @@
       const c = todosClientes.find(x => x.id === id);
       carregarPedidos(String(id), 'Pedidos de ' + (c ? (c.nome || c.email) : 'cliente'));
     });
+    function abrirAcertoDoPedido(id) {
+      maletaAcerto = String(Number(id));
+      marcacoesAcerto.clear();
+      document.getElementById('resumoMaletaTelefone').value = '';
+      document.querySelector('.tab-btn[data-tab="acerto"]').click();
+    }
+
+    // Enviar maleta: as peças de pronta entrega do pedido vão para condicional, ligadas a ele
+    document.getElementById('listaPedidos').addEventListener('click', async (e) => {
+      const acerto = e.target.closest('[data-acerto-pedido]');
+      if (acerto) return abrirAcertoDoPedido(acerto.dataset.acertoPedido);
+      const btn = e.target.closest('[data-enviar-maleta]');
+      if (!btn || btn.disabled) return;
+      const id = Number(btn.dataset.enviarMaleta);
+      btn.disabled = true;
+      btn.textContent = 'Enviando...';
+      try {
+        const res = await fetchAdmin(`/api/admin/pedidos/${id}/enviar-maleta`, { method: 'POST' });
+        const data = await res.json().catch(() => ({}));
+        const faltam = (data.indisponiveis || []).map(i => i.nome).join(', ');
+        if (!res.ok) throw new Error(`${data.error || 'Erro ao enviar a maleta'}${faltam ? `: ${faltam}` : ''}`);
+        mostrarToast(`Maleta do pedido #${id}: ${data.na_maleta.length} peça(s) em condicional.${faltam ? ` Já não estavam disponíveis: ${faltam}.` : ''}`, 'success',
+          { texto: 'Fazer acerto', onClick: () => abrirAcertoDoPedido(id) });
+        await carregarProdutos();
+      } catch (err) {
+        console.error(err);
+        mostrarToast(err.message, 'error');
+      }
+      if (pedidosAbertos) await carregarPedidos(pedidosAbertos.filtro, pedidosAbertos.titulo, false);
+    });
+
     document.getElementById('buscaClientes').addEventListener('input', (e) => renderizarClientes(filtrarClientes(todosClientes, e.target.value)));
     document.getElementById('btnPedidosSemConta').addEventListener('click', () => carregarPedidos('sem-conta', 'Pedidos sem conta (cliente não estava logado)'));
     document.getElementById('btnAtualizarClientes').addEventListener('click', carregarClientes);
