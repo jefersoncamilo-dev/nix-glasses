@@ -53,6 +53,13 @@ describe('vitrine: atalhos e pílulas de filtro', () => {
     assert.match(ctx.textoGuiaCatalogo('', 3), /3 modelos/);
   });
 
+  it('os botões de ação usam o padrão .btn (sem laranja/azul/verde soltos)', () => {
+    assert.doesNotMatch(html, /bg-orange-500 hover:bg-orange-600|bg-blue-600 hover:bg-blue-700|bg-green-500 hover:bg-green-600/);
+    for (const id of ['barraMaleta', 'finalizarPedido', 'enviarCliente', 'sairCliente', 'fotoProvador', 'maletaProvador', 'whatsappLink']) {
+      assert.match(html, new RegExp(`id="${id}"[^>]*class="[^"]*\\bbtn\\b`), id);
+    }
+  });
+
   it('as animações de orientação param com prefers-reduced-motion', () => {
     const bloco = html.match(/@media \(prefers-reduced-motion: reduce\) \{\s*\.guia-seta[^}]*\}/);
     assert.ok(bloco, 'faltou desligar as animações de guia');

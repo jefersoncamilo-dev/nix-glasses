@@ -47,12 +47,34 @@
     .provador-espelho { position: absolute; inset: 0; transform: scaleX(-1); }
     .provador-espelho video, .provador-espelho canvas { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
     #modalProvador input[type=range] { accent-color: #f97316; }
-    /* Botão da maleta: sem o atraso de toque do celular, "afunda" ao tocar e pulsa ao mudar de estado */
-    .btn-maleta { touch-action: manipulation; -webkit-tap-highlight-color: transparent; transition: background-color 0.15s ease, color 0.15s ease, transform 0.1s ease; }
-    .btn-maleta:active { transform: scale(0.96); }
+    /* Botão da maleta: pulsa ao mudar de estado (o resto vem de .btn) */
     .btn-maleta.pulso { animation: pulsoMaleta 0.35s ease; }
     @keyframes pulsoMaleta { 0% { transform: scale(0.94); } 60% { transform: scale(1.04); } 100% { transform: scale(1); } }
     @media (prefers-reduced-motion: reduce) { .btn-maleta.pulso { animation: none; } }
+    /* Botões padronizados da vitrine: mesma forma (pílula), altura, fonte e estados.
+       Tamanhos: .btn (44px, área de toque), .btn-sm (cards) e .btn-lg (topo).
+       Cores: primário (laranja), encomenda (azul), na-maleta (verde claro), secundário
+       (contorno claro), contorno-escuro (sobre fundo escuro), chrome e whatsapp. */
+    .btn { display: inline-flex; align-items: center; justify-content: center; gap: 0.5rem; min-height: 44px; padding: 0 1.25rem; border: 1px solid transparent; border-radius: 9999px; font-size: 0.875rem; font-weight: 600; line-height: 1.2; text-align: center; cursor: pointer; touch-action: manipulation; -webkit-tap-highlight-color: transparent; transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease, filter 0.15s ease, transform 0.1s ease; }
+    .btn:active { transform: scale(0.97); }
+    .btn:focus-visible { outline: 2px solid #f97316; outline-offset: 2px; }
+    .btn:disabled, .btn[aria-disabled="true"] { opacity: 0.6; cursor: not-allowed; transform: none; }
+    .btn-sm { min-height: 36px; padding: 0 0.375rem; gap: 0.25rem; font-size: 0.75rem; white-space: nowrap; }
+    .btn-lg { min-height: 48px; padding: 0 2rem; font-size: 1rem; }
+    @media (min-width: 640px) { .btn-sm { padding: 0 0.75rem; font-size: 0.875rem; } }
+    .btn-primario { background: #f97316; color: #fff; }
+    .btn-primario:hover:not(:disabled) { background: #ea580c; }
+    .btn-encomenda { background: #2563eb; color: #fff; }
+    .btn-encomenda:hover:not(:disabled) { background: #1d4ed8; }
+    .btn-na-maleta { background: #f0fdf4; color: #15803d; border-color: #86efac; }
+    .btn-na-maleta:hover:not(:disabled) { background: #dcfce7; }
+    .btn-secundario { background: #fff; color: #1f2937; border-color: #d1d5db; }
+    .btn-secundario:hover:not(:disabled) { background: #f9fafb; }
+    .btn-contorno-escuro { background: transparent; color: #fff; border-color: rgba(255,255,255,0.35); }
+    .btn-contorno-escuro:hover:not(:disabled) { background: rgba(255,255,255,0.1); }
+    .btn-whatsapp { background: #22c55e; color: #fff; }
+    .btn-whatsapp:hover:not(:disabled) { background: #16a34a; }
+    @media (prefers-reduced-motion: reduce) { .btn { transition: none; } .btn:active { transform: none; } }
     /* Guias da vitrine: seta que "cutuca" para baixo, ponto que pulsa e filtros em pílula */
     .guia-seta { animation: guiaSeta 1.6s ease-in-out infinite; }
     @keyframes guiaSeta { 0%, 100% { transform: translateY(0); opacity: 0.6; } 50% { transform: translateY(6px); opacity: 1; } }
@@ -63,8 +85,6 @@
     @keyframes guiaCutuca { 0%, 100% { transform: translateX(0); } 50% { transform: translateX(4px); } }
     .filtro-pilula { touch-action: manipulation; -webkit-tap-highlight-color: transparent; transition: background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease; }
     .filtro-pilula[aria-pressed="true"] { background: #161616; color: #fff; border-color: #161616; }
-    .hero-atalho { transition: background-color 0.15s ease, border-color 0.15s ease, transform 0.1s ease; }
-    .hero-atalho:active { transform: scale(0.97); }
     #barraMaleta { transition: transform 0.25s ease, opacity 0.25s ease; }
     #barraMaleta.escondida { transform: translateY(140%); opacity: 0; pointer-events: none; }
     @media (prefers-reduced-motion: reduce) {
@@ -113,9 +133,9 @@
       <p class="text-lg sm:text-xl max-w-2xl mx-auto mb-8" style="color:var(--nix-muted)">Design exclusivo, qualidade premium e proteção UV400. Escolha os modelos e prove em casa.</p>
       <!-- Atalhos: cada um leva ao catálogo já com o filtro escolhido -->
       <div class="flex flex-col sm:flex-row items-stretch sm:items-center justify-center gap-3 max-w-md sm:max-w-none mx-auto">
-        <a href="#catalogo" data-atalho-filtro="" class="hero-atalho chrome-btn px-8 py-3 rounded-full font-semibold">Coleção <span class="font-normal opacity-70">· todos os modelos</span></a>
-        <a href="#catalogo" data-atalho-filtro="DISPONIVEL" class="hero-atalho px-6 py-3 rounded-full font-semibold border text-white hover:bg-white/10" style="border-color:rgba(255,255,255,0.35)">Disponíveis <span class="font-normal" style="color:var(--nix-muted)">· pronta entrega</span></a>
-        <a href="#catalogo" data-atalho-filtro="SOB_ENCOMENDA" class="hero-atalho px-6 py-3 rounded-full font-semibold border text-white hover:bg-white/10" style="border-color:rgba(255,255,255,0.35)">Sob Encomenda</a>
+        <a href="#catalogo" data-atalho-filtro="" class="btn btn-lg chrome-btn">Coleção <span class="font-normal opacity-70">· todos os modelos</span></a>
+        <a href="#catalogo" data-atalho-filtro="DISPONIVEL" class="btn btn-lg btn-contorno-escuro">Disponíveis <span class="font-normal" style="color:var(--nix-muted)">· pronta entrega</span></a>
+        <a href="#catalogo" data-atalho-filtro="SOB_ENCOMENDA" class="btn btn-lg btn-contorno-escuro">Sob Encomenda</a>
       </div>
       <!-- Como funciona -->
       <ol class="mt-10 grid grid-cols-3 gap-2 sm:gap-6 max-w-3xl mx-auto text-left sm:text-center">
@@ -181,7 +201,7 @@
   </section>
 
   <!-- Atalho para a maleta: aparece quando já há modelos escolhidos -->
-  <button type="button" id="barraMaleta" class="escondida fixed z-40 bottom-4 left-4 right-4 sm:left-auto sm:right-6 sm:w-auto flex items-center justify-between gap-4 rounded-full bg-orange-500 hover:bg-orange-600 text-white pl-5 pr-4 py-3 shadow-xl font-semibold text-sm" aria-label="Abrir minha maleta">
+  <button type="button" id="barraMaleta" class="escondida fixed z-40 bottom-4 left-4 right-4 sm:left-auto sm:right-6 sm:w-auto btn btn-primario justify-between gap-4 pl-5 pr-4 shadow-xl" aria-label="Abrir minha maleta">
     <span id="barraMaletaTexto"></span>
     <span class="inline-flex items-center gap-1">Ver maleta <svg class="guia-cutuca w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M9 5l7 7-7 7"/></svg></span>
   </button>
@@ -211,8 +231,8 @@
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
       <h2 class="font-brand text-3xl font-bold text-white tracking-wide mb-4">Fale Conosco</h2>
       <p class="mb-8 max-w-2xl mx-auto" style="color:var(--nix-muted)">Dúvidas, sugestões ou quer ser um revendedor? Estamos à disposição.</p>
-      <a id="whatsappLink" href="#" class="inline-flex items-center px-6 py-3 bg-green-500 hover:bg-green-600 text-white rounded-full font-semibold transition-colors">
-        <svg class="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 24 24"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.466-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.472.099-.174.05-.372-.025-.521-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.372-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.076 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.402h-.004a9.87 9.87 0 01-5.031-1.378 3.43 3.43 0 01-.947-2.327c-.273-.731-.47-1.39-.47-2.308 0-1.853 1.598-3.22 3.435-3.683.338-.082.68-.112 1.023-.112.354 0 .696.032 1.038.111 1.955.482 3.44 1.934 3.683 3.717 0 .904-.21 1.565-.48 2.296a3.58 3.58 0 01-.927 2.225 9.87 9.87 0 01-5.034 1.416z"/></svg>
+      <a id="whatsappLink" href="#" class="btn btn-lg btn-whatsapp">
+        <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.466-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.472.099-.174.05-.372-.025-.521-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.372-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.076 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.402h-.004a9.87 9.87 0 01-5.031-1.378 3.43 3.43 0 01-.947-2.327c-.273-.731-.47-1.39-.47-2.308 0-1.853 1.598-3.22 3.435-3.683.338-.082.68-.112 1.023-.112.354 0 .696.032 1.038.111 1.955.482 3.44 1.934 3.683 3.717 0 .904-.21 1.565-.48 2.296a3.58 3.58 0 01-.927 2.225 9.87 9.87 0 01-5.034 1.416z"/></svg>
         Falar no WhatsApp
       </a>
     </div>
@@ -288,7 +308,7 @@
           <p id="maletaTotal" class="text-xl sm:text-2xl font-bold text-gray-900">R$ 0,00</p>
           <p id="maletaSinal" class="hidden w-full text-right sm:text-left text-xs font-medium text-blue-700"></p>
         </div>
-        <button id="finalizarPedido" class="w-full sm:w-auto bg-orange-500 hover:bg-orange-600 text-white px-6 sm:px-8 py-3 rounded-full text-sm sm:text-base font-semibold transition-colors">Finalizar Pedido no WhatsApp</button>
+        <button id="finalizarPedido" class="btn btn-lg btn-primario w-full sm:w-auto">Finalizar Pedido no WhatsApp</button>
       </div>
     </div>
   </div>
@@ -310,7 +330,7 @@
         </div>
         <p class="text-sm text-gray-500">Seu nome já vem preenchido na maleta e seu e-mail vai junto no pedido do WhatsApp.</p>
         <div class="flex justify-end pt-2">
-          <button type="button" id="sairCliente" class="px-6 py-3 rounded-full text-sm font-semibold text-gray-600 border border-gray-300 hover:bg-gray-100">Sair</button>
+          <button type="button" id="sairCliente" class="btn btn-secundario px-6">Sair</button>
         </div>
       </div>
       <form id="formCliente" class="p-6 space-y-4" novalidate>
@@ -332,7 +352,7 @@
           <p id="dicaSenha" class="hidden mt-1 text-xs text-gray-500">Pelo menos 8 caracteres.</p>
         </div>
         <p id="clienteErro" class="hidden text-sm text-red-600" role="alert"></p>
-        <button type="submit" id="enviarCliente" class="w-full bg-orange-500 hover:bg-orange-600 disabled:opacity-60 text-white px-8 py-3 rounded-full text-sm font-semibold transition-colors">Entrar</button>
+        <button type="submit" id="enviarCliente" class="btn btn-primario w-full">Entrar</button>
       </form>
     </div>
   </div>
@@ -374,8 +394,8 @@
         </label>
       </div>
       <div class="px-4 flex flex-wrap items-center gap-2">
-        <button type="button" id="fotoProvador" class="flex-1 min-w-[8rem] chrome-btn px-4 py-2.5 rounded-lg text-sm font-semibold">Tirar foto</button>
-        <button type="button" id="maletaProvador" class="flex-1 min-w-[8rem] bg-orange-500 hover:bg-orange-600 text-white px-4 py-2.5 rounded-lg text-sm font-semibold">Adicionar à Maleta</button>
+        <button type="button" id="fotoProvador" class="btn chrome-btn flex-1 min-w-[8rem]">Tirar foto</button>
+        <button type="button" id="maletaProvador" class="btn btn-primario flex-1 min-w-[8rem]">Adicionar à Maleta</button>
       </div>
       <p id="tamanhoProvador" class="px-4 pt-2 text-xs" style="color:var(--nix-muted)"></p>
       <!-- Fotos tiradas: ficam lado a lado para comparar os modelos -->
@@ -622,11 +642,10 @@
     // Botão do card. O mesmo HTML é usado para trocar só o botão logo após o clique.
     function botaoMaletaCard(produto, jaNaMaleta) {
       const encomenda = ehSobEncomenda(produto);
-      const cor = jaNaMaleta ? 'bg-green-50 text-green-700 border-green-300 hover:bg-green-100'
-        : encomenda ? 'bg-blue-600 hover:bg-blue-700 text-white border-transparent' : 'bg-orange-500 hover:bg-orange-600 text-white border-transparent';
+      const cor = jaNaMaleta ? 'btn-na-maleta' : encomenda ? 'btn-encomenda' : 'btn-primario';
       const curto = jaNaMaleta ? '✓ Na Maleta' : encomenda ? '+ Encomenda' : '+ Maleta';
       const longo = jaNaMaleta ? '✓ Na Maleta · Remover' : encomenda ? 'Encomendar (na Maleta)' : 'Adicionar à Maleta';
-      return `<button type="button" data-btn-maleta onclick="toggleMaleta(${Number(produto.id)})" aria-pressed="${jaNaMaleta}" class="btn-maleta w-full ${cor} border py-1.5 sm:py-2 rounded-lg text-xs sm:text-sm font-medium"><span class="sm:hidden">${curto}</span><span class="hidden sm:inline">${longo}</span></button>`;
+      return `<button type="button" data-btn-maleta onclick="toggleMaleta(${Number(produto.id)})" aria-pressed="${jaNaMaleta}" class="btn btn-sm btn-maleta w-full ${cor}"><span class="sm:hidden">${curto}</span><span class="hidden sm:inline">${longo}</span></button>`;
     }
 
     // Itens da maleta marcados como encomenda (guardados assim ao adicionar)
@@ -834,8 +853,8 @@
             </dl>` : ''}
             ${encomenda ? `<p class="text-sm text-blue-700 bg-blue-50 rounded-lg px-3 py-2 mb-4">50% sinal + 50% na entrega (sinal de ${formatarMoeda(calcularSinal(produto.preco_venda))})</p>` : ''}
             <div class="mt-auto">
-              ${fotos.length ? `<button type="button" onclick="abrirProvador(${id})" class="w-full mb-2 border border-gray-300 text-gray-800 hover:bg-gray-50 py-3 rounded-lg font-medium transition-colors">Provar virtualmente</button>` : ''}
-              <button type="button" onclick="toggleMaleta(${id}); renderizarDetalhes()" aria-pressed="${jaNaMaleta}" class="btn-maleta w-full border ${jaNaMaleta ? 'bg-green-50 text-green-700 border-green-300 hover:bg-green-100' : encomenda ? 'bg-blue-600 hover:bg-blue-700 text-white border-transparent' : 'bg-orange-500 hover:bg-orange-600 text-white border-transparent'} py-3 rounded-lg font-medium">${jaNaMaleta ? '✓ Na Maleta · Remover' : encomenda ? 'Encomendar (adicionar à Maleta)' : 'Adicionar à Maleta'}</button>
+              ${fotos.length ? `<button type="button" onclick="abrirProvador(${id})" class="btn btn-secundario w-full mb-2">Provar virtualmente</button>` : ''}
+              <button type="button" onclick="toggleMaleta(${id}); renderizarDetalhes()" aria-pressed="${jaNaMaleta}" class="btn btn-maleta w-full ${jaNaMaleta ? 'btn-na-maleta' : encomenda ? 'btn-encomenda' : 'btn-primario'}">${jaNaMaleta ? '✓ Na Maleta · Remover' : encomenda ? 'Encomendar (adicionar à Maleta)' : 'Adicionar à Maleta'}</button>
             </div>
           </div>
         </div>
@@ -1175,6 +1194,9 @@
       const naMaleta = maleta.itens.some(i => i.id === produto.id);
       maletaProvador.textContent = naMaleta ? '✓ Na Maleta · Remover' : ehSobEncomenda(produto) ? 'Encomendar' : 'Adicionar à Maleta';
       maletaProvador.setAttribute('aria-pressed', String(naMaleta));
+      // Mesmas cores do botão do card: laranja, azul (encomenda) ou verde (já na maleta)
+      maletaProvador.classList.remove('btn-primario', 'btn-encomenda', 'btn-na-maleta');
+      maletaProvador.classList.add(naMaleta ? 'btn-na-maleta' : ehSobEncomenda(produto) ? 'btn-encomenda' : 'btn-primario');
     }
 
     // Foto do jeito que aparece na tela (espelhada), com o óculos por cima
