@@ -26,8 +26,8 @@ function carregar(funcoes, globais = {}) {
   return ctx;
 }
 
-const { calcularPoseOculos, suavizarPose, prepararPixelsOculos, desenharOculos } =
-  carregar(['calcularPoseOculos', 'suavizarPose', 'prepararPixelsOculos', 'desenharOculos']);
+const { calcularPoseOculos, pixelsPorMilimetro, suavizarPose, prepararPixelsOculos, desenharOculos } =
+  carregar(['calcularPoseOculos', 'pixelsPorMilimetro', 'suavizarPose', 'prepararPixelsOculos', 'desenharOculos']);
 
 const perto = (a, b, msg) => assert.ok(Math.abs(a - b) < 1e-6, `${msg}: ${a} ≠ ${b}`);
 
@@ -223,8 +223,108 @@ describe('Provador: botão nos detalhes do produto', () => {
   });
 
   it('o título do provador entra por textContent (sem innerHTML com o nome do produto)', () => {
-    const fonte = extrairFuncao(HTML, 'abrirProvador');
+    assert.match(extrairFuncao(HTML, 'abrirProvador'), /selecionarProdutoProvador\(produto\)/);
+    const fonte = extrairFuncao(HTML, 'selecionarProdutoProvador');
     assert.match(fonte, /provadorTitulo'\)\.textContent =/);
     assert.doesNotMatch(fonte, /innerHTML/);
+  });
+});
+
+// Íris de 11,7 mm com `diametroPx` pixels nas duas íris (vídeo 1000x500)
+function comIris(p, diametroPx) {
+  const r = diametroPx / 2 / 1000;
+  p[469] = { x: 0.42 - r, y: 0.4 };
+  p[471] = { x: 0.42 + r, y: 0.4 };
+  p[474] = { x: 0.58 - r, y: 0.4 };
+  p[476] = { x: 0.58 + r, y: 0.4 };
+  return p;
+}
+
+describe('Provador: tamanho real pela íris', () => {
+  it('pixelsPorMilimetro usa o diâmetro médio das íris (11,7 mm)', () => {
+    perto(pixelsPorMilimetro(comIris(rosto(), 23.4), 1000, 500), 2, 'px/mm');
+    assert.equal(pixelsPorMilimetro(rosto(), 1000, 500), null);
+  });
+
+  it('com a largura cadastrada, a armação sai no tamanho real', () => {
+    // 2 px/mm x 140 mm = 280 px (o rosto mede 300 px)
+    const pose = calcularPoseOculos(comIris(rosto(), 23.4), 1000, 500, { larguraMm: 140, escala: 1 });
+    perto(pose.largura, 280, 'largura');
+    assert.equal(pose.tamanhoReal, true);
+    const maior = calcularPoseOculos(comIris(rosto(), 23.4), 1000, 500, { larguraMm: 140, escala: 1.1 });
+    perto(maior.largura, 308, 'o ajuste de tamanho continua valendo');
+  });
+
+  it('limita a 0,75x–1,4x a largura do rosto (cadastro ou detecção errados)', () => {
+    perto(calcularPoseOculos(comIris(rosto(), 23.4), 1000, 500, { larguraMm: 50 }).largura, 225, 'mínimo');
+    perto(calcularPoseOculos(comIris(rosto(), 23.4), 1000, 500, { larguraMm: 400 }).largura, 420, 'máximo');
+  });
+
+  it('sem largura cadastrada ou sem íris, volta para a largura do rosto', () => {
+    const semCadastro = calcularPoseOculos(comIris(rosto(), 23.4), 1000, 500, { larguraMm: 0 });
+    perto(semCadastro.largura, 300, 'sem cadastro');
+    assert.equal(semCadastro.tamanhoReal, false);
+    const semIris = calcularPoseOculos(rosto(), 1000, 500, { larguraMm: 140 });
+    perto(semIris.largura, 300, 'sem íris');
+    assert.equal(semIris.tamanhoReal, false);
+  });
+});
+
+describe('Provador: troca de modelo, maleta e fotos', () => {
+  const PAYLOAD = '"><img src=x onerror=alert(1)>';
+  const produtosTeste = [
+    { id: 1, nome: `Aviador ${PAYLOAD}`, fotos: ['/imagens/a'], largura_total_cm: '14.2' },
+    { id: 2, nome: 'Redondo', fotos: ['/imagens/b'] },
+    { id: 3, nome: 'Sem foto', fotos: [] },
+  ];
+
+  function provadorCtx(extra = {}) {
+    const el = () => ({ innerHTML: '', textContent: '', hidden: null, classList: { toggle(c, v) { this.dono.hidden = v; } }, setAttribute() {} });
+    const fazer = () => { const e = el(); e.classList.dono = e; return e; };
+    return carregar(['escapeHtml', 'fotosDoProduto', 'renderizarCarrosselProvador', 'textoTamanhoProvador', 'renderizarFotosProvador'], {
+      produtos: produtosTeste,
+      provador: { produtoId: 2, fotos: [] },
+      carrosselProvador: fazer(),
+      carrosselProvadorBox: fazer(),
+      fotosProvador: fazer(),
+      listaFotosProvador: fazer(),
+      ...extra,
+    });
+  }
+
+  it('carrossel lista só modelos com foto, marca o atual e escapa o nome', () => {
+    const ctx = provadorCtx();
+    ctx.renderizarCarrosselProvador();
+    const html = ctx.carrosselProvador.innerHTML;
+    assert.equal((html.match(/trocarOculosProvador\(/g) || []).length, 2);
+    assert.match(html, /trocarOculosProvador\(2\)[^>]*border-orange-500[^>]*aria-current="true"/);
+    assert.doesNotMatch(html, /<img src=x/);
+    assert.match(html, /&quot;&gt;&lt;img src=x/);
+    assert.equal(ctx.carrosselProvadorBox.hidden, false);
+  });
+
+  it('carrossel some quando só há um modelo com foto', () => {
+    const ctx = provadorCtx({ produtos: [produtosTeste[1], produtosTeste[2]] });
+    ctx.renderizarCarrosselProvador();
+    assert.equal(ctx.carrosselProvadorBox.hidden, true);
+  });
+
+  it('texto do tamanho diz quando é real (cadastro) ou estimado', () => {
+    const ctx = provadorCtx();
+    assert.match(ctx.textoTamanhoProvador(produtosTeste[0]), /Tamanho real: armação de 14,2 cm/);
+    assert.match(ctx.textoTamanhoProvador(produtosTeste[1]), /estimado/);
+  });
+
+  it('fotos tiradas aparecem para baixar, com o nome escapado', () => {
+    const ctx = provadorCtx();
+    ctx.provador.fotos = [{ url: 'blob:http://x/1', nome: produtosTeste[0].nome }];
+    ctx.renderizarFotosProvador();
+    const html = ctx.listaFotosProvador.innerHTML;
+    assert.match(html, /href="blob:http:\/\/x\/1" download="nix-glasses-provador-1.jpg"/);
+    assert.doesNotMatch(html, /<img src=x/);
+    assert.equal(ctx.fotosProvador.hidden, false);
+    ctx.provador.fotos = [];
+    ctx.renderizarFotosProvador();
+    assert.equal(ctx.fotosProvador.hidden, true);
   });
 });

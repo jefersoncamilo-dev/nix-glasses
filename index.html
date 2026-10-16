@@ -315,12 +315,27 @@
           <input type="range" id="ajusteAlturaProvador" min="-15" max="15" value="0" class="w-full">
         </label>
       </div>
-      <p class="px-4 pb-4 text-xs" style="color:var(--nix-muted)">Prévia aproximada. A imagem da câmera é processada só no seu aparelho e não é enviada para lugar nenhum.</p>
+      <div class="px-4 flex flex-wrap items-center gap-2">
+        <button type="button" id="fotoProvador" class="flex-1 min-w-[8rem] chrome-btn px-4 py-2.5 rounded-lg text-sm font-semibold">Tirar foto</button>
+        <button type="button" id="maletaProvador" class="flex-1 min-w-[8rem] bg-orange-500 hover:bg-orange-600 text-white px-4 py-2.5 rounded-lg text-sm font-semibold">Adicionar à Maleta</button>
+      </div>
+      <p id="tamanhoProvador" class="px-4 pt-2 text-xs" style="color:var(--nix-muted)"></p>
+      <!-- Fotos tiradas: ficam lado a lado para comparar os modelos -->
+      <div id="fotosProvador" class="hidden px-4 pt-3">
+        <p class="text-xs mb-2" style="color:var(--nix-muted)">Suas fotos (toque para baixar)</p>
+        <div id="listaFotosProvador" class="grid grid-cols-4 gap-2"></div>
+      </div>
+      <!-- Outros modelos: troca o óculos sem fechar a câmera -->
+      <div id="carrosselProvadorBox" class="hidden pt-3">
+        <p class="px-4 text-xs mb-2" style="color:var(--nix-muted)">Provar outro modelo</p>
+        <div id="carrosselProvador" class="miniaturas flex gap-2 px-4 overflow-x-auto"></div>
+      </div>
+      <p class="px-4 py-4 text-xs" style="color:var(--nix-muted)">Prévia aproximada. A imagem da câmera é processada só no seu aparelho e não é enviada para lugar nenhum.</p>
     </div>
   </div>
 
   <!-- Toast -->
-  <div id="toastContainer" class="fixed bottom-6 right-6 z-50 space-y-2"></div>
+  <div id="toastContainer" class="fixed bottom-6 right-6 z-[70] space-y-2"></div>
 
   <script>
     // Estado
@@ -764,9 +779,18 @@
     const statusProvador = document.getElementById('statusProvador');
     const ajusteEscalaProvador = document.getElementById('ajusteEscalaProvador');
     const ajusteAlturaProvador = document.getElementById('ajusteAlturaProvador');
+    const carrosselProvador = document.getElementById('carrosselProvador');
+    const carrosselProvadorBox = document.getElementById('carrosselProvadorBox');
+    const maletaProvador = document.getElementById('maletaProvador');
+    const tamanhoProvador = document.getElementById('tamanhoProvador');
+    const fotosProvador = document.getElementById('fotosProvador');
+    const listaFotosProvador = document.getElementById('listaFotosProvador');
+    const MAX_FOTOS_PROVADOR = 4;
 
     // sessao muda a cada abrir/fechar: o que terminar de carregar depois de fechado é descartado
-    const provador = { aberto: false, sessao: 0, stream: null, landmarker: null, oculos: null, pose: null, raf: 0, ultimoTempo: -1, ajuste: { escala: 1, deslocamentoY: 0 } };
+    const provador = { aberto: false, sessao: 0, stream: null, landmarker: null, oculos: null, pose: null, raf: 0, ultimoTempo: -1, ajuste: { escala: 1, deslocamentoY: 0, larguraMm: 0 }, produtoId: null, troca: 0, fotos: [] };
+    // Fotos de óculos já preparadas (fundo removido), por URL: trocar de modelo fica instantâneo
+    const cacheOculosProvador = new Map();
     let faceLandmarkerPromessa = null;
 
     // Pontos do rosto (coordenadas normalizadas 0..1 do vídeo) -> onde e como desenhar o óculos.
@@ -793,14 +817,38 @@
 
       const escala = ajuste && Number.isFinite(ajuste.escala) ? ajuste.escala : 1;
       const deslocamentoY = ajuste && Number.isFinite(ajuste.deslocamentoY) ? ajuste.deslocamentoY : 0;
-      const largura = larguraRosto * escala;
+      // Tamanho real: com a largura da armação cadastrada (mm) e a régua da íris, a armação
+      // sai do tamanho que teria no rosto. Limitado a 0,75x–1,4x o rosto para um erro de
+      // cadastro ou de detecção não desenhar algo absurdo.
+      let larguraBase = larguraRosto;
+      let tamanhoReal = false;
+      const larguraMm = ajuste ? Number(ajuste.larguraMm) : 0;
+      const pxPorMm = larguraMm > 0 ? pixelsPorMilimetro(pontos, larguraVideo, alturaVideo) : null;
+      if (pxPorMm) {
+        larguraBase = Math.min(Math.max(larguraMm * pxPorMm, larguraRosto * 0.75), larguraRosto * 1.4);
+        tamanhoReal = true;
+      }
+      const largura = larguraBase * escala;
       // "Para baixo" no referencial do rosto é o vetor (-sen, cos) do ângulo dos olhos
       return {
         x: nariz.x - Math.sin(angulo) * deslocamentoY * largura,
         y: nariz.y + Math.cos(angulo) * deslocamentoY * largura,
         largura,
         angulo,
+        tamanhoReal,
       };
+    }
+
+    // Régua do rosto: o diâmetro da íris é quase igual em todos os adultos (~11,7 mm), então
+    // ele converte milímetros em pixels. Pontos 469/471 e 474/476 são as bordas esquerda e
+    // direita de cada íris; usa a média das duas. Sem os pontos da íris, devolve null.
+    function pixelsPorMilimetro(pontos, larguraVideo, alturaVideo) {
+      const diametro = (a, b) => (pontos[a] && pontos[b]
+        ? Math.hypot((pontos[b].x - pontos[a].x) * larguraVideo, (pontos[b].y - pontos[a].y) * alturaVideo)
+        : 0);
+      const d1 = diametro(469, 471), d2 = diametro(474, 476);
+      const media = d1 && d2 ? (d1 + d2) / 2 : d1 || d2;
+      return media > 0 ? media / 11.7 : null;
     }
 
     // Média móvel exponencial entre o quadro anterior e o novo: fator 1 = sem suavização,
@@ -809,7 +857,7 @@
       if (!anterior || !nova) return nova;
       const mix = (a, b) => a + (b - a) * fator;
       const dAngulo = Math.atan2(Math.sin(nova.angulo - anterior.angulo), Math.cos(nova.angulo - anterior.angulo));
-      return { x: mix(anterior.x, nova.x), y: mix(anterior.y, nova.y), largura: mix(anterior.largura, nova.largura), angulo: anterior.angulo + dAngulo * fator };
+      return { x: mix(anterior.x, nova.x), y: mix(anterior.y, nova.y), largura: mix(anterior.largura, nova.largura), angulo: anterior.angulo + dAngulo * fator, tamanhoReal: nova.tamanhoReal };
     }
 
     // Prepara os pixels da foto (RGBA, alterados no lugar) para virar a armação no rosto:
@@ -931,7 +979,7 @@
       provador.pose = null;
       provador.oculos = null;
       provador.ultimoTempo = -1;
-      document.getElementById('provadorTitulo').textContent = `Provador Virtual · ${produto.nome}`;
+      selecionarProdutoProvador(produto);
       modalProvador.classList.remove('hidden');
       document.body.style.overflow = 'hidden';
       entrarModalHistorico('provador');
@@ -949,11 +997,12 @@
         if (sessao !== provador.sessao) stream.getTracks().forEach(t => t.stop());
       }, () => {});
       try {
-        const [stream, landmarker, oculos] = await Promise.all([camera, carregarFaceLandmarker(), carregarImagemOculos(foto)]);
+        const [stream, landmarker, oculos] = await Promise.all([camera, carregarFaceLandmarker(), oculosDoCache(foto)]);
         if (sessao !== provador.sessao) return;
         provador.stream = stream;
         provador.landmarker = landmarker;
-        provador.oculos = oculos;
+        // Se trocou de modelo enquanto carregava, a troca já cuidou dos óculos
+        if (provador.produtoId === produto.id && !provador.oculos) provador.oculos = oculos;
         videoProvador.srcObject = stream;
         await videoProvador.play();
         if (sessao !== provador.sessao) return;
@@ -967,6 +1016,97 @@
       }
     }
     window.abrirProvador = abrirProvador;
+
+    function oculosDoCache(url) {
+      if (!cacheOculosProvador.has(url)) {
+        const promessa = carregarImagemOculos(url);
+        promessa.catch(() => cacheOculosProvador.delete(url));
+        cacheOculosProvador.set(url, promessa);
+      }
+      return cacheOculosProvador.get(url);
+    }
+
+    // Produto em prova: título, largura real (mm), botão da maleta e destaque no carrossel
+    function selecionarProdutoProvador(produto) {
+      provador.produtoId = produto.id;
+      const cm = Number(produto.largura_total_cm);
+      provador.ajuste.larguraMm = Number.isFinite(cm) && cm > 0 ? cm * 10 : 0;
+      document.getElementById('provadorTitulo').textContent = `Provador Virtual · ${produto.nome}`;
+      tamanhoProvador.textContent = textoTamanhoProvador(produto);
+      atualizarMaletaProvador();
+      renderizarCarrosselProvador();
+    }
+
+    function textoTamanhoProvador(produto) {
+      const cm = Number(produto.largura_total_cm);
+      return Number.isFinite(cm) && cm > 0
+        ? `Tamanho real: armação de ${cm.toFixed(1).replace('.', ',')} cm, medida pela sua íris.`
+        : 'Tamanho estimado pela largura do seu rosto.';
+    }
+
+    // Miniaturas dos modelos com foto; o que está no rosto fica marcado
+    function renderizarCarrosselProvador() {
+      const lista = produtos.filter(p => fotosDoProduto(p).length);
+      carrosselProvadorBox.classList.toggle('hidden', lista.length < 2);
+      carrosselProvador.innerHTML = lista.map((p) => {
+        const atual = p.id === provador.produtoId;
+        return `<button type="button" onclick="trocarOculosProvador(${Number(p.id)})" class="flex-shrink-0 w-16 h-16 rounded-lg overflow-hidden border-2 bg-white ${atual ? 'border-orange-500' : 'border-transparent opacity-70 hover:opacity-100'}" aria-label="Provar ${escapeHtml(p.nome)}"${atual ? ' aria-current="true"' : ''}>
+          <img src="${escapeHtml(fotosDoProduto(p)[0])}" alt="" class="w-full h-full object-cover" onerror="imgFallback(this)">
+        </button>`;
+      }).join('');
+    }
+
+    // Troca o óculos sem desligar a câmera
+    async function trocarOculosProvador(produtoId) {
+      const produto = produtos.find(p => p.id === produtoId);
+      const foto = produto ? fotosDoProduto(produto)[0] : null;
+      if (!foto || !provador.aberto || produtoId === provador.produtoId) return;
+      const troca = ++provador.troca;
+      selecionarProdutoProvador(produto);
+      try {
+        const oculos = await oculosDoCache(foto);
+        if (troca === provador.troca && provador.aberto) provador.oculos = oculos;
+      } catch (err) {
+        if (troca === provador.troca) mostrarToast('Não foi possível carregar a foto deste modelo.', 'error');
+      }
+    }
+    window.trocarOculosProvador = trocarOculosProvador;
+
+    function atualizarMaletaProvador() {
+      const produto = produtos.find(p => p.id === provador.produtoId);
+      if (!produto) return;
+      const naMaleta = maleta.itens.some(i => i.id === produto.id);
+      maletaProvador.textContent = naMaleta ? '✓ Na Maleta · Remover' : ehSobEncomenda(produto) ? 'Encomendar' : 'Adicionar à Maleta';
+      maletaProvador.setAttribute('aria-pressed', String(naMaleta));
+    }
+
+    // Foto do jeito que aparece na tela (espelhada), com o óculos por cima
+    function tirarFotoProvador() {
+      const v = videoProvador;
+      if (!provador.stream || !v.videoWidth) return;
+      const c = document.createElement('canvas');
+      c.width = v.videoWidth;
+      c.height = v.videoHeight;
+      const ctx = c.getContext('2d');
+      ctx.translate(c.width, 0);
+      ctx.scale(-1, 1);
+      ctx.drawImage(v, 0, 0);
+      ctx.drawImage(canvasProvador, 0, 0);
+      const produto = produtos.find(p => p.id === provador.produtoId);
+      c.toBlob((blob) => {
+        if (!blob || !provador.aberto) return;
+        provador.fotos.unshift({ url: URL.createObjectURL(blob), nome: produto ? produto.nome : 'Nix Glasses' });
+        provador.fotos.splice(MAX_FOTOS_PROVADOR).forEach(f => URL.revokeObjectURL(f.url));
+        renderizarFotosProvador();
+      }, 'image/jpeg', 0.9);
+    }
+
+    function renderizarFotosProvador() {
+      fotosProvador.classList.toggle('hidden', !provador.fotos.length);
+      listaFotosProvador.innerHTML = provador.fotos.map((f, i) => `<a href="${escapeHtml(f.url)}" download="nix-glasses-provador-${i + 1}.jpg" class="block rounded-lg overflow-hidden aspect-[4/3] bg-black" title="${escapeHtml(f.nome)}">
+          <img src="${escapeHtml(f.url)}" alt="Foto provando ${escapeHtml(f.nome)}" class="w-full h-full object-cover">
+        </a>`).join('');
+    }
 
     // Laço de animação: detecta o rosto só quando chega um quadro novo da câmera
     function quadroProvador() {
@@ -997,6 +1137,9 @@
       cancelAnimationFrame(provador.raf);
       if (provador.stream) provador.stream.getTracks().forEach(t => t.stop());
       provador.stream = null;
+      provador.troca++;
+      provador.fotos.splice(0).forEach(f => URL.revokeObjectURL(f.url));
+      renderizarFotosProvador();
       videoProvador.srcObject = null;
       canvasProvador.getContext('2d').clearRect(0, 0, canvasProvador.width, canvasProvador.height);
       statusProvador.classList.remove('hidden');
@@ -1011,6 +1154,13 @@
     document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && provador.aberto) fecharProvador(); });
     // Trocar de aba desliga a câmera (o navegador pausaria o vídeo de qualquer jeito)
     document.addEventListener('visibilitychange', () => { if (document.hidden) fecharProvador(); });
+    document.getElementById('fotoProvador').addEventListener('click', tirarFotoProvador);
+    maletaProvador.addEventListener('click', () => {
+      if (provador.produtoId === null) return;
+      toggleMaleta(provador.produtoId);
+      atualizarMaletaProvador();
+      if (detalhes) renderizarDetalhes();
+    });
     ajusteEscalaProvador.addEventListener('input', () => { provador.ajuste.escala = Number(ajusteEscalaProvador.value) / 100; });
     ajusteAlturaProvador.addEventListener('input', () => { provador.ajuste.deslocamentoY = Number(ajusteAlturaProvador.value) / 100; });
 
