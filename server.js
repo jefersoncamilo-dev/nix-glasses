@@ -23,6 +23,9 @@ app.use(express.json());
 // Empresa da requisição pelo endereço (Host). Todas as rotas usam req.db, o banco dela.
 function escolherEmpresa(req, res, next) {
   req.empresa = empresaDoHost(EMPRESAS, req.hostname);
+  if (!req.empresa) {
+    return res.status(404).type('text').send('Loja não encontrada neste endereço.');
+  }
   req.db = req.empresa.pool;
   next();
 }

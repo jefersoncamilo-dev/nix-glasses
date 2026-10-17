@@ -12,8 +12,8 @@
 //   EMPRESA_PASUCPORTAS_NOME           nome inicial da loja (o admin pode trocar depois)
 //   EMPRESA_PASUCPORTAS_DOMINIOS       endereços, separados por vírgula. Sem ele, vale
 //                                      qualquer endereço que comece com "<slug>."
-// A primeira empresa da lista é a padrão: atende endereços que não são de nenhuma
-// outra (como nix-glasses.onrender.com) e, sem as variáveis EMPRESA_<SLUG>_*,
+// A primeira empresa da lista é a padrão: atende o endereço do Render
+// (nix-glasses.onrender.com) e, sem as variáveis EMPRESA_<SLUG>_*,
 // usa DATABASE_URL, ADMIN_USER e ADMIN_PASS_HASH, como antes.
 
 const SLUG_VALIDO = /^[a-z0-9][a-z0-9-]{0,39}$/;
@@ -59,12 +59,21 @@ function lerEmpresas(env) {
   return empresas;
 }
 
-// Empresa dona do endereço: domínio listado, senão "<slug>." no começo, senão a padrão.
+// Endereços que sempre vão para a empresa padrão: o do Render e os internos (testes, health check).
+function hostInterno(h) {
+  return h === '' || h === 'localhost' || h.endsWith('.onrender.com') || /^[\d.]+$/.test(h) || h.includes(':');
+}
+
+// Empresa dona do endereço: domínio listado, senão "<slug>." no começo. Com uma empresa só,
+// qualquer endereço é dela (como antes). Com várias, um endereço que não é de nenhuma
+// (subdomínio digitado errado, DNS apontado sem configurar) devolve null em vez de mostrar
+// a loja padrão por engano.
 function empresaDoHost(empresas, host) {
   const h = normalizarHost(host);
-  return empresas.find((e) => e.dominios.includes(h))
-    || empresas.find((e) => !e.dominios.length && h.startsWith(e.slug + '.'))
-    || empresas[0];
+  const dona = empresas.find((e) => e.dominios.includes(h))
+    || empresas.find((e) => !e.dominios.length && h.startsWith(e.slug + '.'));
+  if (dona) return dona;
+  return empresas.length === 1 || hostInterno(h) ? empresas[0] : null;
 }
 
 module.exports = { lerEmpresas, empresaDoHost, normalizarHost };

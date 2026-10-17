@@ -66,13 +66,24 @@ describe('empresaDoHost', () => {
 
   it('com DOMINIOS, só os domínios listados valem', () => {
     assert.equal(slug('minhaloja.com.br'), 'loja');
-    assert.equal(slug('loja.temcatalogo.com.br'), 'nix');
+    assert.equal(empresaDoHost(empresas, 'loja.temcatalogo.com.br'), null);
   });
 
-  it('endereço desconhecido (como o do Render) fica com a empresa padrão', () => {
+  it('o endereço do Render e os internos ficam com a empresa padrão', () => {
     assert.equal(slug('nix-glasses.onrender.com'), 'nix');
+    assert.equal(slug('localhost'), 'nix');
+    assert.equal(slug('10.0.0.5:10000'), 'nix');
     assert.equal(slug(''), 'nix');
-    assert.equal(slug('pasucportasfalso.com'), 'nix');
+  });
+
+  it('com várias empresas, endereço de ninguém não cai na loja padrão', () => {
+    assert.equal(empresaDoHost(empresas, 'pasucportasfalso.com'), null);
+    assert.equal(empresaDoHost(empresas, 'digitado-errado.temcatalogo.com.br'), null);
+  });
+
+  it('com uma empresa só, qualquer endereço é dela (como antes)', () => {
+    const [nix] = lerEmpresas({ DATABASE_URL: 'pg://1' });
+    assert.equal(empresaDoHost([nix], 'www.qualquer.com.br'), nix);
   });
 });
 
@@ -257,6 +268,14 @@ describe('duas empresas no mesmo servidor', () => {
     assert.equal((await pedir(srv, NIX, 'POST', '/api/clientes/login', { json: { email: 'bia@ex.com', senha: 'senha-boa-123' } })).status, 401);
     assert.equal((await pedir(srv, NIX, 'GET', '/api/clientes/me', { token: cadastro.body.token })).status, 401);
     assert.equal((await pedir(srv, PASUC, 'GET', '/api/clientes/me', { token: cadastro.body.token })).status, 200);
+  });
+
+  it('endereço que não é de nenhuma empresa responde 404, sem dados de ninguém', async () => {
+    for (const caminho of ['/', '/api/produtos', '/api/config/whatsapp']) {
+      const res = await pedir(srv, 'errado.temcatalogo.com.br', 'GET', caminho);
+      assert.equal(res.status, 404, caminho);
+      assert.equal(res.body, 'Loja não encontrada neste endereço.');
+    }
   });
 
   it('a vitrine de cada endereço sai com a sua loja', async () => {
