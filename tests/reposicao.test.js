@@ -81,13 +81,19 @@ describe('histórico de reposição', () => {
     assert.deepEqual(historico.map(c => Number(c.preco_custo)), [110, 100, 80]);
   });
 
-  it('reativar=true devolve produto esgotado para disponível', async () => {
+  it('soma as peças no estoque e devolve o esgotado para disponível', async () => {
     const p = await criarProduto(produto('R-4'));
     await api('PUT', `/api/produtos/${p.id}`, { body: { status: 'ESGOTADO' } });
-    const sem = await api('POST', `/api/admin/produtos/${p.id}/compras`, { body: { preco_custo: 100 } });
-    assert.equal(sem.body.produto.status, 'ESGOTADO');
-    const com = await api('POST', `/api/admin/produtos/${p.id}/compras`, { body: { preco_custo: 100, reativar: true } });
-    assert.equal(com.body.produto.status, 'DISPONIVEL');
+    const r = await api('POST', `/api/admin/produtos/${p.id}/compras`, { body: { preco_custo: 100, quantidade: 3, pedido_fornecedor: '14563', data_compra: '09/11/2025' } });
+    assert.equal(r.status, 201);
+    assert.equal(r.body.produto.status, 'DISPONIVEL');
+    assert.equal(r.body.produto.estoque, 3);
+    assert.equal(r.body.compra.pedido_fornecedor, '14563');
+    assert.equal(r.body.compra.data_compra, '2025-11-09');
+    const mais = await api('POST', `/api/admin/produtos/${p.id}/compras`, { body: { preco_custo: 90, quantidade: 2 } });
+    assert.equal(mais.body.produto.estoque, 5);
+    const historico = (await api('GET', `/api/admin/produtos/${p.id}/compras`)).body;
+    assert.deepEqual(historico.map(c => [c.origem, c.quantidade, c.pedido_fornecedor]), [['REPOSICAO', 2, ''], ['CADASTRO', 1, ''], ['REPOSICAO', 3, '14563']]);
   });
 
   it('valida custo, quantidade, data, produto e login', async () => {

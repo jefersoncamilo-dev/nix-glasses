@@ -282,6 +282,37 @@ async function initTables(pool) {
       `);
     }
 
+    // Estoque em unidades: produtos.estoque conta as peças na loja e maleta_pecas
+    // as que estão com clientes (uma linha por peça, ligada ao pedido da maleta).
+    // O status do produto sai dessas contas. Na criação, cada produto de antes
+    // (uma peça por cadastro) vira 1 em estoque se DISPONIVEL e a peça em
+    // CONDICIONAL vira uma linha da maleta.
+    const temMaletaPecas = (await client.query(`SELECT to_regclass('maleta_pecas') AS t`)).rows[0].t !== null;
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS maleta_pecas (
+        id SERIAL PRIMARY KEY,
+        produto_id INTEGER NOT NULL REFERENCES produtos(id) ON DELETE CASCADE,
+        pedido_id INTEGER REFERENCES pedidos(id) ON DELETE SET NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+    await client.query('CREATE INDEX IF NOT EXISTS maleta_pecas_produto_idx ON maleta_pecas (produto_id)');
+    await client.query('CREATE INDEX IF NOT EXISTS maleta_pecas_pedido_idx ON maleta_pecas (pedido_id)');
+    await client.query(`ALTER TABLE produtos ADD COLUMN IF NOT EXISTS estoque INTEGER`);
+    await client.query(`UPDATE produtos SET estoque = CASE WHEN status = 'DISPONIVEL' THEN 1 ELSE 0 END WHERE estoque IS NULL`);
+    await client.query(`ALTER TABLE produtos ALTER COLUMN estoque SET DEFAULT 1, ALTER COLUMN estoque SET NOT NULL`);
+    if (!temMaletaPecas) {
+      await client.query(`
+        INSERT INTO maleta_pecas (produto_id, pedido_id)
+        SELECT id, pedido_condicional_id FROM produtos WHERE status = 'CONDICIONAL'
+      `);
+    }
+    // Nº do pedido no fornecedor (ex.: 14563), para achar a compra depois
+    await client.query(`
+      ALTER TABLE compras_fornecedor
+      ADD COLUMN IF NOT EXISTS pedido_fornecedor VARCHAR(60) NOT NULL DEFAULT ''
+    `);
+
     await client.query(`
       CREATE TABLE IF NOT EXISTS configuracoes (
         chave VARCHAR(100) PRIMARY KEY,

@@ -87,7 +87,7 @@ async function iniciarServidor({ comAdmin = true, env: envExtra = {} } = {}) {
 const pool = new Pool({ connectionString: DATABASE_URL });
 
 async function limparBanco() {
-  await pool.query('TRUNCATE produtos, compras_fornecedor, imagens, acertos, pedidos, clientes, acessorios, encomendas RESTART IDENTITY');
+  await pool.query('TRUNCATE produtos, compras_fornecedor, maleta_pecas, imagens, acertos, pedidos, clientes, acessorios, encomendas RESTART IDENTITY');
   await pool.query(`UPDATE configuracoes SET valor = '' WHERE chave = 'whatsapp_number'`);
 }
 

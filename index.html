@@ -498,6 +498,12 @@
         const response = await fetch('/api/produtos');
         if (!response.ok) throw new Error('Erro ao buscar produtos');
         produtos = await response.json();
+        const saiu = sincronizarMaleta(maleta, produtos);
+        if (saiu) {
+          salvarMaleta();
+          atualizarMaletaUI();
+          mostrarToast(saiu === 1 ? '1 peça saiu da maleta porque não está mais disponível' : `${saiu} peças saíram da maleta porque não estão mais disponíveis`);
+        }
         preencherFiltroFormato();
         preencherFiltroGenero();
         atualizarContagemFiltros();
@@ -1287,7 +1293,7 @@
       const index = maleta.itens.findIndex(i => i.id === produtoId);
       const encomenda = ehSobEncomenda(produto);
       if (index >= 0) maleta.itens.splice(index, 1);
-      else maleta.itens.push({ id: produto.id, nome: produto.nome, preco: Number(produto.preco_venda), imagem: produto.imagem_url, encomenda, intencao: encomenda ? 'ENCOMENDA' : 'CONDICIONAL' });
+      else maleta.itens.push({ id: produto.id, sku: produto.codigo_sku, nome: produto.nome, preco: Number(produto.preco_venda), imagem: produto.imagem_url, encomenda, intencao: encomenda ? 'ENCOMENDA' : 'CONDICIONAL' });
       // Primeiro o botão muda (feedback imediato), depois o resto
       atualizarCardMaleta(produtoId);
       if (index < 0 && typeof navigator !== 'undefined' && navigator.vibrate) navigator.vibrate(12);
@@ -1304,6 +1310,27 @@
       item.intencao = intencao;
       salvarMaleta();
       atualizarMaletaUI();
+    }
+
+    // A maleta fica salva no navegador. Ao carregar o catálogo, tira as peças que não
+    // estão mais à venda (apagadas, esgotadas) e as que trocaram de produto: depois de
+    // zerar os dados, o mesmo id pode ser outro óculos, então o SKU (ou, em maletas
+    // antigas sem SKU, o nome) também precisa bater. Preço e foto vêm do catálogo.
+    // Devolve quantas peças saíram.
+    function sincronizarMaleta(maleta, produtos) {
+      const antes = maleta.itens.length;
+      maleta.itens = maleta.itens.filter(item => {
+        const p = produtos.find(prod => prod.id === item.id);
+        if (!p) return false;
+        const mesmo = item.sku ? item.sku === p.codigo_sku : item.nome === p.nome;
+        if (!mesmo) return false;
+        item.sku = p.codigo_sku;
+        item.nome = p.nome;
+        item.preco = Number(p.preco_venda);
+        item.imagem = p.imagem_url;
+        return true;
+      });
+      return antes - maleta.itens.length;
     }
 
     // Salvar maleta no localStorage

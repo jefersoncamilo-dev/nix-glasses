@@ -122,7 +122,7 @@ describe('relatório de conversão das maletas', () => {
     await h.pool.query(`UPDATE pedidos SET maleta_enviada_em = CURRENT_TIMESTAMP - interval '60 days' WHERE id = $1`, [m2]);
     // Acerto sem pedido fica à parte
     const avulsa = await criarProduto('AV');
-    await h.pool.query(`UPDATE produtos SET status = 'CONDICIONAL' WHERE id = $1`, [avulsa]);
+    await api('PUT', `/api/produtos/${avulsa}`, { body: { status: 'CONDICIONAL' } });
     await api('POST', '/api/admin/acerto', { body: { comprados: [avulsa], devolvidos: [] } });
 
     const tudo = await api('GET', '/api/admin/relatorios/maletas');

@@ -203,7 +203,7 @@ describe('fechamento do pedido na entrega', () => {
 
     // Acerto: ela comprou a peça da maleta, que passa a ser cobrada no fechamento
     await api('POST', '/api/admin/acerto', { body: { comprados: [b], devolvidos: [], pedido_id: id } });
-    await h.pool.query(`UPDATE produtos SET status = 'ESGOTADO' WHERE id = $1`, [a]);
+    await h.pool.query(`UPDATE produtos SET status = 'ESGOTADO', estoque = 0 WHERE id = $1`, [a]);
     const vendida = await api('PUT', `/api/admin/pedidos/${id}/fechamento`, { body: { concluir: true } });
     assert.equal(vendida.status, 409);
     assert.deepEqual(vendida.body.indisponiveis.map(i => i.codigo_sku), ['A']);
