@@ -139,7 +139,7 @@ function carregar(arquivo, funcoes, prefixo = '') {
 
 describe('especificações técnicas: painel', () => {
   const painel = carregar('admin/index.html',
-    ['escapeHtml', 'linhaLoteVazia', 'linhaLoteEstaVazia', 'lerPreco', 'lerMedida', 'formatarMedida', 'lerDisponibilidade', 'lerStatus', 'campoDoCabecalho', 'linhasDaPlanilha', 'linkSeguro', 'validarLote'],
+    ['escapeHtml', 'linhaLoteVazia', 'linhaLoteEstaVazia', 'lerPreco', 'lerMedida', 'formatarMedida', 'lerDisponibilidade', 'lerStatus', 'lerGenero', 'campoDoCabecalho', 'linhasDaPlanilha', 'linkSeguro', 'validarLote'],
     (html) => `${html.match(/const COLUNAS_LOTE = \[[\s\S]*?\n {4}\];/)[0]}\n${html.match(/const CAMPOS_MEDIDA = \[.*\];/)[0]}`);
 
   it('lê e formata medidas em cm', () => {

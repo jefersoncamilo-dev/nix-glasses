@@ -86,6 +86,12 @@ async function initTables(pool) {
       ADD COLUMN IF NOT EXISTS nome_curto VARCHAR(80) NOT NULL DEFAULT ''
     `);
 
+    // Gênero do produto (MASCULINO, FEMININO, UNISSEX); vazio = não informado.
+    await client.query(`
+      ALTER TABLE produtos
+      ADD COLUMN IF NOT EXISTS genero VARCHAR(10) NOT NULL DEFAULT ''
+    `);
+
     // Histórico de compras/reposições de cada produto (custo unitário pago ao fornecedor).
     // origem: CADASTRO (custo informado ao cadastrar) ou REPOSICAO (registrada no painel).
     await client.query(`

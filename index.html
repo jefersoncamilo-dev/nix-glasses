@@ -160,6 +160,9 @@
           <select id="filtroFormato" class="hidden w-full sm:w-auto px-3 sm:px-4 py-1.5 sm:py-2 text-sm text-gray-700 border border-gray-200 rounded-full focus:outline-none focus:ring-2 focus:ring-gray-400" aria-label="Formato">
             <option value="">Todos os formatos</option>
           </select>
+          <select id="filtroGenero" class="hidden w-full sm:w-auto px-3 sm:px-4 py-1.5 sm:py-2 text-sm text-gray-700 border border-gray-200 rounded-full focus:outline-none focus:ring-2 focus:ring-gray-400" aria-label="Gênero">
+            <option value="">Todos os gêneros</option>
+          </select>
         </div>
       </div>
       <!-- Orientação: uma linha que muda com o filtro (some quando não há o que dizer) -->
@@ -392,6 +395,7 @@
     const emptyState = document.getElementById('emptyState');
     const filtroStatus = document.getElementById('filtroStatus');
     const filtroFormato = document.getElementById('filtroFormato');
+    const filtroGenero = document.getElementById('filtroGenero');
     const modalMaleta = document.getElementById('modalMaleta');
     const btnMaleta = document.getElementById('btnMaleta');
     const fecharMaleta = document.getElementById('fecharMaleta');
@@ -495,6 +499,7 @@
         if (!response.ok) throw new Error('Erro ao buscar produtos');
         produtos = await response.json();
         preencherFiltroFormato();
+        preencherFiltroGenero();
         atualizarContagemFiltros();
         renderizarCatalogo();
       } catch (error) {
@@ -515,6 +520,26 @@
       });
       // Com um formato só (ou nenhum) o filtro não ajuda: fica escondido
       filtroFormato.classList.toggle('hidden', formatos.length < 2);
+    }
+
+    const NOMES_GENERO = { MASCULINO: 'Masculino', FEMININO: 'Feminino', UNISSEX: 'Unissex' };
+
+    // Filtro de gênero: só os gêneros cadastrados. Escolher Masculino ou Feminino
+    // também mostra os Unissex (servem para os dois).
+    function preencherFiltroGenero() {
+      const generos = Object.keys(NOMES_GENERO).filter(g => produtos.some(p => p.genero === g));
+      filtroGenero.innerHTML = '<option value="">Todos os gêneros</option>';
+      generos.forEach(g => {
+        const opt = document.createElement('option');
+        opt.value = g;
+        opt.textContent = NOMES_GENERO[g];
+        filtroGenero.appendChild(opt);
+      });
+      filtroGenero.classList.toggle('hidden', generos.length < 2);
+    }
+
+    function passaFiltroGenero(p, genero) {
+      return !genero || p.genero === genero || (p.genero === 'UNISSEX' && genero !== 'UNISSEX');
     }
 
     // Escapa texto vindo do banco ou do localStorage antes de ir para innerHTML
@@ -636,10 +661,12 @@
     function renderizarCatalogo() {
       const statusFiltro = filtroStatus.value;
       const formatoFiltro = filtroFormato.value;
+      const generoFiltro = filtroGenero.value;
 
       const filtrados = produtos.filter(p => {
         if (!passaFiltroStatus(p, statusFiltro)) return false;
         if (formatoFiltro && p.formato !== formatoFiltro) return false;
+        if (!passaFiltroGenero(p, generoFiltro)) return false;
         return true;
       });
 
@@ -777,6 +804,7 @@
         ['Formato da lente', produto.formato],
         ['Cor', produto.cor_armacao],
         ['Tipo', produto.tipo],
+        ['Gênero', { MASCULINO: 'Masculino', FEMININO: 'Feminino', UNISSEX: 'Unissex' }[produto.genero] || ''],
       ].filter(([, valor]) => valor);
     }
 
@@ -1679,6 +1707,7 @@
       document.getElementById('catalogo').scrollIntoView({ behavior: 'smooth' });
     });
     filtroFormato.addEventListener('change', renderizarCatalogo);
+    filtroGenero.addEventListener('change', renderizarCatalogo);
   </script>
 </body>
 </html>
