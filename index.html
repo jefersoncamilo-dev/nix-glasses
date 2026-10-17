@@ -39,6 +39,8 @@
     .toast { animation: slideIn 0.3s ease; }
     @keyframes slideIn { from { opacity: 0; transform: translateX(100%); } to { opacity: 1; transform: translateX(0); } }
     input, select, textarea { color-scheme: dark; }
+    /* Nas áreas brancas (catálogo e janelas) os campos ficam claros, não cinza-escuro */
+    #catalogo select, #modalMaleta input, #modalCliente input { color-scheme: light; background-color: #fff; }
     .foto-nav { opacity: 0; transition: opacity 0.2s ease; }
     .glass-card:hover .foto-nav, .foto-nav:focus-visible { opacity: 1; }
     .miniaturas { scrollbar-width: thin; }
@@ -77,19 +79,14 @@
     .btn-contorno-escuro { background: transparent; color: #fff; border-color: rgba(255,255,255,0.35); }
     .btn-contorno-escuro:hover:not(:disabled) { background: rgba(255,255,255,0.1); }
     @media (prefers-reduced-motion: reduce) { .btn { transition: none; } .btn:active { transform: none; } }
-    /* Guias da vitrine: seta que "cutuca" para baixo, ponto que pulsa e filtros em pílula */
-    .guia-seta { animation: guiaSeta 1.6s ease-in-out infinite; }
-    @keyframes guiaSeta { 0%, 100% { transform: translateY(0); opacity: 0.6; } 50% { transform: translateY(6px); opacity: 1; } }
-    .guia-ponto { position: relative; }
-    .guia-ponto::after { content: ''; position: absolute; inset: 0; border-radius: 9999px; background: inherit; animation: guiaPonto 1.8s ease-out infinite; }
-    @keyframes guiaPonto { 0% { transform: scale(1); opacity: 0.7; } 100% { transform: scale(2.6); opacity: 0; } }
+    /* Guias da vitrine: seta da barra da maleta que "cutuca" e filtros em pílula */
     .guia-cutuca { animation: guiaCutuca 1.4s ease-in-out infinite; }
     @keyframes guiaCutuca { 0%, 100% { transform: translateX(0); } 50% { transform: translateX(4px); } }
     .filtro-pilula { touch-action: manipulation; -webkit-tap-highlight-color: transparent; transition: background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease; }
     #barraMaleta { transition: transform 0.25s ease, opacity 0.25s ease; }
     #barraMaleta.escondida { transform: translateY(140%); opacity: 0; pointer-events: none; }
     @media (prefers-reduced-motion: reduce) {
-      .guia-seta, .guia-ponto::after, .guia-cutuca { animation: none; }
+      .guia-cutuca { animation: none; }
       #barraMaleta { transition: none; }
     }
   </style>
@@ -126,53 +123,33 @@
   </header>
 
   <!-- Hero -->
-  <section class="text-white py-12 sm:py-20 lg:py-28" style="background:radial-gradient(ellipse 80% 60% at 50% -10%, #3a3a3a 0%, #1c1c1c 55%, #101010 100%)">
+  <section class="text-white py-8 sm:py-14 lg:py-20" style="background:radial-gradient(ellipse 80% 60% at 50% -10%, #3a3a3a 0%, #1c1c1c 55%, #101010 100%)">
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-      <p data-loja="nome" class="text-xs font-medium uppercase mb-4" style="letter-spacing:0.4em;color:var(--nix-muted)">Nix Glasses</p>
-      <h1 data-loja="chamada" class="font-brand text-3xl sm:text-5xl lg:text-6xl font-bold tracking-wide mb-6 chrome-text">Óculos que definem seu estilo</h1>
-      <div class="mx-auto mb-8 h-px w-24" style="background:linear-gradient(90deg,transparent,#c9c9c9,transparent)"></div>
-      <p data-loja="descricao" class="text-lg sm:text-xl max-w-2xl mx-auto mb-8" style="color:var(--nix-muted)">Design exclusivo, qualidade premium e proteção UV400. Escolha os modelos e prove em casa.</p>
-      <!-- Atalhos: cada um leva ao catálogo já com o filtro escolhido -->
-      <div class="flex flex-col sm:flex-row items-stretch sm:items-center justify-center gap-3 max-w-md sm:max-w-none mx-auto">
-        <a href="#catalogo" data-atalho-filtro="" aria-pressed="true" class="btn btn-lg btn-contorno-escuro atalho-topo">Coleção <span class="font-normal opacity-70">· todos os modelos</span></a>
-        <a href="#catalogo" data-atalho-filtro="DISPONIVEL" aria-pressed="false" class="btn btn-lg btn-contorno-escuro atalho-topo">Pronta Entrega <span class="font-normal opacity-70">· prove em casa</span></a>
-        <a href="#catalogo" data-atalho-filtro="SOB_ENCOMENDA" aria-pressed="false" class="btn btn-lg btn-contorno-escuro atalho-topo">Sob Encomenda <span class="font-normal opacity-70">· encontre seu estilo</span></a>
+      <h1 data-loja="chamada" class="font-brand text-3xl sm:text-5xl lg:text-6xl font-bold tracking-wide mb-3 sm:mb-5 chrome-text">Óculos que definem seu estilo</h1>
+      <p data-loja="descricao" class="text-sm sm:text-lg max-w-2xl mx-auto mb-6 sm:mb-8" style="color:var(--nix-muted)">Design exclusivo, qualidade premium e proteção UV400. Escolha os modelos e prove em casa.</p>
+      <!-- Atalhos: cada um leva ao catálogo já com o filtro escolhido (o complemento só aparece em telas maiores) -->
+      <div class="flex flex-col sm:flex-row items-stretch sm:items-center justify-center gap-2 sm:gap-3 max-w-md sm:max-w-none mx-auto">
+        <a href="#catalogo" data-atalho-filtro="" aria-pressed="true" class="btn btn-lg btn-contorno-escuro atalho-topo">Coleção <span class="hidden sm:inline font-normal opacity-70">· todos os modelos</span></a>
+        <a href="#catalogo" data-atalho-filtro="DISPONIVEL" aria-pressed="false" class="btn btn-lg btn-contorno-escuro atalho-topo">Pronta Entrega <span class="hidden sm:inline font-normal opacity-70">· prove em casa</span></a>
+        <a href="#catalogo" data-atalho-filtro="SOB_ENCOMENDA" aria-pressed="false" class="btn btn-lg btn-contorno-escuro atalho-topo">Sob Encomenda <span class="hidden sm:inline font-normal opacity-70">· encontre seu estilo</span></a>
       </div>
-      <!-- Como funciona -->
-      <ol class="mt-10 grid grid-cols-3 gap-2 sm:gap-6 max-w-3xl mx-auto text-left sm:text-center">
-        <li class="rounded-xl border p-3 sm:p-4" style="border-color:var(--nix-border);background:rgba(255,255,255,0.03)">
-          <span class="chrome-btn inline-flex w-6 h-6 rounded-full items-center justify-center text-xs font-bold mb-2">1</span>
-          <p class="text-xs sm:text-sm font-semibold text-white">Escolha os modelos</p>
-          <p class="text-[11px] sm:text-xs mt-1" style="color:var(--nix-muted)">Toque em <strong>+ Maleta</strong> nos que quer provar</p>
-        </li>
-        <li class="rounded-xl border p-3 sm:p-4" style="border-color:var(--nix-border);background:rgba(255,255,255,0.03)">
-          <span class="chrome-btn inline-flex w-6 h-6 rounded-full items-center justify-center text-xs font-bold mb-2">2</span>
-          <p class="text-xs sm:text-sm font-semibold text-white">Envie a maleta</p>
-          <p class="text-[11px] sm:text-xs mt-1" style="color:var(--nix-muted)">O pedido segue pelo WhatsApp</p>
-        </li>
-        <li class="rounded-xl border p-3 sm:p-4" style="border-color:var(--nix-border);background:rgba(255,255,255,0.03)">
-          <span class="chrome-btn inline-flex w-6 h-6 rounded-full items-center justify-center text-xs font-bold mb-2">3</span>
-          <p class="text-xs sm:text-sm font-semibold text-white">Prove em casa</p>
-          <p class="text-[11px] sm:text-xs mt-1" style="color:var(--nix-muted)">Fique só com os que amar</p>
-        </li>
+      <!-- Como funciona: uma linha só, sem caixas -->
+      <ol class="mt-6 sm:mt-8 flex items-center justify-center gap-2 sm:gap-4 text-[11px] sm:text-sm" style="color:var(--nix-muted)" aria-label="Como funciona">
+        <li class="flex items-center gap-1.5"><span class="chrome-btn inline-flex w-5 h-5 rounded-full items-center justify-center text-[10px] font-bold">1</span>Escolha</li>
+        <li aria-hidden="true" class="opacity-40">—</li>
+        <li class="flex items-center gap-1.5"><span class="chrome-btn inline-flex w-5 h-5 rounded-full items-center justify-center text-[10px] font-bold">2</span>Envie a maleta</li>
+        <li aria-hidden="true" class="opacity-40">—</li>
+        <li class="flex items-center gap-1.5"><span class="chrome-btn inline-flex w-5 h-5 rounded-full items-center justify-center text-[10px] font-bold">3</span>Prove em casa</li>
       </ol>
-      <a href="#catalogo" class="mt-8 inline-flex flex-col items-center gap-1 text-xs" style="color:var(--nix-muted)" aria-label="Ir para os modelos">
-        <span>Veja os modelos</span>
-        <svg class="guia-seta w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
-      </a>
     </div>
   </section>
 
   <!-- Catálogo -->
-  <section id="catalogo" class="py-16 lg:py-24 bg-white scroll-mt-16">
+  <section id="catalogo" class="pb-16 lg:pb-24 bg-white scroll-mt-16">
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-      <div class="flex flex-col gap-4 mb-6 sm:mb-10 sm:flex-row sm:items-center sm:justify-between">
-        <div class="flex items-center gap-3">
-          <span id="vitrineLogoChip" class="hidden items-center rounded-lg px-2 py-1" style="background:#232323">
-            <img src="/logo.png" alt="NIX" class="h-8 sm:h-10 w-auto" onload="document.getElementById('vitrineLogoChip').style.display='inline-flex'" onerror="document.getElementById('vitrineLogoChip').remove()">
-          </span>
-          <h2 class="text-2xl sm:text-3xl font-bold text-gray-900 text-left">Nossa Coleção</h2>
-        </div>
+      <!-- Filtros: ficam presos abaixo do topo enquanto a cliente rola os modelos -->
+      <div id="barraFiltros" class="sticky top-16 z-30 -mx-4 sm:-mx-6 lg:-mx-8 px-4 sm:px-6 lg:px-8 pt-3 pb-2 sm:pt-8 sm:pb-4 mb-2 sm:mb-4 bg-white/95 border-b border-gray-100 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between" style="backdrop-filter:blur(8px)">
+        <h2 class="hidden sm:block text-2xl sm:text-3xl font-bold text-gray-900 text-left">Nossa Coleção</h2>
         <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-4">
           <input type="hidden" id="filtroStatus" value="">
           <div id="filtroPilulas" class="flex gap-1 p-1 rounded-full bg-gray-100" role="group" aria-label="Mostrar">
@@ -180,16 +157,13 @@
             <button type="button" data-filtro="DISPONIVEL" aria-pressed="false" class="filtro-pilula flex-auto px-2 py-2 rounded-full text-xs sm:text-sm font-medium text-gray-700 border border-transparent whitespace-nowrap">Pronta Entrega <span data-contagem="DISPONIVEL" class="opacity-60"></span></button>
             <button type="button" data-filtro="SOB_ENCOMENDA" aria-pressed="false" class="filtro-pilula flex-auto px-2 py-2 rounded-full text-xs sm:text-sm font-medium text-gray-700 border border-transparent whitespace-nowrap"><span class="sm:hidden">Encomenda</span><span class="hidden sm:inline">Sob Encomenda</span> <span data-contagem="SOB_ENCOMENDA" class="opacity-60"></span></button>
           </div>
-          <select id="filtroFormato" class="w-full sm:w-auto px-3 sm:px-4 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500">
-            <option value="">Todos os Formatos</option>
+          <select id="filtroFormato" class="hidden w-full sm:w-auto px-3 sm:px-4 py-1.5 sm:py-2 text-sm text-gray-700 border border-gray-200 rounded-full focus:outline-none focus:ring-2 focus:ring-gray-400" aria-label="Formato">
+            <option value="">Todos os formatos</option>
           </select>
         </div>
       </div>
-      <!-- Orientação: muda com o filtro e com a maleta -->
-      <div id="guiaCatalogo" class="flex items-start gap-3 mb-5 sm:mb-8 rounded-xl border border-orange-200 bg-orange-50 px-4 py-3 text-sm text-gray-800" role="status">
-        <span class="guia-ponto mt-1.5 inline-block w-2.5 h-2.5 shrink-0 rounded-full bg-orange-500" aria-hidden="true"></span>
-        <p id="guiaCatalogoTexto"></p>
-      </div>
+      <!-- Orientação: uma linha que muda com o filtro (some quando não há o que dizer) -->
+      <p id="guiaCatalogo" class="mb-3 sm:mb-6 text-xs sm:text-sm text-gray-500" role="status"><span id="guiaCatalogoTexto"></span></p>
       <div id="catalogoGrid" class="grid grid-cols-3 gap-2 sm:gap-6">
         <!-- Cards inseridos via JS -->
       </div>
@@ -207,107 +181,99 @@
     <span class="inline-flex items-center gap-1">Ver maleta <svg class="guia-cutuca w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M9 5l7 7-7 7"/></svg></span>
   </button>
 
-  <!-- Sobre -->
-  <section id="sobre" class="py-16 lg:py-24 border-t" style="background:#1b1b1b;border-color:var(--nix-border)">
-    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-      <div class="grid lg:grid-cols-2 gap-12 items-center">
-        <div>
-          <h2 data-loja="sobre_titulo" class="font-brand text-3xl font-bold text-white tracking-wide mb-4">A Nix Glasses</h2>
-          <div class="mb-4 h-px w-16" style="background:linear-gradient(90deg,#c9c9c9,transparent)"></div>
-          <div data-loja-paragrafos="sobre"><p class="mb-4" style="color:var(--nix-muted)">Fundada com a paixão por design e proteção ocular, a Nix Glasses nasceu para oferecer óculos de sol que unem estilo, qualidade e tecnologia.</p><p class="mb-4" style="color:var(--nix-muted)">Todos nossos modelos possuem lentes com proteção UV400, armações em acetato italiano ou metal premium, e passam por rigoroso controle de qualidade.</p><p style="color:var(--nix-muted)">Trabalhamos com o sistema de maleta: você experimenta em casa, escolhe seus favoritos e finaliza o pedido pelo WhatsApp.</p></div>
-        </div>
-        <div class="relative">
-          <div class="aspect-square rounded-3xl flex items-center justify-center border" style="background:linear-gradient(135deg,#333333 0%,#141414 100%);border-color:var(--nix-border)">
-            <span data-loja="marca" class="font-brand text-7xl sm:text-8xl font-bold chrome-text select-none">NIX</span>
-          </div>
-        </div>
+  <!-- Sobre e contato -->
+  <section id="sobre" class="py-12 lg:py-16 border-t scroll-mt-16" style="background:#1b1b1b;border-color:var(--nix-border)">
+    <div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
+      <h2 data-loja="sobre_titulo" class="font-brand text-2xl sm:text-3xl font-bold text-white tracking-wide mb-4">A Nix Glasses</h2>
+      <div class="text-sm sm:text-base"><div data-loja-paragrafos="sobre"><p class="mb-4" style="color:var(--nix-muted)">Fundada com a paixão por design e proteção ocular, a Nix Glasses nasceu para oferecer óculos de sol que unem estilo, qualidade e tecnologia.</p><p class="mb-4" style="color:var(--nix-muted)">Todos nossos modelos possuem lentes com proteção UV400, armações em acetato italiano ou metal premium, e passam por rigoroso controle de qualidade.</p><p style="color:var(--nix-muted)">Trabalhamos com o sistema de maleta: você experimenta em casa, escolhe seus favoritos e finaliza o pedido pelo WhatsApp.</p></div></div>
+      <div id="contato" class="mt-8 pt-8 border-t scroll-mt-16" style="border-color:var(--nix-border)">
+        <p class="mb-4 text-sm" style="color:var(--nix-muted)">Dúvidas ou quer ser revendedor? Fale com a gente.</p>
+        <a id="whatsappLink" href="#" class="btn btn-lg btn-primario">
+          <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.466-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.472.099-.174.05-.372-.025-.521-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.372-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.076 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.402h-.004a9.87 9.87 0 01-5.031-1.378 3.43 3.43 0 01-.947-2.327c-.273-.731-.47-1.39-.47-2.308 0-1.853 1.598-3.22 3.435-3.683.338-.082.68-.112 1.023-.112.354 0 .696.032 1.038.111 1.955.482 3.44 1.934 3.683 3.717 0 .904-.21 1.565-.48 2.296a3.58 3.58 0 01-.927 2.225 9.87 9.87 0 01-5.034 1.416z"/></svg>
+          Falar no WhatsApp
+        </a>
       </div>
     </div>
   </section>
 
-  <!-- Contato -->
-  <section id="contato" class="py-16 lg:py-24 border-t" style="background:#131313;border-color:var(--nix-border)">
-    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-      <h2 class="font-brand text-3xl font-bold text-white tracking-wide mb-4">Fale Conosco</h2>
-      <p class="mb-8 max-w-2xl mx-auto" style="color:var(--nix-muted)">Dúvidas, sugestões ou quer ser um revendedor? Estamos à disposição.</p>
-      <a id="whatsappLink" href="#" class="btn btn-lg btn-primario">
-        <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.466-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.472.099-.174.05-.372-.025-.521-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.372-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.076 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.402h-.004a9.87 9.87 0 01-5.031-1.378 3.43 3.43 0 01-.947-2.327c-.273-.731-.47-1.39-.47-2.308 0-1.853 1.598-3.22 3.435-3.683.338-.082.68-.112 1.023-.112.354 0 .696.032 1.038.111 1.955.482 3.44 1.934 3.683 3.717 0 .904-.21 1.565-.48 2.296a3.58 3.58 0 01-.927 2.225 9.87 9.87 0 01-5.034 1.416z"/></svg>
-        Falar no WhatsApp
-      </a>
-    </div>
-  </section>
-
   <!-- Footer -->
-  <footer class="text-white py-12 border-t" style="background:#0e0e0e;border-color:var(--nix-border)">
+  <footer class="text-white pt-8 pb-24 sm:pb-8 border-t" style="background:#0e0e0e;border-color:var(--nix-border)">
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
       <p data-loja="marca" class="font-brand text-xl font-bold tracking-wide chrome-text mb-2">NIX</p>
       <p class="text-sm" style="color:var(--nix-muted)">&copy; 2026 <span data-loja="nome">Nix Glasses</span>. Todos os direitos reservados.</p>
     </div>
   </footer>
 
-  <!-- Modal Maleta -->
-  <div id="modalMaleta" class="fixed inset-0 modal-overlay bg-black/50 hidden z-50 flex items-center justify-center p-4">
-    <div class="bg-white rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-hidden flex flex-col">
-      <div class="flex items-center justify-between p-6 border-b border-gray-200">
-        <h3 class="text-xl font-bold text-gray-900">Minha Maleta</h3>
-        <button id="fecharMaleta" class="p-2 text-gray-500 hover:text-gray-700 rounded-lg hover:bg-gray-100">
+  <!-- Modal Maleta: 1. modelos escolhidos, 2. dados para entrega, botão de envio fixo no rodapé -->
+  <div id="modalMaleta" class="fixed inset-0 modal-overlay bg-black/50 hidden z-50 flex items-end sm:items-center justify-center p-0 sm:p-4" role="dialog" aria-modal="true" aria-labelledby="maletaTitulo">
+    <div class="bg-white rounded-t-2xl sm:rounded-2xl max-w-2xl w-full max-h-[92vh] sm:max-h-[90vh] overflow-hidden flex flex-col">
+      <div class="flex items-center justify-between px-5 py-4 sm:px-6 border-b border-gray-200">
+        <div>
+          <h3 id="maletaTitulo" class="text-lg sm:text-xl font-bold text-gray-900">Minha Maleta</h3>
+          <p id="maletaSubtitulo" class="text-xs text-gray-500"></p>
+        </div>
+        <button id="fecharMaleta" class="p-2 text-gray-500 hover:text-gray-700 rounded-lg hover:bg-gray-100" aria-label="Fechar">
           <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
         </button>
       </div>
-      <div class="p-6 overflow-y-auto flex-1">
-        <div id="maletaVazia" class="text-center py-12">
-          <svg class="mx-auto h-16 w-16 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z"/></svg>
+      <div class="px-5 py-4 sm:p-6 overflow-y-auto flex-1">
+        <div id="maletaVazia" class="text-center py-10">
+          <svg class="mx-auto h-14 w-14 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z"/></svg>
           <h4 class="mt-4 text-lg font-medium text-gray-900">Sua maleta está vazia</h4>
-          <p class="mt-2 text-gray-500">Adicione óculos ao catálogo para começar seu pedido.</p>
+          <p class="mt-1 mb-5 text-sm text-gray-500">Toque em <strong>+ Maleta</strong> nos modelos que quer receber.</p>
+          <button type="button" id="verModelosMaleta" class="btn btn-primario px-6">Ver modelos</button>
         </div>
-        <div id="maletaItens" class="hidden space-y-4">
+        <div id="maletaItens" class="hidden space-y-3">
           <!-- Itens inseridos via JS -->
         </div>
-        <div id="maletaFormulario" class="hidden">
-          <h4 class="text-lg font-semibold text-gray-900 mb-4">Dados para Entrega</h4>
-          <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-            <div>
-              <label class="block text-sm font-medium text-gray-700 mb-1">Nome Completo *</label>
-              <input type="text" id="nomeCliente" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500" required>
+        <div id="maletaFormulario" class="hidden mt-6">
+          <h4 class="text-sm font-semibold text-gray-900 mb-3"><span class="chrome-btn inline-flex w-5 h-5 mr-1.5 rounded-full items-center justify-center text-[10px] font-bold align-[1px]">2</span>Dados para entrega</h4>
+          <div class="grid grid-cols-2 gap-3">
+            <div class="col-span-2 sm:col-span-1">
+              <label for="nomeCliente" class="block text-xs font-medium text-gray-600 mb-1">Nome completo *</label>
+              <input type="text" id="nomeCliente" autocomplete="name" class="w-full px-3 py-2.5 text-base sm:text-sm text-gray-900 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gray-400" required>
+            </div>
+            <div class="col-span-2 sm:col-span-1">
+              <label for="telefoneCliente" class="block text-xs font-medium text-gray-600 mb-1">WhatsApp *</label>
+              <input type="tel" id="telefoneCliente" autocomplete="tel" inputmode="tel" class="w-full px-3 py-2.5 text-base sm:text-sm text-gray-900 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gray-400" placeholder="(11) 98888-7777" required>
             </div>
             <div>
-              <label class="block text-sm font-medium text-gray-700 mb-1">Telefone/WhatsApp *</label>
-              <input type="tel" id="telefoneCliente" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500" required>
+              <label for="cepCliente" class="block text-xs font-medium text-gray-600 mb-1">CEP *</label>
+              <input type="text" id="cepCliente" autocomplete="postal-code" inputmode="numeric" class="w-full px-3 py-2.5 text-base sm:text-sm text-gray-900 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gray-400" placeholder="00000-000" maxlength="9" required>
             </div>
             <div>
-              <label class="block text-sm font-medium text-gray-700 mb-1">CEP *</label>
-              <input type="text" id="cepCliente" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500" placeholder="00000-000" maxlength="9" required>
+              <label for="numeroCliente" class="block text-xs font-medium text-gray-600 mb-1">Número *</label>
+              <input type="text" id="numeroCliente" class="w-full px-3 py-2.5 text-base sm:text-sm text-gray-900 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gray-400" required>
             </div>
-            <div>
-              <label class="block text-sm font-medium text-gray-700 mb-1">Número *</label>
-              <input type="text" id="numeroCliente" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500" required>
-            </div>
-            <div class="md:col-span-2">
-              <label class="block text-sm font-medium text-gray-700 mb-1">Rua</label>
-              <input type="text" id="ruaCliente" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500" readonly>
-            </div>
-            <div class="md:col-span-2">
-              <label class="block text-sm font-medium text-gray-700 mb-1">Bairro</label>
-              <input type="text" id="bairroCliente" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500" readonly>
-            </div>
-            <div class="md:col-span-2">
-              <label class="block text-sm font-medium text-gray-700 mb-1">Cidade/UF</label>
-              <input type="text" id="cidadeCliente" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500" readonly>
-            </div>
-            <div class="md:col-span-2">
-              <label class="block text-sm font-medium text-gray-700 mb-1">Complemento</label>
-              <input type="text" id="complementoCliente" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500">
+            <!-- Endereço: aparece depois do CEP, já preenchido quando o CEP é encontrado (dá para corrigir) -->
+            <div id="enderecoCliente" class="hidden col-span-2 grid grid-cols-2 gap-3">
+              <div class="col-span-2">
+                <label for="ruaCliente" class="block text-xs font-medium text-gray-600 mb-1">Rua *</label>
+                <input type="text" id="ruaCliente" autocomplete="address-line1" class="w-full px-3 py-2.5 text-base sm:text-sm text-gray-900 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gray-400" required>
+              </div>
+              <div>
+                <label for="bairroCliente" class="block text-xs font-medium text-gray-600 mb-1">Bairro</label>
+                <input type="text" id="bairroCliente" class="w-full px-3 py-2.5 text-base sm:text-sm text-gray-900 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gray-400">
+              </div>
+              <div>
+                <label for="cidadeCliente" class="block text-xs font-medium text-gray-600 mb-1">Cidade/UF</label>
+                <input type="text" id="cidadeCliente" class="w-full px-3 py-2.5 text-base sm:text-sm text-gray-900 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gray-400">
+              </div>
+              <div class="col-span-2">
+                <label for="complementoCliente" class="block text-xs font-medium text-gray-600 mb-1">Complemento</label>
+                <input type="text" id="complementoCliente" class="w-full px-3 py-2.5 text-base sm:text-sm text-gray-900 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gray-400" placeholder="Apto, bloco, referência">
+              </div>
             </div>
           </div>
         </div>
       </div>
-      <div id="maletaFooter" class="hidden p-4 sm:p-6 border-t border-gray-200 bg-gray-50 rounded-b-2xl flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+      <div id="maletaFooter" class="hidden px-5 py-4 sm:p-6 border-t border-gray-200 bg-gray-50 sm:rounded-b-2xl flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div class="flex flex-wrap items-baseline justify-between gap-x-2 sm:block">
           <p class="text-sm text-gray-500">Total</p>
           <p id="maletaTotal" class="text-xl sm:text-2xl font-bold text-gray-900">R$ 0,00</p>
           <p id="maletaSinal" class="hidden w-full text-right sm:text-left text-xs font-medium text-blue-700"></p>
         </div>
-        <button id="finalizarPedido" class="btn btn-lg btn-primario w-full sm:w-auto">Finalizar Pedido no WhatsApp</button>
+        <button id="finalizarPedido" class="btn btn-lg btn-primario w-full sm:w-auto">Enviar pedido pelo WhatsApp</button>
       </div>
     </div>
   </div>
@@ -540,13 +506,15 @@
     // Preencher filtro de formato
     function preencherFiltroFormato() {
       const formatos = [...new Set(produtos.map(p => p.formato).filter(Boolean))];
-      filtroFormato.innerHTML = '<option value="">Todos os Formatos</option>';
+      filtroFormato.innerHTML = '<option value="">Todos os formatos</option>';
       formatos.forEach(f => {
         const opt = document.createElement('option');
         opt.value = f;
         opt.textContent = f;
         filtroFormato.appendChild(opt);
       });
+      // Com um formato só (ou nenhum) o filtro não ajuda: fica escondido
+      filtroFormato.classList.toggle('hidden', formatos.length < 2);
     }
 
     // Escapa texto vindo do banco ou do localStorage antes de ir para innerHTML
@@ -588,15 +556,12 @@
       return contagem;
     }
 
-    // Texto de orientação acima dos cards: o que o filtro mostra e o próximo passo
+    // Uma linha de orientação acima dos cards: o que o filtro mostra ou, na Coleção, o
+    // primeiro passo. Com modelos já escolhidos a barra "Ver maleta" mostra o próximo passo.
     function textoGuiaCatalogo(filtro, itensNaMaleta) {
-      const passo = itensNaMaleta > 0
-        ? `Você já escolheu ${itensNaMaleta} ${itensNaMaleta === 1 ? 'modelo' : 'modelos'}. Quando terminar, abra a maleta e envie pelo WhatsApp.`
-        : 'Toque em <strong>+ Maleta</strong> nos modelos que quer provar em casa.';
-      const mostra = filtro === 'DISPONIVEL' ? '<strong>Pronta entrega:</strong> vão na maleta e chegam para você provar.'
-        : filtro === 'SOB_ENCOMENDA' ? '<strong>Sob encomenda:</strong> pedimos para você com sinal de 50%.'
-        : '<strong>Coleção completa:</strong> todos os modelos, de pronta entrega e sob encomenda.';
-      return `${mostra} ${passo}`;
+      if (filtro === 'DISPONIVEL') return '<strong>Pronta entrega:</strong> vão na maleta e chegam para você provar em casa.';
+      if (filtro === 'SOB_ENCOMENDA') return '<strong>Sob encomenda:</strong> pedimos para você com sinal de 50%.';
+      return itensNaMaleta > 0 ? '' : 'Toque em <strong>+ Maleta</strong> nos modelos que quer provar em casa.';
     }
 
     // Troca o filtro de disponibilidade (pílulas do catálogo e atalhos do topo)
@@ -615,7 +580,9 @@
 
     function atualizarGuias() {
       const n = maleta.itens.length;
-      document.getElementById('guiaCatalogoTexto').innerHTML = textoGuiaCatalogo(filtroStatus.value, n);
+      const guia = textoGuiaCatalogo(filtroStatus.value, n);
+      document.getElementById('guiaCatalogoTexto').innerHTML = guia;
+      document.getElementById('guiaCatalogo').classList[guia ? 'remove' : 'add']('hidden');
       document.getElementById('barraMaletaTexto').textContent = `${n} ${n === 1 ? 'modelo' : 'modelos'} na maleta`;
       document.getElementById('barraMaleta').classList[n === 0 ? 'add' : 'remove']('escondida');
     }
@@ -697,6 +664,8 @@
         const card = document.createElement('div');
         card.dataset.card = id;
         const tags = tagsCard(produto);
+        // "Disponível" é o normal da vitrine: só encomenda e condicional ganham etiqueta
+        const mostraEtiqueta = encomenda || produto.status !== 'DISPONIVEL';
         card.className = 'glass-card bg-white rounded-xl sm:rounded-2xl overflow-hidden border border-gray-100 flex flex-col';
         card.innerHTML = `
           <div class="aspect-square bg-gray-100 relative overflow-hidden">
@@ -709,18 +678,17 @@
             <div class="absolute bottom-1.5 sm:bottom-2 left-0 right-0 flex justify-center gap-1 pointer-events-none">
               ${fotos.map((_, i) => `<span data-dot class="w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full ${i === indice ? 'bg-white' : 'bg-white/50'} shadow"></span>`).join('')}
             </div>` : ''}
-            <div class="absolute top-1.5 right-1.5 sm:top-3 sm:right-3">
+            ${mostraEtiqueta ? `<div class="absolute top-1.5 right-1.5 sm:top-3 sm:right-3">
               <span class="px-1.5 sm:px-2 py-0.5 sm:py-1 text-[9px] sm:text-xs font-medium rounded-full ${etiqueta.classe}">${escapeHtml(etiqueta.texto)}</span>
-            </div>
-            <div data-selo-maleta class="${jaNaMaleta ? '' : 'hidden '}absolute bottom-1.5 left-1.5 sm:bottom-3 sm:left-3 bg-orange-500 text-white px-1.5 sm:px-2 py-0.5 sm:py-1 text-[9px] sm:text-xs font-medium rounded-full">Na Maleta</div>
+            </div>` : ''}
+            <div data-selo-maleta class="${jaNaMaleta ? '' : 'hidden '}chrome-btn absolute bottom-1.5 left-1.5 sm:bottom-3 sm:left-3 w-5 h-5 sm:w-7 sm:h-7 flex items-center justify-center rounded-full shadow text-[10px] sm:text-sm font-bold" title="Na maleta" aria-label="Na maleta">✓</div>
           </div>
           <div class="p-2 sm:p-4 flex-1 flex flex-col">
             <h3 class="font-semibold text-gray-900 text-xs sm:text-base leading-snug mb-0.5 line-clamp-2 break-words" title="${escapeHtml(produto.nome)}">${escapeHtml(nomeCard(produto))}</h3>
-            <p class="text-[10px] sm:text-xs text-gray-400 mb-1 sm:mb-2 truncate">${escapeHtml(produto.codigo_sku)}</p>
-            ${tags.length ? `<div class="flex flex-wrap gap-1 mb-1.5 sm:mb-2">${tags.map(t => `<span class="max-w-full truncate px-1.5 sm:px-2 py-0.5 text-[9px] sm:text-[11px] leading-tight text-gray-600 bg-gray-100 rounded-full">${escapeHtml(t)}</span>`).join('')}</div>` : ''}
-            <div class="mt-auto flex flex-wrap items-center gap-x-2 gap-y-1 mb-2 sm:mb-3">
-              <span class="text-sm sm:text-xl font-bold text-gray-900">${formatarMoeda(produto.preco_venda)}</span>
-              ${encomenda ? `<span data-selo-sinal class="px-1.5 sm:px-2 py-0.5 text-[9px] sm:text-[11px] font-medium leading-tight text-blue-700 bg-blue-50 border border-blue-100 rounded-full whitespace-nowrap" title="50% de sinal agora e 50% na entrega">Sinal: ${formatarMoeda(calcularSinal(produto.preco_venda))}</span>` : ''}
+            ${tags.length ? `<p data-tags-card class="hidden sm:block text-xs text-gray-500 mb-2 truncate">${tags.map(escapeHtml).join(' · ')}</p>` : ''}
+            <div class="mt-auto mb-2 sm:mb-3">
+              <span class="block text-sm sm:text-xl font-bold text-gray-900">${formatarMoeda(produto.preco_venda)}</span>
+              ${encomenda ? `<span data-selo-sinal class="block text-[10px] sm:text-xs font-medium text-blue-700 whitespace-nowrap" title="50% de sinal agora e 50% na entrega">Sinal: ${formatarMoeda(calcularSinal(produto.preco_venda))}</span>` : ''}
             </div>
             <div data-acao-maleta>${botaoMaletaCard(produto, jaNaMaleta)}</div>
           </div>
@@ -1328,6 +1296,7 @@
       }
 
       if (maleta.itens.length === 0) {
+        document.getElementById('maletaSubtitulo').textContent = '';
         maletaVazia.classList.remove('hidden');
         maletaItens.classList.add('hidden');
         maletaFormulario.classList.add('hidden');
@@ -1348,9 +1317,11 @@
           const ativo = (item.intencao === 'COMPRA' ? 'COMPRA' : 'CONDICIONAL') === intencao;
           return `<button type="button" onclick="definirIntencao(${Number(item.id)}, '${intencao}')" aria-pressed="${ativo}" class="px-2 py-1 rounded-md ${ativo ? 'bg-white shadow text-gray-900 font-semibold' : 'text-gray-500 hover:text-gray-700'}">${texto}</button>`;
         };
+        document.getElementById('maletaSubtitulo').textContent = partes;
         const ajuda = resumo.prova.length + resumo.compras.length
-          ? `<p class="text-xs text-gray-500">Escolha para cada peça: <strong>Provar na maleta</strong> (você recebe em casa, prova e devolve o que não quiser) ou <strong>Compra direta</strong>. ${escapeHtml(partes)}</p>` : '';
-        maletaItens.innerHTML = ajuda + maleta.itens.map((item, idx) => `
+          ? '<p class="text-xs text-gray-500"><strong>Provar na maleta:</strong> você recebe, prova e devolve o que não quiser.</p>' : '';
+        const titulo = '<h4 class="text-sm font-semibold text-gray-900"><span class="chrome-btn inline-flex w-5 h-5 mr-1.5 rounded-full items-center justify-center text-[10px] font-bold align-[1px]">1</span>Seus modelos</h4>';
+        maletaItens.innerHTML = titulo + ajuda + maleta.itens.map((item, idx) => `
           <div class="flex items-center gap-3 p-3 rounded-lg ${itemEhEncomenda(item) ? 'bg-blue-50 border border-blue-200' : item.intencao === 'COMPRA' ? 'bg-purple-50 border border-purple-200' : 'bg-gray-50'}">
             ${item.imagem ? `<img src="${escapeHtml(item.imagem)}" alt="${escapeHtml(item.nome)}" class="w-16 h-16 object-cover rounded" onerror="imgFallback(this)">` : '<div class="w-16 h-16 bg-gray-200 rounded flex items-center justify-center"><svg class="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg></div>'}
             <div class="flex-1 min-w-0">
@@ -1398,10 +1369,16 @@
       cepInput.value = v;
     });
 
+    // Rua, bairro, cidade e complemento aparecem depois do CEP (ou se já estiverem preenchidos)
+    function mostrarEndereco() {
+      document.getElementById('enderecoCliente').classList.remove('hidden');
+    }
+
     // Buscar CEP
     cepInput.addEventListener('blur', async () => {
       const cep = cepInput.value.replace(/\D/g, '');
       if (cep.length !== 8) return;
+      mostrarEndereco();
 
       try {
         const res = await fetch(`https://viacep.com.br/ws/${cep}/json/`);
@@ -1510,6 +1487,7 @@
     function preencherDadosCliente() {
       const campoNome = document.getElementById('nomeCliente');
       if (cliente && cliente.nome && !campoNome.value.trim()) campoNome.value = cliente.nome;
+      if (document.getElementById('ruaCliente').value.trim()) mostrarEndereco();
     }
 
     // Confere no servidor se a sessão salva ainda vale (conta existe, token não expirou)
@@ -1636,7 +1614,8 @@
       const complemento = document.getElementById('complementoCliente').value.trim();
 
       if (!nome || !telefone || !cep || !numero || !rua) {
-        mostrarToast('Preencha todos os campos obrigatórios', 'error');
+        if (cep && !rua) mostrarEndereco();
+        mostrarToast(cep && !rua ? 'Confira o CEP ou preencha a rua' : 'Preencha os campos com *', 'error');
         return;
       }
 
@@ -1694,6 +1673,11 @@
     // Atalhos do topo: o link rola até o catálogo e o filtro já vem escolhido
     document.querySelectorAll('[data-atalho-filtro]').forEach(a => a.addEventListener('click', () => aplicarFiltroStatus(a.dataset.atalhoFiltro)));
     document.getElementById('barraMaleta').addEventListener('click', abrirModalMaleta);
+    // Maleta vazia: "Ver modelos" fecha a janela e leva ao catálogo
+    document.getElementById('verModelosMaleta').addEventListener('click', () => {
+      fecharModalMaleta();
+      document.getElementById('catalogo').scrollIntoView({ behavior: 'smooth' });
+    });
     filtroFormato.addEventListener('change', renderizarCatalogo);
   </script>
 </body>

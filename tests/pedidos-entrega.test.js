@@ -348,12 +348,13 @@ describe('vitrine: intenção de cada item no carrinho', () => {
   function vitrine(itens) {
     const el = () => ({ innerHTML: '', textContent: '', classList: { add() {}, remove() {} } });
     const els = { maletaVazia: el(), maletaItens: el(), maletaFormulario: el(), maletaFooter: el(), maletaTotal: el(), maletaSinal: el() };
+    const porId = {};
     const guardado = {};
     const ctx = carregar('index.html', FUNCOES, {
-      ...els, maleta: { itens }, filtroStatus: { value: '' }, formatarMoeda, document: { getElementById: el },
+      ...els, maleta: { itens }, filtroStatus: { value: '' }, formatarMoeda, document: { getElementById: (id) => (porId[id] ||= el()) },
       salvarMaleta() { guardado.salvou = (guardado.salvou || 0) + 1; },
     });
-    return { ctx, els, guardado };
+    return { ctx, els: { ...els, porId }, guardado };
   }
   const dados = { nome: 'Ana', telefone: '11', rua: 'Rua A', numero: '1', bairro: 'Centro', cidade: 'SP' };
 
@@ -370,7 +371,7 @@ describe('vitrine: intenção de cada item no carrinho', () => {
     v.ctx.definirIntencao(2, 'COMPRA'); // encomenda não muda
     assert.deepEqual(v.ctx.maleta.itens.map(i => i.intencao), ['COMPRA', 'ENCOMENDA', undefined]);
     assert.equal(v.guardado.salvou, 1);
-    assert.match(v.els.maletaItens.innerHTML, /1 para provar · 1 compra direta · 1 encomenda\(s\)/);
+    assert.equal(v.els.porId.maletaSubtitulo.textContent, '1 para provar · 1 compra direta · 1 encomenda(s)');
 
     const r = v.ctx.resumoMaleta(v.ctx.maleta.itens);
     assert.deepEqual([r.compras.length, r.prova.length, r.encomendas.length, r.totalCompra, r.totalProva], [1, 1, 1, 100, 50]);

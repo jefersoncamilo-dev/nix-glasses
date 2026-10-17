@@ -158,10 +158,10 @@ describe('vitrine: card limpo', () => {
     assert.equal(ctx.nomeCard({ nome: 'Aviador' }), 'Aviador');
   });
 
-  it('material, formato e cor viram etiquetas, só as preenchidas', () => {
+  it('material, formato e cor viram uma linha discreta, só os preenchidos, sem o SKU', () => {
     const { ctx, cards } = vitrine([hexagonal]);
-    const etiquetas = [...cards[0].innerHTML.matchAll(/rounded-full">([^<]+)<\/span>/g)].map((m) => m[1]);
-    assert.deepEqual(etiquetas.filter((t) => ['Metal', 'Hexagonal', 'Dourado'].includes(t)), ['Metal', 'Hexagonal', 'Dourado']);
+    assert.match(cards[0].innerHTML, /data-tags-card[^>]*>Metal · Hexagonal · Dourado<\/p>/);
+    assert.doesNotMatch(cards[0].innerHTML, /HX-01/);
     assert.deepEqual([...ctx.tagsCard({ material: '', formato: 'Redondo', cor_armacao: null })], ['Redondo']);
   });
 
