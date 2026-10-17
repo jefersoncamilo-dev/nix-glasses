@@ -22,3 +22,6 @@ services:
         sync: false
       - key: JWT_SECRET
         generateValue: true
+      # Várias empresas no mesmo serviço: veja .env.example (EMPRESAS e EMPRESA_<SLUG>_*).
+      - key: EMPRESAS
+        sync: false

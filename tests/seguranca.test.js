@@ -25,6 +25,8 @@ describe('arquivos estáticos', () => {
     const proibidos = [
       '/server.js',
       '/db.js',
+      '/empresas.js',
+      '/loja.js',
       '/package.json',
       '/package-lock.json',
       '/.env',

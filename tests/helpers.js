@@ -36,8 +36,9 @@ function portaLivre() {
   });
 }
 
-// comAdmin=false sobe o servidor sem ADMIN_USER/ADMIN_PASS_HASH (admin deve ficar fechado)
-async function iniciarServidor({ comAdmin = true } = {}) {
+// comAdmin=false sobe o servidor sem ADMIN_USER/ADMIN_PASS_HASH (admin deve ficar fechado).
+// env: variáveis a mais (ex.: EMPRESAS e EMPRESA_<SLUG>_* nos testes de várias empresas).
+async function iniciarServidor({ comAdmin = true, env: envExtra = {} } = {}) {
   const port = await portaLivre();
   const env = {
     ...process.env,
@@ -47,6 +48,7 @@ async function iniciarServidor({ comAdmin = true } = {}) {
     JWT_SECRET,
     ADMIN_USER: comAdmin ? ADMIN_USER : '',
     ADMIN_PASS_HASH: comAdmin ? hashSenha(ADMIN_PASS) : '',
+    ...envExtra,
   };
   const proc = spawn(process.execPath, ['server.js'], { cwd: ROOT, env, stdio: ['ignore', 'pipe', 'pipe'] });
 
@@ -117,6 +119,8 @@ const PNG_1x1 = Buffer.from(
 );
 
 module.exports = {
+  DATABASE_URL,
+  hashSenha,
   ADMIN_USER,
   ADMIN_PASS,
   JWT_SECRET,

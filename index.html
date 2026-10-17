@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Nix Glasses - Óculos de Sol Premium</title>
+  <title data-loja="titulo">Nix Glasses - Óculos de Sol Premium</title>
   <meta name="theme-color" content="#161616">
   <link rel="icon" href="/favicon.ico" sizes="any">
   <link rel="apple-touch-icon" href="/apple-touch-icon.png">
@@ -99,11 +99,11 @@
   <header class="sticky top-0 z-50 border-b" style="background:rgba(22,22,22,0.92);border-color:var(--nix-border);backdrop-filter:blur(12px)">
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
       <div class="flex items-center justify-between h-16">
-        <a href="#" class="flex items-center gap-3" aria-label="Nix Glasses">
+        <a href="#" class="flex items-center gap-3" aria-label="Início">
           <img src="/logo.png" alt="NIX" class="h-12 w-auto" onload="document.getElementById('brandFallback').style.display='none'" onerror="this.remove()">
           <span class="flex items-baseline gap-2">
-            <span id="brandFallback" class="font-brand text-2xl font-bold tracking-wide chrome-text">NIX</span>
-            <span class="text-[11px] font-medium uppercase" style="letter-spacing:0.35em;color:var(--nix-muted)">Glasses</span>
+            <span id="brandFallback" data-loja="marca" class="font-brand text-2xl font-bold tracking-wide chrome-text">NIX</span>
+            <span data-loja="complemento" class="text-[11px] font-medium uppercase" style="letter-spacing:0.35em;color:var(--nix-muted)">Glasses</span>
           </span>
         </a>
         <nav class="hidden md:flex items-center space-x-8">
@@ -128,10 +128,10 @@
   <!-- Hero -->
   <section class="text-white py-12 sm:py-20 lg:py-28" style="background:radial-gradient(ellipse 80% 60% at 50% -10%, #3a3a3a 0%, #1c1c1c 55%, #101010 100%)">
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-      <p class="text-xs font-medium uppercase mb-4" style="letter-spacing:0.4em;color:var(--nix-muted)">Nix Glasses</p>
-      <h1 class="font-brand text-3xl sm:text-5xl lg:text-6xl font-bold tracking-wide mb-6 chrome-text">Óculos que definem seu estilo</h1>
+      <p data-loja="nome" class="text-xs font-medium uppercase mb-4" style="letter-spacing:0.4em;color:var(--nix-muted)">Nix Glasses</p>
+      <h1 data-loja="chamada" class="font-brand text-3xl sm:text-5xl lg:text-6xl font-bold tracking-wide mb-6 chrome-text">Óculos que definem seu estilo</h1>
       <div class="mx-auto mb-8 h-px w-24" style="background:linear-gradient(90deg,transparent,#c9c9c9,transparent)"></div>
-      <p class="text-lg sm:text-xl max-w-2xl mx-auto mb-8" style="color:var(--nix-muted)">Design exclusivo, qualidade premium e proteção UV400. Escolha os modelos e prove em casa.</p>
+      <p data-loja="descricao" class="text-lg sm:text-xl max-w-2xl mx-auto mb-8" style="color:var(--nix-muted)">Design exclusivo, qualidade premium e proteção UV400. Escolha os modelos e prove em casa.</p>
       <!-- Atalhos: cada um leva ao catálogo já com o filtro escolhido -->
       <div class="flex flex-col sm:flex-row items-stretch sm:items-center justify-center gap-3 max-w-md sm:max-w-none mx-auto">
         <a href="#catalogo" data-atalho-filtro="" aria-pressed="true" class="btn btn-lg btn-contorno-escuro atalho-topo">Coleção <span class="font-normal opacity-70">· todos os modelos</span></a>
@@ -212,15 +212,13 @@
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
       <div class="grid lg:grid-cols-2 gap-12 items-center">
         <div>
-          <h2 class="font-brand text-3xl font-bold text-white tracking-wide mb-4">A Nix Glasses</h2>
+          <h2 data-loja="sobre_titulo" class="font-brand text-3xl font-bold text-white tracking-wide mb-4">A Nix Glasses</h2>
           <div class="mb-4 h-px w-16" style="background:linear-gradient(90deg,#c9c9c9,transparent)"></div>
-          <p class="mb-4" style="color:var(--nix-muted)">Fundada com a paixão por design e proteção ocular, a Nix Glasses nasceu para oferecer óculos de sol que unem estilo, qualidade e tecnologia.</p>
-          <p class="mb-4" style="color:var(--nix-muted)">Todos nossos modelos possuem lentes com proteção UV400, armações em acetato italiano ou metal premium, e passam por rigoroso controle de qualidade.</p>
-          <p style="color:var(--nix-muted)">Trabalhamos com o sistema de maleta: você experimenta em casa, escolhe seus favoritos e finaliza o pedido pelo WhatsApp.</p>
+          <div data-loja-paragrafos="sobre"><p class="mb-4" style="color:var(--nix-muted)">Fundada com a paixão por design e proteção ocular, a Nix Glasses nasceu para oferecer óculos de sol que unem estilo, qualidade e tecnologia.</p><p class="mb-4" style="color:var(--nix-muted)">Todos nossos modelos possuem lentes com proteção UV400, armações em acetato italiano ou metal premium, e passam por rigoroso controle de qualidade.</p><p style="color:var(--nix-muted)">Trabalhamos com o sistema de maleta: você experimenta em casa, escolhe seus favoritos e finaliza o pedido pelo WhatsApp.</p></div>
         </div>
         <div class="relative">
           <div class="aspect-square rounded-3xl flex items-center justify-center border" style="background:linear-gradient(135deg,#333333 0%,#141414 100%);border-color:var(--nix-border)">
-            <span class="font-brand text-7xl sm:text-8xl font-bold chrome-text select-none">NIX</span>
+            <span data-loja="marca" class="font-brand text-7xl sm:text-8xl font-bold chrome-text select-none">NIX</span>
           </div>
         </div>
       </div>
@@ -242,8 +240,8 @@
   <!-- Footer -->
   <footer class="text-white py-12 border-t" style="background:#0e0e0e;border-color:var(--nix-border)">
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-      <p class="font-brand text-xl font-bold tracking-wide chrome-text mb-2">NIX</p>
-      <p class="text-sm" style="color:var(--nix-muted)">&copy; 2026 Nix Glasses. Todos os direitos reservados.</p>
+      <p data-loja="marca" class="font-brand text-xl font-bold tracking-wide chrome-text mb-2">NIX</p>
+      <p class="text-sm" style="color:var(--nix-muted)">&copy; 2026 <span data-loja="nome">Nix Glasses</span>. Todos os direitos reservados.</p>
     </div>
   </footer>
 
@@ -499,7 +497,7 @@
     // Fallback de imagem (caso o upload falhe / imagem ausente)
     function imgFallback(el) {
       el.onerror = null;
-      el.src = "data:image/svg+xml;charset=UTF-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='600' height='600'%3E%3Crect width='100%25' height='100%25' fill='%23f3f4f6'/%3E%3Ctext x='50%25' y='50%25' font-family='sans-serif' font-size='28' fill='%239ca3af' text-anchor='middle' dy='.3em'%3ENix Glasses%3C/text%3E%3C/svg%3E";
+      el.src = "data:image/svg+xml;charset=UTF-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='600' height='600'%3E%3Crect width='100%25' height='100%25' fill='%23f3f4f6'/%3E%3Ctext x='50%25' y='50%25' font-family='sans-serif' font-size='28' fill='%239ca3af' text-anchor='middle' dy='.3em'%3ESem foto%3C/text%3E%3C/svg%3E";
     }
     window.imgFallback = imgFallback;
 
@@ -855,7 +853,7 @@
             </dl>` : ''}
             ${encomenda ? `<p class="text-sm text-blue-700 bg-blue-50 rounded-lg px-3 py-2 mb-4">50% sinal + 50% na entrega (sinal de ${formatarMoeda(calcularSinal(produto.preco_venda))})</p>` : ''}
             <div class="mt-auto">
-              ${fotos.length ? `<button type="button" onclick="abrirProvador(${id})" class="btn btn-secundario w-full mb-2">Provar virtualmente</button>` : ''}
+              ${fotos.length && globalThis.LOJA?.oculos !== false ? `<button type="button" onclick="abrirProvador(${id})" class="btn btn-secundario w-full mb-2">Provar virtualmente</button>` : ''}
               <button type="button" onclick="toggleMaleta(${id}); renderizarDetalhes()" aria-pressed="${jaNaMaleta}" class="btn btn-maleta w-full ${jaNaMaleta ? 'btn-na-maleta' : encomenda ? 'btn-encomenda' : 'btn-primario'}">${jaNaMaleta ? '✓ Na Maleta · Remover' : encomenda ? 'Encomendar (adicionar à Maleta)' : 'Adicionar à Maleta'}</button>
             </div>
           </div>
@@ -1216,7 +1214,7 @@
       const produto = produtos.find(p => p.id === provador.produtoId);
       c.toBlob((blob) => {
         if (!blob || !provador.aberto) return;
-        provador.fotos.unshift({ url: URL.createObjectURL(blob), nome: produto ? produto.nome : 'Nix Glasses' });
+        provador.fotos.unshift({ url: URL.createObjectURL(blob), nome: produto ? produto.nome : (globalThis.LOJA?.nome || 'Nix Glasses') });
         provador.fotos.splice(MAX_FOTOS_PROVADOR).forEach(f => URL.revokeObjectURL(f.url));
         renderizarFotosProvador();
       }, 'image/jpeg', 0.9);
@@ -1465,7 +1463,7 @@
       rotulo.title = cliente ? cliente.email : '';
       document.getElementById('clienteConectado').classList.toggle('hidden', !cliente);
       document.getElementById('formCliente').classList.toggle('hidden', !!cliente);
-      document.getElementById('clienteConectadoNome').textContent = cliente ? (cliente.nome || 'Cliente Nix') : '';
+      document.getElementById('clienteConectadoNome').textContent = cliente ? (cliente.nome || 'Cliente') : '';
       document.getElementById('clienteConectadoEmail').textContent = cliente ? cliente.email : '';
 
       const cadastro = modoCliente === 'cadastro';
@@ -1583,7 +1581,7 @@
         const data = await res.json();
         whatsappNumero = sanitizeWhatsapp(data.whatsapp || data.valor || data.number || '');
         if (whatsappNumero) {
-          whatsappLink.href = `https://wa.me/${whatsappNumero}?text=${encodeURIComponent('Olá! Gostaria de saber mais sobre a Nix Glasses.')}`;
+          whatsappLink.href = `https://wa.me/${whatsappNumero}?text=${encodeURIComponent(`Olá! Gostaria de saber mais sobre a ${(globalThis.LOJA?.nome || 'Nix Glasses')}.`)}`;
         }
       } catch (err) {
         console.error('Erro ao carregar WhatsApp:', err);
@@ -1592,7 +1590,7 @@
 
     // Montar mensagem WhatsApp
     function montarTextoWhatsapp(maleta, dados) {
-      let msg = `*Nix Glasses - Novo Pedido*\n\n`;
+      let msg = `*${(globalThis.LOJA?.nome || 'Nix Glasses')} - Novo Pedido*\n\n`;
       msg += `*Cliente:* ${dados.nome}\n`;
       msg += `*Telefone:* ${dados.telefone}\n`;
       if (dados.email) msg += `*E-mail:* ${dados.email}\n`;

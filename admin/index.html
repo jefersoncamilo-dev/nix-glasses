@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Nix Glasses - Admin</title>
+  <title data-loja="nome" data-loja-sufixo=" - Admin">Nix Glasses - Admin</title>
   <link rel="icon" href="/favicon.ico" sizes="any">
   <link rel="apple-touch-icon" href="/apple-touch-icon.png">
   <script src="https://cdn.tailwindcss.com"></script>
@@ -32,7 +32,7 @@
   <aside id="sidebar" class="sidebar fixed inset-y-0 left-0 z-50 w-64 max-w-[85vw] bg-white border-r border-gray-200 flex flex-col">
     <div class="flex items-center justify-between h-16 px-6 border-b border-gray-200">
       <h1 class="flex items-center gap-2 text-xl font-bold text-gray-900">
-        <span class="inline-flex items-center rounded-lg px-2 py-1" style="background:#161616"><img src="/logo.png" alt="NIX" class="h-7 w-auto"></span>
+        <span class="inline-flex items-center rounded-lg px-2 py-1" style="background:#161616"><img src="/logo.png" alt="NIX" class="h-7 w-auto" onerror="this.parentElement.remove()"></span>
         Admin
       </h1>
       <button id="closeSidebar" class="lg:hidden p-2 text-gray-500 hover:text-gray-700"><svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg></button>
@@ -96,7 +96,7 @@
         <button id="openSidebar" class="lg:hidden p-2 -ml-2 text-gray-500 hover:text-gray-700" aria-label="Abrir menu"><svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/></svg></button>
         <h2 id="pageTitle" class="text-base sm:text-xl font-semibold text-gray-900 truncate">Produtos</h2>
         <div class="flex items-center space-x-4">
-          <span class="text-sm text-gray-500 hidden sm:block">Admin Nix Glasses</span>
+          <span class="text-sm text-gray-500 hidden sm:block">Admin <span data-loja="nome">Nix Glasses</span></span>
           <button id="btnSair" class="text-sm text-gray-500 hover:text-red-600 font-medium">Sair</button>
         </div>
       </div>
@@ -504,6 +504,67 @@
           </div>
           <button id="btnSalvarWhatsapp" class="bg-orange-500 hover:bg-orange-600 text-white px-6 py-2 rounded-lg font-medium transition-colors">Salvar</button>
         </div>
+
+        <!-- Dados da loja: nome, textos da vitrine, logo e recursos -->
+        <div class="bg-white rounded-xl border border-gray-200 p-6 max-w-xl mt-6">
+          <h4 class="text-base font-semibold text-gray-900 mb-1">Dados da loja</h4>
+          <p class="text-sm text-gray-500 mb-4">Aparecem na vitrine e nas mensagens do WhatsApp. Campo vazio volta ao texto padrão.</p>
+          <div class="mb-6">
+            <span class="block text-sm font-medium text-gray-700 mb-2">Logo</span>
+            <div class="flex items-center gap-3 flex-wrap">
+              <span class="inline-flex items-center justify-center rounded-lg px-3 py-2 min-h-[3.5rem] min-w-[5rem]" style="background:#161616">
+                <img id="lojaLogoPreview" alt="" class="h-10 w-auto hidden">
+                <span id="lojaLogoVazia" class="text-xs text-gray-400">Sem logo</span>
+              </span>
+              <label class="cursor-pointer bg-gray-100 hover:bg-gray-200 text-gray-800 px-4 py-2 rounded-lg text-sm font-medium">
+                Trocar logo
+                <input type="file" id="lojaLogoArquivo" accept="image/jpeg,image/png,image/webp" class="hidden">
+              </label>
+              <button type="button" id="btnRemoverLogo" class="hidden text-sm text-red-600 hover:underline">Remover</button>
+            </div>
+            <p class="text-xs text-gray-500 mt-2">PNG com fundo transparente fica melhor (o topo da vitrine é escuro).</p>
+          </div>
+          <div class="space-y-4">
+            <div>
+              <label for="loja_nome" class="block text-sm font-medium text-gray-700 mb-1">Nome da loja</label>
+              <input type="text" id="loja_nome" data-campo-loja="nome" maxlength="100" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500">
+            </div>
+            <div>
+              <label for="loja_marca" class="block text-sm font-medium text-gray-700 mb-1">Marca (texto grande no topo e no rodapé)</label>
+              <input type="text" id="loja_marca" data-campo-loja="marca" maxlength="30" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500">
+            </div>
+            <div>
+              <label for="loja_complemento" class="block text-sm font-medium text-gray-700 mb-1">Complemento da marca (texto pequeno ao lado)</label>
+              <input type="text" id="loja_complemento" data-campo-loja="complemento" maxlength="40" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500">
+            </div>
+            <div>
+              <label for="loja_titulo" class="block text-sm font-medium text-gray-700 mb-1">Título da aba do navegador</label>
+              <input type="text" id="loja_titulo" data-campo-loja="titulo" maxlength="120" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500">
+            </div>
+            <div>
+              <label for="loja_chamada" class="block text-sm font-medium text-gray-700 mb-1">Frase principal da vitrine</label>
+              <input type="text" id="loja_chamada" data-campo-loja="chamada" maxlength="120" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500">
+            </div>
+            <div>
+              <label for="loja_descricao" class="block text-sm font-medium text-gray-700 mb-1">Texto abaixo da frase principal</label>
+              <input type="text" id="loja_descricao" data-campo-loja="descricao" maxlength="300" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500">
+            </div>
+            <div>
+              <label for="loja_sobre_titulo" class="block text-sm font-medium text-gray-700 mb-1">Título da seção "Sobre"</label>
+              <input type="text" id="loja_sobre_titulo" data-campo-loja="sobre_titulo" maxlength="80" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500">
+            </div>
+            <div>
+              <label for="loja_sobre" class="block text-sm font-medium text-gray-700 mb-1">Texto da seção "Sobre"</label>
+              <textarea id="loja_sobre" data-campo-loja="sobre" rows="6" maxlength="2000" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500"></textarea>
+              <p class="text-xs text-gray-500 mt-1">Deixe uma linha em branco entre os parágrafos.</p>
+            </div>
+            <label class="flex items-start gap-3">
+              <input type="checkbox" id="loja_oculos" class="mt-1 h-4 w-4 accent-orange-500">
+              <span class="text-sm text-gray-700"><strong>Loja de óculos</strong><br><span class="text-gray-500">Mostra o provador virtual na vitrine e fala em "óculos" nas mensagens da maleta.</span></span>
+            </label>
+          </div>
+          <button id="btnSalvarLoja" class="mt-6 bg-orange-500 hover:bg-orange-600 text-white px-6 py-2 rounded-lg font-medium transition-colors">Salvar dados da loja</button>
+        </div>
       </div>
     </div>
   </main>
@@ -852,7 +913,7 @@
     // Fallback de imagem (caso o upload falhe / imagem ausente)
     function imgFallback(el) {
       el.onerror = null;
-      el.src = "data:image/svg+xml;charset=UTF-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='600' height='600'%3E%3Crect width='100%25' height='100%25' fill='%23f3f4f6'/%3E%3Ctext x='50%25' y='50%25' font-family='sans-serif' font-size='28' fill='%239ca3af' text-anchor='middle' dy='.3em'%3ENix Glasses%3C/text%3E%3C/svg%3E";
+      el.src = "data:image/svg+xml;charset=UTF-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='600' height='600'%3E%3Crect width='100%25' height='100%25' fill='%23f3f4f6'/%3E%3Ctext x='50%25' y='50%25' font-family='sans-serif' font-size='28' fill='%239ca3af' text-anchor='middle' dy='.3em'%3ESem foto%3C/text%3E%3C/svg%3E";
     }
     window.imgFallback = imgFallback;
 
@@ -925,7 +986,7 @@
         if (target === 'encomendas') carregarEncomendas();
         if (target === 'acessorios') carregarAcessorios();
         if (target === 'metricas') { carregarMetricas(); carregarResumoFornecedores(); carregarRelatorioMaletas(); }
-        if (target === 'config') carregarWhatsApp();
+        if (target === 'config') { carregarWhatsApp(); carregarLoja(); }
         sidebar.classList.remove('open');
         sidebarOverlay.classList.add('hidden');
       });
@@ -2099,11 +2160,13 @@
       const soma = lista => lista.reduce((t, p) => t + Math.round(Number(p.preco_venda) * 100), 0) / 100;
       const vendidos = condicionais.filter(p => comprados.includes(p.id));
       const voltaram = condicionais.filter(p => devolvidos.includes(p.id));
+      const loja = globalThis.LOJA || { nome: 'Nix Glasses', oculos: true };
+      const emoji = loja.oculos ? ' 🕶️' : '';
       if (!vendidos.length && !voltaram.length) {
         return [
-          '*Nix Glasses: sua maleta* 🕶️',
+          `*${loja.nome}: sua maleta*${emoji}`,
           '',
-          'Óculos enviados para você provar em casa:',
+          `${loja.oculos ? 'Óculos enviados' : 'Peças enviadas'} para você provar em casa:`,
           '',
           ...condicionais.map(linha),
           '',
@@ -2113,7 +2176,7 @@
         ].join('\n');
       }
       const comigo = condicionais.filter(p => !comprados.includes(p.id) && !devolvidos.includes(p.id));
-      const partes = ['*Nix Glasses: acerto da maleta* 🕶️'];
+      const partes = [`*${loja.nome}: acerto da maleta*${emoji}`];
       if (vendidos.length) {
         partes.push('', `✅ *Ficou com (${vendidos.length}):*`, ...vendidos.map(linha), '', `*Total a pagar: ${moeda(soma(vendidos))}*`);
       } else {
@@ -2918,7 +2981,7 @@
     // Mensagem para a cliente quando a encomenda chegou
     function textoAvisoEncomenda(e) {
       const falta = Math.max(Math.round(((Number(e.valor) || 0) - (Number(e.sinal_pago) || 0)) * 100) / 100, 0);
-      let msg = `Olá${e.nome_cliente ? ', ' + String(e.nome_cliente).split(' ')[0] : ''}! Sua encomenda chegou na Nix Glasses:\n`;
+      let msg = `Olá${e.nome_cliente ? ', ' + String(e.nome_cliente).split(' ')[0] : ''}! Sua encomenda chegou na ${globalThis.LOJA?.nome || 'Nix Glasses'}:\n`;
       msg += `*${e.modelo}*${e.especificacoes ? `\n${e.especificacoes}` : ''}\n`;
       if (falta > 0) msg += `\nValor restante: ${formatarMoeda(falta)}\n`;
       msg += '\nVamos combinar a entrega?';
@@ -3316,6 +3379,75 @@
         });
         if (!res.ok) throw new Error('Erro ao salvar');
         mostrarToast('WhatsApp salvo!');
+      } catch (err) {
+        mostrarToast(err.message, 'error');
+      }
+    });
+
+    // Dados da loja
+    function mostrarLogoLoja(url) {
+      const img = document.getElementById('lojaLogoPreview');
+      img.classList.toggle('hidden', !url);
+      if (url) img.src = url; else img.removeAttribute('src');
+      document.getElementById('lojaLogoVazia').classList.toggle('hidden', !!url);
+      document.getElementById('btnRemoverLogo').classList.toggle('hidden', !url);
+    }
+
+    function preencherLoja(loja) {
+      document.querySelectorAll('[data-campo-loja]').forEach(el => { el.value = loja[el.dataset.campoLoja] || ''; });
+      document.getElementById('loja_oculos').checked = !!loja.oculos;
+      mostrarLogoLoja(loja.logo);
+    }
+
+    async function respostaLoja(res) {
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || 'Erro ao salvar');
+      preencherLoja(data);
+      return data;
+    }
+
+    async function carregarLoja() {
+      try {
+        const res = await fetchAdmin('/api/admin/loja');
+        if (res.ok) preencherLoja(await res.json());
+      } catch (err) {
+        console.error(err);
+      }
+    }
+
+    document.getElementById('btnSalvarLoja').addEventListener('click', async () => {
+      const corpo = { oculos: document.getElementById('loja_oculos').checked };
+      document.querySelectorAll('[data-campo-loja]').forEach(el => { corpo[el.dataset.campoLoja] = el.value; });
+      try {
+        await respostaLoja(await fetchAdmin('/api/admin/loja', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(corpo)
+        }));
+        mostrarToast('Dados da loja salvos!');
+      } catch (err) {
+        mostrarToast(err.message, 'error');
+      }
+    });
+
+    document.getElementById('lojaLogoArquivo').addEventListener('change', async (e) => {
+      const arquivo = e.target.files[0];
+      e.target.value = '';
+      if (!arquivo) return;
+      const fd = new FormData();
+      fd.append('foto1', arquivo);
+      try {
+        await respostaLoja(await fetchAdmin('/api/admin/loja/logo', { method: 'POST', body: fd }));
+        mostrarToast('Logo salva!');
+      } catch (err) {
+        mostrarToast(err.message, 'error');
+      }
+    });
+
+    document.getElementById('btnRemoverLogo').addEventListener('click', async () => {
+      try {
+        await respostaLoja(await fetchAdmin('/api/admin/loja/logo', { method: 'DELETE' }));
+        mostrarToast('Logo removida');
       } catch (err) {
         mostrarToast(err.message, 'error');
       }

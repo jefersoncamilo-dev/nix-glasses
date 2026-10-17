@@ -4,28 +4,31 @@ require('dotenv').config();
 // Neon DB exige SSL. O driver `pg` não suporta `channel_binding=require` na
 // connection string (gera aviso no console), então removemos esse parâmetro
 // aqui e ativamos SSL via opção `ssl`, mantendo `sslmode=require` no .env.
-function buildConnectionString() {
-  let cs = process.env.DATABASE_URL || '';
+function buildConnectionString(cs) {
+  cs = cs || '';
   // Remove channel_binding=require / prefer / disable para evitar warning do pg
   cs = cs.replace(/[?&]channel_binding=[^&]*/g, (m) => (m.startsWith('?') ? '?' : ''));
   cs = cs.replace(/\?&/, '?').replace(/\?$/, '').replace(/&&+/g, '&');
   return cs;
 }
 
-function shouldUseSSL() {
-  const cs = process.env.DATABASE_URL || '';
+function shouldUseSSL(cs) {
+  cs = cs || '';
   if (process.env.NODE_ENV === 'production') return true;
   if (cs.includes('neon.tech')) return true;
   if (cs.includes('sslmode=require')) return true;
   return false;
 }
 
-const pool = new Pool({
-  connectionString: buildConnectionString(),
-  ssl: shouldUseSSL() ? { rejectUnauthorized: false } : false,
-});
+// Um pool por banco: cada empresa tem o seu (ver empresas.js).
+function criarPool(databaseUrl) {
+  return new Pool({
+    connectionString: buildConnectionString(databaseUrl),
+    ssl: shouldUseSSL(databaseUrl) ? { rejectUnauthorized: false } : false,
+  });
+}
 
-async function initTables() {
+async function initTables(pool) {
   const client = await pool.connect();
   try {
     await client.query(`
@@ -295,4 +298,4 @@ async function initTables() {
   }
 }
 
-module.exports = { pool, initTables };
+module.exports = { criarPool, initTables };
