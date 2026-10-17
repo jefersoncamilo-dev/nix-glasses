@@ -12,8 +12,8 @@
 //   EMPRESA_PASUCPORTAS_NOME           nome inicial da loja (o admin pode trocar depois)
 //   EMPRESA_PASUCPORTAS_DOMINIOS       endereços, separados por vírgula. Sem ele, vale
 //                                      qualquer endereço que comece com "<slug>."
-// A primeira empresa da lista é a padrão: atende o endereço do Render
-// (nix-glasses.onrender.com) e, sem as variáveis EMPRESA_<SLUG>_*,
+// A primeira empresa da lista é a padrão: atende o endereço do próprio serviço no
+// Render (RENDER_EXTERNAL_HOSTNAME, ex.: nix-glasses.onrender.com) e, sem as variáveis EMPRESA_<SLUG>_*,
 // usa DATABASE_URL, ADMIN_USER e ADMIN_PASS_HASH, como antes.
 
 const SLUG_VALIDO = /^[a-z0-9][a-z0-9-]{0,39}$/;
@@ -24,6 +24,20 @@ function prefixoEnv(slug) {
 
 function normalizarHost(host) {
   return String(host || '').trim().toLowerCase().replace(/:\d+$/, '').replace(/\.$/, '');
+}
+
+// Identidade do banco numa connection string: servidor, porta e nome do banco. Usuário,
+// senha e parâmetros (?sslmode=...) não mudam o banco; o endpoint "-pooler" do Neon é o
+// mesmo banco do endpoint direto. Devolve a própria string se ela não for uma URL.
+function identidadeBanco(databaseUrl) {
+  try {
+    const u = new URL(databaseUrl);
+    const host = u.hostname.toLowerCase().replace(/^([^.]+)-pooler\./, '$1.');
+    const local = host === 'localhost' || host === '127.0.0.1' || host === '::1' || host === '[::1]' ? 'localhost' : host;
+    return `${local}:${u.port || '5432'}/${decodeURIComponent(u.pathname.slice(1)) || 'postgres'}`;
+  } catch {
+    return String(databaseUrl);
+  }
 }
 
 // Lê as empresas das variáveis de ambiente. Erros de configuração param o boot,
@@ -46,22 +60,26 @@ function lerEmpresas(env) {
       padrao,
       nome: String(env[p + 'NOME'] || '').trim(),
       dominios,
+      // O Render informa o endereço .onrender.com do serviço; só ele (não qualquer
+      // *.onrender.com) vai para a empresa padrão.
+      hostRender: padrao ? normalizarHost(env.RENDER_EXTERNAL_HOSTNAME) : '',
       databaseUrl,
       adminUser: v('ADMIN_USER', 'ADMIN_USER'),
       adminPassHash: v('ADMIN_PASS_HASH', 'ADMIN_PASS_HASH'),
     });
   }
-  const bancos = new Set();
+  const bancos = new Map();
   for (const e of empresas) {
-    if (bancos.has(e.databaseUrl)) throw new Error(`A empresa "${e.slug}" usa o mesmo banco de outra empresa: cada uma precisa do seu`);
-    bancos.add(e.databaseUrl);
+    const id = identidadeBanco(e.databaseUrl);
+    if (bancos.has(id)) throw new Error(`A empresa "${e.slug}" usa o mesmo banco da empresa "${bancos.get(id)}": cada uma precisa do seu`);
+    bancos.set(id, e.slug);
   }
   return empresas;
 }
 
-// Endereços que sempre vão para a empresa padrão: o do Render e os internos (testes, health check).
+// Endereços internos (testes, acesso direto por IP) vão para a empresa padrão.
 function hostInterno(h) {
-  return h === '' || h === 'localhost' || h.endsWith('.onrender.com') || /^[\d.]+$/.test(h) || h.includes(':');
+  return h === '' || h === 'localhost' || /^[\d.]+$/.test(h) || h.includes(':');
 }
 
 // Empresa dona do endereço: domínio listado, senão "<slug>." no começo. Com uma empresa só,
@@ -73,7 +91,8 @@ function empresaDoHost(empresas, host) {
   const dona = empresas.find((e) => e.dominios.includes(h))
     || empresas.find((e) => !e.dominios.length && h.startsWith(e.slug + '.'));
   if (dona) return dona;
-  return empresas.length === 1 || hostInterno(h) ? empresas[0] : null;
+  const padrao = empresas[0];
+  return empresas.length === 1 || hostInterno(h) || (padrao.hostRender && h === padrao.hostRender) ? padrao : null;
 }
 
-module.exports = { lerEmpresas, empresaDoHost, normalizarHost };
+module.exports = { lerEmpresas, empresaDoHost, normalizarHost, identidadeBanco };

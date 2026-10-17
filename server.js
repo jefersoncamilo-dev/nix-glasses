@@ -29,6 +29,8 @@ function escolherEmpresa(req, res, next) {
   req.db = req.empresa.pool;
   next();
 }
+// Health check do Render: responde antes de escolher a empresa, então não depende do endereço.
+app.get('/saude', (req, res) => res.type('text').send('ok'));
 app.use(escolherEmpresa);
 
 // Dados da loja (nome, textos, logo, recursos) por empresa, guardados em memória
@@ -777,12 +779,27 @@ function calcularFechamento(itens, extras, desconto) {
   };
 }
 
+// Cada banco guarda de qual empresa ele é. Se duas empresas apontarem para o mesmo banco
+// (mesmo com connection strings diferentes), a segunda encontra a marca da primeira e o
+// boot para, em vez de misturar os dados.
+async function conferirDonoDoBanco(empresa) {
+  await empresa.pool.query(
+    `INSERT INTO configuracoes (chave, valor) VALUES ('empresa_dona', $1) ON CONFLICT (chave) DO NOTHING`,
+    [empresa.slug]
+  );
+  const { rows } = await empresa.pool.query(`SELECT valor FROM configuracoes WHERE chave = 'empresa_dona'`);
+  if (rows[0].valor !== empresa.slug) {
+    throw new Error(`O banco da empresa "${empresa.slug}" já é da empresa "${rows[0].valor}": cada empresa precisa do seu banco`);
+  }
+}
+
 async function startServer() {
   for (const empresa of EMPRESAS) {
     if (!isAdminAuthEnabled(empresa)) {
       console.warn(`[auth] Empresa "${empresa.slug}": login do admin não definido, rotas admin ficarão bloqueadas (503).`);
     }
     await initTables(empresa.pool);
+    await conferirDonoDoBanco(empresa);
   }
   console.log(`Empresas: ${EMPRESAS.map((e) => e.slug).join(', ')}`);
 
@@ -2352,6 +2369,9 @@ async function startServer() {
   });
 }
 
-startServer().catch(console.error);
+startServer().catch((err) => {
+  console.error(err);
+  process.exit(1);
+});
 
 module.exports = app;

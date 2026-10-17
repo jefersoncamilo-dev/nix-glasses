@@ -7,7 +7,7 @@ const http = require('node:http');
 const path = require('node:path');
 const { Pool } = require('pg');
 const h = require('./helpers');
-const { lerEmpresas, empresaDoHost } = require('../empresas');
+const { lerEmpresas, empresaDoHost, identidadeBanco } = require('../empresas');
 const { PADRAO_NIX, lojaPadrao, limparTextoLoja, montarLoja, renderizarPagina } = require('../loja');
 
 after(h.fecharBanco);
@@ -47,6 +47,21 @@ describe('lerEmpresas', () => {
     assert.throws(() => lerEmpresas({ EMPRESAS: 'nix,outra', DATABASE_URL: 'pg://a' }), /EMPRESA_OUTRA_DATABASE_URL/);
     assert.throws(() => lerEmpresas({ EMPRESAS: 'nix,outra', DATABASE_URL: 'pg://a', EMPRESA_OUTRA_DATABASE_URL: 'pg://a' }), /mesmo banco/);
   });
+
+  it('acha o mesmo banco escrito de jeitos diferentes', () => {
+    const neon = 'postgresql://u:s@ep-abc-123.us-east-2.aws.neon.tech/neondb?sslmode=require';
+    const mesmos = [
+      'postgresql://outro:x@EP-ABC-123.us-east-2.aws.neon.tech:5432/neondb',
+      'postgresql://u:s@ep-abc-123-pooler.us-east-2.aws.neon.tech/neondb?sslmode=require&channel_binding=require',
+    ];
+    for (const outra of mesmos) {
+      assert.equal(identidadeBanco(outra), identidadeBanco(neon), outra);
+      assert.throws(() => lerEmpresas({ EMPRESAS: 'nix,outra', DATABASE_URL: neon, EMPRESA_OUTRA_DATABASE_URL: outra }), /mesmo banco da empresa "nix"/);
+    }
+    assert.equal(identidadeBanco('postgres://a@127.0.0.1/x'), identidadeBanco('postgres://b@localhost:5432/x'));
+    assert.notEqual(identidadeBanco(neon), identidadeBanco(neon.replace('/neondb', '/pasuc')));
+    assert.notEqual(identidadeBanco(neon), identidadeBanco(neon.replace('ep-abc-123', 'ep-xyz-999')));
+  });
 });
 
 describe('empresaDoHost', () => {
@@ -56,6 +71,7 @@ describe('empresaDoHost', () => {
     EMPRESA_PASUCPORTAS_DATABASE_URL: 'pg://2',
     EMPRESA_LOJA_DATABASE_URL: 'pg://3',
     EMPRESA_LOJA_DOMINIOS: 'minhaloja.com.br',
+    RENDER_EXTERNAL_HOSTNAME: 'nix-glasses.onrender.com',
   });
   const slug = (host) => empresaDoHost(empresas, host).slug;
 
@@ -69,8 +85,9 @@ describe('empresaDoHost', () => {
     assert.equal(empresaDoHost(empresas, 'loja.temcatalogo.com.br'), null);
   });
 
-  it('o endereço do Render e os internos ficam com a empresa padrão', () => {
+  it('o endereço do serviço no Render e os internos ficam com a empresa padrão', () => {
     assert.equal(slug('nix-glasses.onrender.com'), 'nix');
+    assert.equal(slug('NIX-GLASSES.onrender.com.'), 'nix');
     assert.equal(slug('localhost'), 'nix');
     assert.equal(slug('10.0.0.5:10000'), 'nix');
     assert.equal(slug(''), 'nix');
@@ -79,6 +96,7 @@ describe('empresaDoHost', () => {
   it('com várias empresas, endereço de ninguém não cai na loja padrão', () => {
     assert.equal(empresaDoHost(empresas, 'pasucportasfalso.com'), null);
     assert.equal(empresaDoHost(empresas, 'digitado-errado.temcatalogo.com.br'), null);
+    assert.equal(empresaDoHost(empresas, 'outra-loja.onrender.com'), null, 'só o .onrender.com deste serviço');
   });
 
   it('com uma empresa só, qualquer endereço é dela (como antes)', () => {
@@ -211,6 +229,7 @@ describe('duas empresas no mesmo servidor', () => {
     srv = await h.iniciarServidor({
       env: {
         EMPRESAS: 'nix,pasucportas',
+        RENDER_EXTERNAL_HOSTNAME: NIX,
         EMPRESA_PASUCPORTAS_DATABASE_URL: url2.href,
         EMPRESA_PASUCPORTAS_NOME: 'Pasuc Portas',
         EMPRESA_PASUCPORTAS_ADMIN_USER: PASUC_USER,
@@ -268,6 +287,17 @@ describe('duas empresas no mesmo servidor', () => {
     assert.equal((await pedir(srv, NIX, 'POST', '/api/clientes/login', { json: { email: 'bia@ex.com', senha: 'senha-boa-123' } })).status, 401);
     assert.equal((await pedir(srv, NIX, 'GET', '/api/clientes/me', { token: cadastro.body.token })).status, 401);
     assert.equal((await pedir(srv, PASUC, 'GET', '/api/clientes/me', { token: cadastro.body.token })).status, 200);
+  });
+
+  it('o health check responde em qualquer endereço', async () => {
+    const res = await pedir(srv, 'errado.temcatalogo.com.br', 'GET', '/saude');
+    assert.equal(res.status, 200);
+    assert.equal(res.body, 'ok');
+  });
+
+  it('o banco guarda de qual empresa ele é', async () => {
+    assert.equal((await pool2.query(`SELECT valor FROM configuracoes WHERE chave = 'empresa_dona'`)).rows[0].valor, 'pasucportas');
+    assert.equal((await h.pool.query(`SELECT valor FROM configuracoes WHERE chave = 'empresa_dona'`)).rows[0].valor, 'nix');
   });
 
   it('endereço que não é de nenhuma empresa responde 404, sem dados de ninguém', async () => {
@@ -333,5 +363,22 @@ describe('duas empresas no mesmo servidor', () => {
     const limpo = await pedir(srv, PASUC, 'PUT', '/api/admin/loja', { token: tokenPasuc, json: { chamada: '' } });
     assert.equal(limpo.body.chamada, 'Escolha seus favoritos');
     assert.equal((await pedir(srv, NIX, 'GET', '/api/admin/loja', { token: tokenNix })).body.nome, 'Nix Glasses');
+  });
+});
+
+describe('mesmo banco com connection strings diferentes', () => {
+  it('o servidor não sobe quando o banco já é de outra empresa', async () => {
+    // Mesmo banco dos testes, escrito com outro host (127.0.0.1 em vez de localhost, ou o
+    // contrário) e com um parâmetro a mais: a URL não denuncia, a marca no banco sim.
+    const outra = new URL(h.DATABASE_URL);
+    outra.hostname = outra.hostname === 'localhost' ? '127.0.0.1' : 'localhost';
+    outra.searchParams.set('application_name', 'outra');
+    await h.pool.query(`INSERT INTO configuracoes (chave, valor) VALUES ('empresa_dona', 'nix') ON CONFLICT DO NOTHING`);
+    await assert.rejects(
+      h.iniciarServidor({
+        env: { EMPRESAS: 'outra', DATABASE_URL: '', EMPRESA_OUTRA_DATABASE_URL: outra.href },
+      }),
+      /já é da empresa "nix"/
+    );
   });
 });
