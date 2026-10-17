@@ -222,6 +222,11 @@
           <ul id="loteIgnoradosLista" class="divide-y divide-amber-100"></ul>
         </div>
 
+        <div id="loteRepostos" class="hidden mt-6 bg-white rounded-xl border border-blue-200 p-4">
+          <p class="font-medium text-blue-700 mb-2">Produtos que já existiam: a quantidade entrou no estoque como reposição</p>
+          <ul id="loteRepostosLista" class="divide-y divide-gray-100"></ul>
+        </div>
+
         <div id="loteCriados" class="hidden mt-6 bg-white rounded-xl border border-green-200 p-4">
           <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-3">
             <p class="font-medium text-green-700" id="loteCriadosTitulo"></p>
@@ -695,12 +700,9 @@
             </div>
           </fieldset>
           <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">Status *</label>
-            <select id="status" name="status" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500" required>
-              <option value="DISPONIVEL">Disponível</option>
-              <option value="CONDICIONAL">Condicional</option>
-              <option value="ESGOTADO">Esgotado</option>
-            </select>
+            <label for="estoque" class="block text-sm font-medium text-gray-700 mb-1">Estoque (peças na loja) *</label>
+            <input type="number" id="estoque" name="estoque" min="0" step="1" value="1" required class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500">
+            <p id="estoqueMaleta" class="text-xs text-gray-500 mt-1">O status sai do estoque: com peça na loja fica Disponível; zerado, Esgotado.</p>
           </div>
           <div>
             <label class="block text-sm font-medium text-gray-700 mb-1">Disponibilidade *</label>
@@ -750,9 +752,11 @@
             <label for="reposicaoData" class="block text-sm font-medium text-gray-700 mb-1">Data</label>
             <input type="date" id="reposicaoData" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500">
           </div>
-          <label id="reposicaoReativarBox" class="col-span-2 sm:col-span-3 flex items-center gap-2 text-sm text-gray-700">
-            <input type="checkbox" id="reposicaoReativar" class="w-4 h-4 text-orange-500 border-gray-300 rounded"> Produto está esgotado: voltar para Disponível
-          </label>
+          <div class="col-span-2 sm:col-span-3">
+            <label for="reposicaoPedido" class="block text-sm font-medium text-gray-700 mb-1">Nº do pedido no fornecedor</label>
+            <input type="text" id="reposicaoPedido" maxlength="60" placeholder="Ex.: 14563" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500">
+          </div>
+          <p id="reposicaoEstoqueInfo" class="col-span-2 sm:col-span-3 text-sm text-gray-700"></p>
           <div class="col-span-2 sm:col-span-3 flex justify-end">
             <button type="submit" class="bg-orange-500 hover:bg-orange-600 text-white px-5 py-2 rounded-lg font-medium transition-colors">Registrar compra</button>
           </div>
@@ -1053,6 +1057,10 @@
       { campo: 'tipo', titulo: 'Tipo', largura: 'w-36' },
       { campo: 'nome_curto', titulo: 'Nome curto', largura: 'w-40' },
       { campo: 'genero', titulo: 'Gênero', largura: 'w-32', opcoes: [['', '—'], ['MASCULINO', 'Masculino'], ['FEMININO', 'Feminino'], ['UNISSEX', 'Unissex']] },
+      // Compra: quantidade é o estoque inicial; em produto já cadastrado, soma como reposição
+      { campo: 'quantidade', titulo: 'Quantidade', largura: 'w-20' },
+      { campo: 'pedido_fornecedor', titulo: 'Pedido fornecedor', largura: 'w-28' },
+      { campo: 'data_compra', titulo: 'Data da compra', largura: 'w-28' },
     ];
     const CAMPOS_MEDIDA = ['diametro_cm', 'ponte_cm', 'largura_total_cm'];
     const MAX_LOTE = 100;
@@ -1061,7 +1069,7 @@
     const tabelaLote = document.getElementById('tabelaLote');
 
     function linhaLoteVazia() {
-      return { nome: '', codigo_sku: '', fornecedor: '', codigo_fornecedor: '', link_fornecedor: '', preco_custo: '', preco_venda: '', disponibilidade: 'PRONTA_ENTREGA', status: 'DISPONIVEL', formato: '', estilo: '', cor_armacao: '', diametro_cm: '', ponte_cm: '', largura_total_cm: '', material: '', tipo: '', nome_curto: '', genero: '' };
+      return { nome: '', codigo_sku: '', fornecedor: '', codigo_fornecedor: '', link_fornecedor: '', preco_custo: '', preco_venda: '', disponibilidade: 'PRONTA_ENTREGA', status: 'DISPONIVEL', formato: '', estilo: '', cor_armacao: '', diametro_cm: '', ponte_cm: '', largura_total_cm: '', material: '', tipo: '', nome_curto: '', genero: '', quantidade: '', pedido_fornecedor: '', data_compra: '' };
     }
 
     function linhaLoteEstaVazia(l) {
@@ -1122,6 +1130,9 @@
       const t = String(titulo || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[*.:]/g, '').replace(/\s+/g, ' ').trim();
       if (!t) return '';
       if (/^(link|url)/.test(t)) return 'link_fornecedor';
+      if (/^(qtd|qtde|quant)/.test(t)) return 'quantidade';
+      if (/^(pedido|n(o|º|°)? ?(do )?pedido)/.test(t)) return 'pedido_fornecedor';
+      if (/^data/.test(t)) return 'data_compra';
       if (/^(cod|codigo|ref|referencia)( do)? forn/.test(t)) return 'codigo_fornecedor';
       if (/^forn/.test(t)) return 'fornecedor';
       if (/^(sku|codigo sku|codigo)$/.test(t)) return 'codigo_sku';
@@ -1195,6 +1206,9 @@
           if (Number.isNaN(lerPreco(l[c]))) erros[c] = 'Preço inválido';
         });
         if (l.genero && !['MASCULINO', 'FEMININO', 'UNISSEX'].includes(l.genero)) erros.genero = 'Use Masculino, Feminino ou Unissex';
+        const qtd = String(l.quantidade ?? '').trim();
+        if (qtd && !(/^\d{1,6}$/.test(qtd) && Number(qtd) >= 1)) erros.quantidade = 'Quantidade inválida (número inteiro a partir de 1)';
+        if (String(l.data_compra ?? '').trim() && !lerDataCompra(l.data_compra)) erros.data_compra = 'Data inválida (use DD/MM/AAAA)';
         if (String(l.link_fornecedor || '').trim() && !linkSeguro(l.link_fornecedor)) erros.link_fornecedor = 'Link inválido (use http:// ou https://)';
         CAMPOS_MEDIDA.forEach(c => {
           if (Number.isNaN(lerMedida(l[c]))) erros[c] = 'Medida inválida (em cm, ex.: 5,0)';
@@ -1203,8 +1217,21 @@
       });
     }
 
+    // Data da planilha (DD/MM/AAAA ou AAAA-MM-DD) -> AAAA-MM-DD; vazia ou inválida -> ''
+    function lerDataCompra(v) {
+      const t = String(v ?? '').trim();
+      const iso = /^(\d{4})-(\d{2})-(\d{2})$/.exec(t);
+      const br = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(t);
+      const [a, m, d] = iso ? [+iso[1], +iso[2], +iso[3]] : br ? [+br[3], +br[2], +br[1]] : [];
+      if (!a) return '';
+      const dt = new Date(Date.UTC(a, m - 1, d));
+      if (dt.getUTCMonth() !== m - 1 || dt.getUTCDate() !== d || a < 2000) return '';
+      return `${a}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+    }
+
     // Aviso por linha (mesmas regras do servidor): SKU ou código do mesmo fornecedor
-    // já cadastrado, ou repetido numa linha anterior. Essas linhas serão ignoradas.
+    // já cadastrado, ou repetido numa linha anterior. Sem quantidade essas linhas
+    // serão ignoradas; com quantidade, a quantidade soma no estoque do produto.
     function avisosDuplicidade(linhas, produtos) {
       const minusc = v => String(v || '').trim().toLowerCase();
       const chave = (f, c) => minusc(f) + '\u0000' + minusc(c);
@@ -1221,7 +1248,7 @@
         else if (cod && codigos.has(cod)) aviso = 'Cód. fornecedor já cadastrado';
         else if (sku && skusLote.has(sku)) aviso = `SKU repetido na linha ${skusLote.get(sku) + 1}`;
         else if (cod && codigosLote.has(cod)) aviso = `Cód. fornecedor repetido na linha ${codigosLote.get(cod) + 1}`;
-        if (aviso) return aviso + ': será ignorado';
+        if (aviso) return aviso + (String(l.quantidade ?? '').trim() ? `: soma ${String(l.quantidade).trim()} no estoque (reposição)` : ': será ignorado');
         if (sku) skusLote.set(sku, i);
         if (cod) codigosLote.set(cod, i);
         return '';
@@ -1383,13 +1410,16 @@
           throw new Error(data.error || 'Erro ao salvar');
         }
         const ignorados = data.ignorados || [];
-        mostrarToast(`${data.produtos.length} produto(s) cadastrado(s)${ignorados.length ? `, ${ignorados.length} ignorado(s) por duplicidade` : '!'}`, data.produtos.length ? 'success' : 'error');
+        const repostos = data.repostos || [];
+        mostrarToast(`${data.produtos.length} produto(s) cadastrado(s)${repostos.length ? `, ${repostos.length} reposição(ões) somada(s) no estoque` : ''}${ignorados.length ? `, ${ignorados.length} ignorado(s) por duplicidade` : ''}`,
+          data.produtos.length || repostos.length ? 'success' : 'error');
         linhasLote = [linhaLoteVazia(), linhaLoteVazia(), linhaLoteVazia()];
         errosLote = [];
         await carregarProdutos();
         renderizarLote();
         renderizarCriadosLote(data.produtos);
         renderizarIgnoradosLote(ignorados);
+        renderizarRepostosLote(repostos);
       } catch (err) {
         console.error(err);
         mostrarToast(err.message, 'error');
@@ -1407,6 +1437,17 @@
         <li class="py-1.5 text-sm text-gray-800">
           <span class="font-medium">SKU ${escapeHtml(g.codigo_sku)}</span>${g.codigo_fornecedor ? ` <span class="text-gray-500">• Cód. fornecedor ${escapeHtml(g.codigo_fornecedor)}</span>` : ''}
           <span class="text-amber-700">: ${escapeHtml(g.motivo)}</span>
+        </li>`).join('');
+    }
+
+    // Reposições do lote: produto que já existia e quanto entrou no estoque
+    function renderizarRepostosLote(repostos) {
+      const painel = document.getElementById('loteRepostos');
+      painel.classList.toggle('hidden', !repostos.length);
+      document.getElementById('loteRepostosLista').innerHTML = repostos.map(r => `
+        <li class="py-1.5 text-sm text-gray-800">
+          <span class="font-medium">${escapeHtml(r.nome)}</span> <span class="text-gray-500">(${escapeHtml(r.codigo_sku)})</span>:
+          +${Number(r.quantidade)} peça(s), estoque agora ${Number(r.estoque)}
         </li>`).join('');
     }
 
@@ -1552,6 +1593,7 @@
           </td>
           <td class="px-4 sm:px-6 py-4">
             <span class="px-2 py-1 text-xs font-medium rounded-full ${statusClass(p.status)}">${escapeHtml(p.status)}</span>
+            <span class="block mt-1 text-xs text-gray-500">${Number(p.estoque) || 0} em estoque${Number(p.em_maleta) ? ` • ${Number(p.em_maleta)} em maleta` : ''}</span>
             ${p.disponibilidade === 'SOB_ENCOMENDA' ? '<span class="block w-max mt-1 px-2 py-1 text-xs font-medium rounded-full bg-blue-100 text-blue-700">SOB ENCOMENDA</span>' : ''}
           </td>
           <td class="hidden sm:table-cell px-4 sm:px-6 py-4 text-gray-900 font-medium">${Number(p.vezes_em_maleta) || 0}</td>
@@ -1688,7 +1730,11 @@
         document.getElementById('fornecedor').value = produto.fornecedor || '';
         document.getElementById('codigo_fornecedor').value = produto.codigo_fornecedor || '';
         document.getElementById('link_fornecedor').value = produto.link_fornecedor || '';
-        document.getElementById('status').value = produto.status;
+        document.getElementById('estoque').value = Number(produto.estoque) || 0;
+        const fora = Number(produto.em_maleta) || 0;
+        document.getElementById('estoqueMaleta').textContent = fora
+          ? `Mais ${fora} peça(s) em maleta com cliente (voltam no acerto).`
+          : 'O status sai do estoque: com peça na loja fica Disponível; zerado, Esgotado.';
         document.getElementById('disponibilidade').value = produto.disponibilidade || 'PRONTA_ENTREGA';
       } else {
         modalTitulo.textContent = 'Novo Produto';
@@ -1786,7 +1832,7 @@
       e.preventDefault();
       const id = document.getElementById('produtoId').value;
       const formData = new FormData();
-      ['nome', 'codigo_sku', 'preco_custo', 'preco_venda', 'formato', 'estilo', 'cor_armacao', 'status', 'disponibilidade'].forEach(field => {
+      ['nome', 'codigo_sku', 'preco_custo', 'preco_venda', 'formato', 'estilo', 'cor_armacao', 'estoque', 'disponibilidade'].forEach(field => {
         const val = document.getElementById(field).value;
         if (val) formData.append(field, val);
       });
@@ -1874,7 +1920,7 @@
             : null;
           return `
           <li class="py-2 flex justify-between gap-3">
-            <span>${escapeHtml(formatarDia(c.data_compra))} <span class="text-gray-400">• ${Number(c.quantidade) || 1} un.${c.origem === 'CADASTRO' ? ' • cadastro' : ''}${c.fornecedor ? ' • ' + escapeHtml(c.fornecedor) : ''}</span></span>
+            <span>${escapeHtml(formatarDia(c.data_compra))} <span class="text-gray-400">• ${Number(c.quantidade) || 1} un.${c.origem === 'CADASTRO' ? ' • cadastro' : ''}${c.pedido_fornecedor ? ' • pedido ' + escapeHtml(c.pedido_fornecedor) : ''}${c.fornecedor ? ' • ' + escapeHtml(c.fornecedor) : ''}</span></span>
             <span class="whitespace-nowrap">${formatarMoeda(Number(c.preco_custo))} ${htmlVariacao(v)}</span>
           </li>`;
         }).join('') || '<li class="py-2 text-gray-500">Nenhuma compra registrada.</li>';
@@ -1891,9 +1937,9 @@
       document.getElementById('reposicaoCusto').value = String(Number(p.preco_custo).toFixed(2)).replace('.', ',');
       document.getElementById('reposicaoQtd').value = '1';
       document.getElementById('reposicaoData').value = hojeIso();
-      const esgotado = p.status === 'ESGOTADO';
-      document.getElementById('reposicaoReativarBox').classList.toggle('hidden', !esgotado);
-      document.getElementById('reposicaoReativar').checked = esgotado;
+      document.getElementById('reposicaoPedido').value = '';
+      document.getElementById('reposicaoEstoqueInfo').textContent =
+        `Estoque atual: ${Number(p.estoque) || 0} peça(s)${Number(p.em_maleta) ? ` + ${Number(p.em_maleta)} em maleta` : ''}. A quantidade comprada soma no estoque.`;
       carregarHistoricoCompras(id);
       abrirModalSimples('modalReposicao');
     };
@@ -1911,7 +1957,7 @@
             preco_custo: custo,
             quantidade: Number(document.getElementById('reposicaoQtd').value) || 1,
             data_compra: document.getElementById('reposicaoData').value,
-            reativar: document.getElementById('reposicaoReativar').checked,
+            pedido_fornecedor: document.getElementById('reposicaoPedido').value.trim(),
           }),
         });
         const data = await res.json().catch(() => ({}));
@@ -2063,18 +2109,28 @@
     let maletaAcerto = '';
     let pedidosMaleta = new Map();
 
+    // Maletas onde há peça do produto (uma entrada por peça; null = sem pedido).
+    // Lista antiga sem `maletas`: a peça em CONDICIONAL do pedido_condicional_id.
+    function maletasDaPeca(p) {
+      if (Array.isArray(p.maletas)) return p.maletas;
+      return p.status === 'CONDICIONAL' ? [p.pedido_condicional_id || null] : [];
+    }
+
     // Peças em condicional da maleta escolhida (do pedido, sem pedido ou todas)
     function condicionaisDoAcerto() {
-      return todosProdutos.filter(p => p.status === 'CONDICIONAL' && (!maletaAcerto
-        || (maletaAcerto === 'avulsas' ? !p.pedido_condicional_id : Number(p.pedido_condicional_id) === Number(maletaAcerto))));
+      return todosProdutos.filter(p => {
+        const m = maletasDaPeca(p);
+        return m.length && (!maletaAcerto
+          || (maletaAcerto === 'avulsas' ? m.some(x => !x) : m.some(x => Number(x) === Number(maletaAcerto))));
+      });
     }
 
     // Opções do seletor: uma por pedido com peças em condicional, mais as peças sem pedido
     function opcoesMaleta(produtos, pedidos) {
-      const todas = produtos.filter(p => p.status === 'CONDICIONAL');
+      const todas = produtos.flatMap(p => maletasDaPeca(p));
       const grupos = new Map();
-      todas.forEach(p => {
-        const k = p.pedido_condicional_id ? String(Number(p.pedido_condicional_id)) : 'avulsas';
+      todas.forEach(pedidoId => {
+        const k = pedidoId ? String(Number(pedidoId)) : 'avulsas';
         grupos.set(k, (grupos.get(k) || 0) + 1);
       });
       const opcoes = [{ valor: '', texto: `Todas as peças em condicional (${todas.length})` }];
@@ -2814,7 +2870,7 @@
       const entregue = pedido.status === 'ENTREGUE';
       const vendidos = (Array.isArray(pedido.vendidos_acerto) ? pedido.vendidos_acerto : []).map(Number);
       const devolvidos = (Array.isArray(pedido.devolvidos_acerto) ? pedido.devolvidos_acerto : []).map(Number);
-      const naRua = todosProdutos.filter(p => p.status === 'CONDICIONAL' && Number(p.pedido_condicional_id) === id);
+      const naRua = todosProdutos.filter(p => maletasDaPeca(p).some(x => Number(x) === id));
       const itens = Array.isArray(pedido.itens) ? pedido.itens : [];
 
       document.getElementById('fechamentoItens').innerHTML = itens.map(i => {

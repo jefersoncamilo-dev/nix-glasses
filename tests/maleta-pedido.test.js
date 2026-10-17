@@ -84,7 +84,7 @@ describe('POST /api/admin/pedidos/:id/enviar-maleta', () => {
   it('409 quando nenhuma peça está disponível, sem marcar o pedido', async () => {
     const a = await criarProduto('A');
     const pedido = await pedir([a]);
-    await h.pool.query(`UPDATE produtos SET status = 'ESGOTADO'`);
+    await h.pool.query(`UPDATE produtos SET status = 'ESGOTADO', estoque = 0`);
     const r = await api('POST', `/api/admin/pedidos/${pedido}/enviar-maleta`);
     assert.equal(r.status, 409);
     assert.deepEqual(r.body.indisponiveis.map(i => i.codigo_sku), ['A']);
@@ -117,7 +117,7 @@ describe('acerto com a maleta do pedido', () => {
 
   it('pedido_id é opcional; inválido dá 400; inexistente fica sem pedido', async () => {
     const a = await criarProduto('A');
-    await h.pool.query(`UPDATE produtos SET status = 'CONDICIONAL'`);
+    await api('PUT', `/api/produtos/${a}`, { body: { status: 'CONDICIONAL' } });
     assert.equal((await api('POST', '/api/admin/acerto', { body: { devolvidos: [a], pedido_id: 'x' } })).status, 400);
     const r = await api('POST', '/api/admin/acerto', { body: { devolvidos: [a], pedido_id: 999 } });
     assert.equal(r.status, 200);
@@ -163,7 +163,7 @@ describe('painel: maleta no acerto', () => {
   ];
 
   it('lista uma opção por pedido e as peças sem pedido', () => {
-    const ctx = carregar(['opcoesMaleta']);
+    const ctx = carregar(['maletasDaPeca', 'opcoesMaleta']);
     const ops = ctx.opcoesMaleta(produtos, new Map([[7, { nome: 'Ana' }]]));
     assert.deepEqual([...ops.map(o => o.valor)], ['', '7', '9', 'avulsas']);
     assert.equal(ops[0].texto, 'Todas as peças em condicional (4)');
@@ -172,12 +172,12 @@ describe('painel: maleta no acerto', () => {
   });
 
   it('sem pedidos, só a opção de todas', () => {
-    const ctx = carregar(['opcoesMaleta']);
+    const ctx = carregar(['maletasDaPeca', 'opcoesMaleta']);
     assert.deepEqual([...ctx.opcoesMaleta([{ id: 1, status: 'CONDICIONAL' }], new Map()).map(o => o.valor)], ['']);
   });
 
   it('filtra as peças pela maleta escolhida', () => {
-    const ids = (maletaAcerto) => carregar(['condicionaisDoAcerto'], { todosProdutos: produtos, maletaAcerto }).condicionaisDoAcerto().map(p => p.id);
+    const ids = (maletaAcerto) => carregar(['maletasDaPeca', 'condicionaisDoAcerto'], { todosProdutos: produtos, maletaAcerto }).condicionaisDoAcerto().map(p => p.id);
     assert.deepEqual(ids(''), [1, 2, 3, 4]);
     assert.deepEqual(ids('7'), [1, 2]);
     assert.deepEqual(ids('avulsas'), [4]);

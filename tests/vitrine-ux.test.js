@@ -233,10 +233,10 @@ describe('nome curto: painel', () => {
     assert.equal(painel.linhaLoteEstaVazia({ ...painel.linhaLoteVazia(), nome_curto: 'X' }), false);
   });
 
-  it('vem depois das colunas antigas (e antes do gênero), para planilhas sem cabeçalho manterem a ordem', () => {
+  it('vem depois das colunas antigas (e antes do gênero e da compra), para planilhas sem cabeçalho manterem a ordem', () => {
     const html = fs.readFileSync(path.join(__dirname, '..', 'admin', 'index.html'), 'utf8');
     const colunas = vm.runInNewContext(`${html.match(/const COLUNAS_LOTE = \[[\s\S]*?\n {4}\];/)[0]}; COLUNAS_LOTE`);
-    assert.deepEqual(JSON.parse(JSON.stringify(colunas.slice(-3).map((c) => c.campo))), ['tipo', 'nome_curto', 'genero']);
+    assert.deepEqual(JSON.parse(JSON.stringify(colunas.slice(-6).map((c) => c.campo))), ['tipo', 'nome_curto', 'genero', 'quantidade', 'pedido_fornecedor', 'data_compra']);
     assert.match(html, /\['nome_curto', 'fornecedor', 'codigo_fornecedor'/);
   });
 });

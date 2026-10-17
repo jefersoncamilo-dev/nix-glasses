@@ -218,7 +218,7 @@ function carregarPainel(globais = {}) {
   const html = fs.readFileSync(path.join(__dirname, '..', 'admin', 'index.html'), 'utf8');
   const colunas = html.match(/const COLUNAS_LOTE = \[[\s\S]*?\n {4}\];/)[0];
   const medidas = html.match(/const CAMPOS_MEDIDA = \[.*\];/)[0];
-  const funcoes = ['escapeHtml', 'linhaLoteVazia', 'linhaLoteEstaVazia', 'lerPreco', 'lerMedida', 'lerDisponibilidade', 'lerStatus', 'lerGenero', 'campoDoCabecalho', 'linhasDaPlanilha', 'linkSeguro', 'validarLote', 'avisosDuplicidade', 'renderizarLote'];
+  const funcoes = ['escapeHtml', 'linhaLoteVazia', 'linhaLoteEstaVazia', 'lerPreco', 'lerMedida', 'lerDisponibilidade', 'lerStatus', 'lerGenero', 'campoDoCabecalho', 'linhasDaPlanilha', 'linkSeguro', 'lerDataCompra', 'validarLote', 'avisosDuplicidade', 'renderizarLote'];
   const fonte = `${colunas}\n${medidas}\nconst MAX_LOTE = 100;\n${funcoes.map(f => extrairFuncao(html, f)).join('\n')}`;
   const ctx = vm.createContext({ Number, String, Math, Map, Set, Object, URL, todosProdutos: [], ...globais });
   vm.runInContext(`${fonte}\n${funcoes.map(f => `this.${f} = ${f};`).join('\n')}`, ctx);
@@ -324,6 +324,27 @@ describe('painel: cadastro em lote', () => {
       'Cód. fornecedor repetido na linha 5: será ignorado',
       '',
     ]);
+  });
+
+  it('lê quantidade, pedido e data da compra pelo cabeçalho e valida', () => {
+    const [a, b] = ctx.linhasDaPlanilha([
+      'Nome\tSKU\tCusto\tVenda\tQuantidade\tPedido fornecedor\tData da compra',
+      'Rex\tNIX001\t39,90\t129,90\t4\t14563\t09/11/2025',
+      'Raptor\tNIX002\t19,90\t129,90\t0\t\t31/02/2025',
+    ].join('\n'));
+    assert.deepEqual([a.quantidade, a.pedido_fornecedor, a.data_compra], ['4', '14563', '09/11/2025']);
+    assert.equal(ctx.lerDataCompra(a.data_compra), '2025-11-09');
+    const erros = ctx.validarLote([a, b]);
+    assert.deepEqual({ ...erros[0] }, {});
+    assert.match(erros[1].quantidade, /Quantidade inválida/);
+    assert.match(erros[1].data_compra, /Data inválida/);
+  });
+
+  it('com quantidade, o duplicado avisa que soma no estoque', () => {
+    const l = (extra) => ({ ...ctx.linhaLoteVazia(), nome: 'X', preco_custo: '10', preco_venda: '20', ...extra });
+    const avisos = ctx.avisosDuplicidade([l({ codigo_sku: 'N9', fornecedor: 'Clush', codigo_fornecedor: 'cl-1', quantidade: '3' })],
+      [{ codigo_sku: 'NIX001', fornecedor: 'Clush', codigo_fornecedor: 'CL-1' }]);
+    assert.deepEqual([...avisos], ['Cód. fornecedor já cadastrado: soma 3 no estoque (reposição)']);
   });
 
   it('linkSeguro só aceita http/https', () => {

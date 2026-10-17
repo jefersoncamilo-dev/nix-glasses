@@ -178,7 +178,7 @@ describe('painel (admin/index.html) escapa dados de produto', () => {
   it('nas listas do acerto', () => {
     const compradosList = elemento();
     const devolvidosList = elemento();
-    const ctx = carregar('admin/index.html', ['escapeHtml', 'condicionaisDoAcerto', 'renderizarListasAcerto'], {
+    const ctx = carregar('admin/index.html', ['escapeHtml', 'maletasDaPeca', 'condicionaisDoAcerto', 'renderizarListasAcerto'], {
       todosProdutos: [produtoMalicioso()],
       maletaAcerto: '',
       compradosList,

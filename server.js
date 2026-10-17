@@ -574,6 +574,9 @@ function validarProdutoLote(linha) {
     formato: textoCurto(l.formato, 100) || null,
     estilo: textoCurto(l.estilo, 100) || null,
     cor_armacao: textoCurto(l.cor_armacao, 100) || null,
+    quantidade: lerQuantidade(l.quantidade),
+    pedido_fornecedor: textoCurto(l.pedido_fornecedor, 60),
+    data_compra: lerDataCompra(l.data_compra),
   };
   const { espec, erro: erroEspec } = lerEspecificacoes(l);
   Object.assign(produto, { diametro_cm: null, ponte_cm: null, largura_total_cm: null, material: '', tipo: '', nome_curto: '', genero: '' }, espec);
@@ -587,7 +590,29 @@ function validarProdutoLote(linha) {
   }
   if (!STATUS_PRODUTO.includes(produto.status)) erros.push({ campo: 'status', mensagem: 'Status inválido' });
   if (!DISPONIBILIDADES_PRODUTO.includes(produto.disponibilidade)) erros.push({ campo: 'disponibilidade', mensagem: 'Disponibilidade inválida' });
+  if (produto.quantidade === false || produto.quantidade === 0) erros.push({ campo: 'quantidade', mensagem: 'Quantidade inválida (número inteiro a partir de 1)' });
+  if (produto.data_compra === false) erros.push({ campo: 'data_compra', mensagem: 'Data inválida (use DD/MM/AAAA)' });
   return { produto, erros };
+}
+
+// Quantidade de peças: vazio = null (não informada), inteiro de 0 a 100000, senão false.
+function lerQuantidade(v) {
+  if (v === undefined || v === null || (typeof v === 'string' && v.trim() === '')) return null;
+  const n = typeof v === 'number' ? v : /^\s*\d{1,6}\s*$/.test(String(v)) ? Number(v) : NaN;
+  return Number.isInteger(n) && n >= 0 && n <= 100000 ? n : false;
+}
+
+// Data da compra em AAAA-MM-DD ou DD/MM/AAAA: vazio = null, inválida = false.
+function lerDataCompra(v) {
+  if (v === undefined || v === null || (typeof v === 'string' && v.trim() === '')) return null;
+  const t = String(v).trim();
+  const iso = /^(\d{4})-(\d{2})-(\d{2})$/.exec(t);
+  const br = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(t);
+  const [a, m, d] = iso ? [+iso[1], +iso[2], +iso[3]] : br ? [+br[3], +br[2], +br[1]] : [];
+  if (!a) return false;
+  const dt = new Date(Date.UTC(a, m - 1, d));
+  if (dt.getUTCMonth() !== m - 1 || dt.getUTCDate() !== d || a < 2000) return false;
+  return `${a}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
 }
 
 // Lote: Map índice -> { campo, motivo } das linhas a ignorar por duplicidade.
@@ -617,12 +642,86 @@ function encontrarDuplicadosLote(produtos, existentes) {
 }
 
 // Ao cadastrar um produto, o custo informado vira a 1ª compra do histórico de reposição.
-async function registrarCompraCadastro(db, produto) {
+async function registrarCompraCadastro(db, produto, compra = {}) {
   await db.query(
-    `INSERT INTO compras_fornecedor (produto_id, fornecedor, preco_custo, quantidade, origem)
-     VALUES ($1, $2, $3, 1, 'CADASTRO')`,
-    [produto.id, produto.fornecedor || '', produto.preco_custo]
+    `INSERT INTO compras_fornecedor (produto_id, fornecedor, preco_custo, quantidade, origem, data_compra, pedido_fornecedor)
+     VALUES ($1, $2, $3, $4, 'CADASTRO', COALESCE($5::date, CURRENT_DATE), $6)`,
+    [produto.id, produto.fornecedor || '', produto.preco_custo, compra.quantidade || 1, compra.data || null, compra.pedido || '']
   );
+}
+
+// Reposição: registra a compra (custo unitário, quantidade, data e nº do pedido no
+// fornecedor), soma as peças no estoque e o custo do produto passa a ser o da
+// compra mais recente. O cadastro (nome, SKU, preço de venda) não muda.
+async function reporEstoque(db, produtoId, { custo, quantidade, data, pedido }) {
+  const compra = await db.query(
+    `INSERT INTO compras_fornecedor (produto_id, fornecedor, preco_custo, quantidade, origem, data_compra, pedido_fornecedor)
+     SELECT id, fornecedor, $2, $3, 'REPOSICAO', COALESCE($4::date, CURRENT_DATE), $5 FROM produtos WHERE id = $1
+     RETURNING id, fornecedor, preco_custo, quantidade, origem, to_char(data_compra, 'YYYY-MM-DD') AS data_compra, pedido_fornecedor, created_at`,
+    [produtoId, custo, quantidade, data || null, pedido || '']
+  );
+  await db.query(
+    `UPDATE produtos SET
+       estoque = estoque + $2,
+       preco_custo = (SELECT preco_custo FROM compras_fornecedor WHERE produto_id = $1 ORDER BY data_compra DESC, id DESC LIMIT 1)
+     WHERE id = $1`,
+    [produtoId, quantidade]
+  );
+  const [produto] = await recalcularStatus(db, [produtoId]);
+  return { compra: compra.rows[0], produto };
+}
+
+// Status sai das contas: peça na loja (estoque) = DISPONIVEL; só em maletas =
+// CONDICIONAL; nenhuma = ESGOTADO. pedido_condicional_id fica com a maleta mais
+// antiga da peça, para as telas que mostram uma só.
+async function recalcularStatus(db, ids) {
+  if (!ids.length) return [];
+  const { rows } = await db.query(
+    `UPDATE produtos p SET
+       status = CASE WHEN p.estoque > 0 THEN 'DISPONIVEL' WHEN m.qtd > 0 THEN 'CONDICIONAL' ELSE 'ESGOTADO' END,
+       pedido_condicional_id = m.pedido_id,
+       updated_at = CURRENT_TIMESTAMP
+     FROM (SELECT x.id,
+                  (SELECT COUNT(*) FROM maleta_pecas mp WHERE mp.produto_id = x.id) AS qtd,
+                  (SELECT mp.pedido_id FROM maleta_pecas mp WHERE mp.produto_id = x.id ORDER BY mp.id LIMIT 1) AS pedido_id
+           FROM produtos x WHERE x.id = ANY($1)) m
+     WHERE p.id = m.id
+     RETURNING p.*`,
+    [ids]
+  );
+  return rows;
+}
+
+// Status escolhido à mão (painel, lote): ESGOTADO zera tudo; DISPONIVEL traz de
+// volta as peças das maletas (ao menos uma na loja); CONDICIONAL tira uma peça da
+// loja para uma maleta sem pedido, se ainda não houver peça fora.
+async function aplicarStatusManual(db, produtoId, status) {
+  if (status === 'ESGOTADO') {
+    await db.query('DELETE FROM maleta_pecas WHERE produto_id = $1', [produtoId]);
+    await db.query('UPDATE produtos SET estoque = 0 WHERE id = $1', [produtoId]);
+  } else if (status === 'DISPONIVEL') {
+    const fora = (await db.query('DELETE FROM maleta_pecas WHERE produto_id = $1 RETURNING id', [produtoId])).rowCount;
+    await db.query('UPDATE produtos SET estoque = GREATEST(estoque + $2, 1) WHERE id = $1', [produtoId, fora]);
+  } else if (status === 'CONDICIONAL') {
+    const fora = (await db.query('SELECT 1 FROM maleta_pecas WHERE produto_id = $1 LIMIT 1', [produtoId])).rowCount;
+    if (!fora) {
+      await db.query('INSERT INTO maleta_pecas (produto_id) VALUES ($1)', [produtoId]);
+      await db.query('UPDATE produtos SET estoque = GREATEST(estoque - 1, 0) WHERE id = $1', [produtoId]);
+    }
+  }
+}
+
+// Tira uma peça do produto da maleta (acerto): de preferência a da maleta do
+// pedido informado, senão a mais antiga. Devolve true se havia peça fora.
+async function tirarDaMaleta(db, produtoId, pedidoId) {
+  const r = await db.query(
+    `DELETE FROM maleta_pecas WHERE id = (
+       SELECT id FROM maleta_pecas WHERE produto_id = $1
+       ORDER BY COALESCE(pedido_id = $2::int, false) DESC, id LIMIT 1 FOR UPDATE
+     ) RETURNING id`,
+    [produtoId, pedidoId]
+  );
+  return r.rowCount > 0;
 }
 
 // Monta o pedido a partir das linhas de produtos do banco (preço e encomenda
@@ -848,6 +947,7 @@ async function startServer() {
         `SELECT p.id, p.nome, p.nome_curto, p.codigo_sku, p.preco_custo, p.preco_venda, p.imagem_url, p.fotos, p.status, p.disponibilidade,
                 p.formato, p.estilo, p.cor_armacao, p.diametro_cm, p.ponte_cm, p.largura_total_cm, p.material, p.tipo, p.genero,
                 p.fornecedor, p.codigo_fornecedor, p.link_fornecedor, p.vezes_em_maleta, p.pedido_condicional_id,
+                p.estoque, COALESCE(mp.pedidos, '{}') AS maletas, COALESCE(cardinality(mp.pedidos), 0)::int AS em_maleta,
                 to_char(uc.data_compra, 'YYYY-MM-DD') AS ultima_compra, uc.preco_custo AS custo_ultima_compra,
                 ca.preco_custo AS custo_compra_anterior, COALESCE(nc.total, 0)::int AS total_compras
          FROM produtos p
@@ -860,6 +960,7 @@ async function startServer() {
            WHERE c.produto_id = p.id ORDER BY data_compra DESC, id DESC OFFSET 1 LIMIT 1
          ) ca ON true
          LEFT JOIN LATERAL (SELECT COUNT(*) AS total FROM compras_fornecedor c WHERE c.produto_id = p.id) nc ON true
+         LEFT JOIN LATERAL (SELECT array_agg(m.pedido_id ORDER BY m.id) AS pedidos FROM maleta_pecas m WHERE m.produto_id = p.id) mp ON true
          ORDER BY p.created_at DESC`
       );
       res.json(result.rows);
@@ -872,9 +973,9 @@ async function startServer() {
   async function handleListConditional(req, res) {
     try {
       const result = await req.db.query(
-        `SELECT id, nome, nome_curto, codigo_sku, preco_custo, preco_venda, imagem_url, fotos, status, disponibilidade, formato, estilo, cor_armacao, diametro_cm, ponte_cm, largura_total_cm, material, tipo, genero, fornecedor, codigo_fornecedor, link_fornecedor, vezes_em_maleta
-         FROM produtos
-         WHERE status = 'CONDICIONAL'
+        `SELECT id, nome, nome_curto, codigo_sku, preco_custo, preco_venda, imagem_url, fotos, status, disponibilidade, formato, estilo, cor_armacao, diametro_cm, ponte_cm, largura_total_cm, material, tipo, genero, fornecedor, codigo_fornecedor, link_fornecedor, vezes_em_maleta, estoque
+         FROM produtos p
+         WHERE EXISTS (SELECT 1 FROM maleta_pecas m WHERE m.produto_id = p.id)
          ORDER BY created_at DESC`
       );
       // Retorna snake_case (padrão PT) + camelCase (compat. admin/acerto.html em inglês)
@@ -909,6 +1010,8 @@ async function startServer() {
     }
     const { espec, erro: erroEspec } = lerEspecificacoes(req.body);
     if (erroEspec) return res.status(400).json({ error: erroEspec.mensagem });
+    const estoque = lerQuantidade(req.body.estoque);
+    if (estoque === false) return res.status(400).json({ error: 'Estoque inválido' });
 
     let client;
     try {
@@ -920,15 +1023,17 @@ async function startServer() {
       }
       const result = await client.query(
         `INSERT INTO produtos (nome, codigo_sku, preco_custo, preco_venda, imagem_url, fotos, disponibilidade, formato, estilo, cor_armacao, fornecedor, codigo_fornecedor, link_fornecedor,
-                               diametro_cm, ponte_cm, largura_total_cm, material, tipo, nome_curto, genero)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)
+                               diametro_cm, ponte_cm, largura_total_cm, material, tipo, nome_curto, genero, estoque)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21)
          RETURNING *`,
         [nome, codigoFinal, preco_custo, preco_venda, fotos[0] || null, fotos, disponibilidade, formato, estilo, cor_armacao, fornecedor, codigoFornecedor, linkFornecedor,
-          espec.diametro_cm ?? null, espec.ponte_cm ?? null, espec.largura_total_cm ?? null, espec.material || '', espec.tipo || '', espec.nome_curto || '', espec.genero || '']
+          espec.diametro_cm ?? null, espec.ponte_cm ?? null, espec.largura_total_cm ?? null, espec.material || '', espec.tipo || '', espec.nome_curto || '', espec.genero || '',
+          estoque ?? 1]
       );
-      await registrarCompraCadastro(client, result.rows[0]);
+      await registrarCompraCadastro(client, result.rows[0], { quantidade: estoque || 1 });
+      const [produto] = await recalcularStatus(client, [result.rows[0].id]);
       await client.query('COMMIT');
-      res.status(201).json(result.rows[0]);
+      res.status(201).json(produto);
     } catch (err) {
       if (client) await client.query('ROLLBACK').catch(() => {});
       console.error(err);
@@ -960,6 +1065,12 @@ async function startServer() {
     }
     const { espec, erro: erroEspec } = lerEspecificacoes(req.body);
     if (erroEspec) return res.status(400).json({ error: erroEspec.mensagem });
+    if (status !== undefined && !STATUS_PRODUTO.includes(status)) {
+      return res.status(400).json({ error: 'Status inválido' });
+    }
+    const estoque = lerQuantidade(req.body.estoque);
+    if (estoque === false) return res.status(400).json({ error: 'Estoque inválido' });
+    const mexeNoEstoque = status !== undefined || estoque !== null;
 
     let client;
     try {
@@ -982,9 +1093,6 @@ async function startServer() {
       addField('codigo_sku', codigoFinal);
       addField('preco_custo', preco_custo);
       addField('preco_venda', preco_venda);
-      addField('status', status);
-      // Fora de condicional a peça deixa de pertencer à maleta de um pedido
-      if (status !== undefined && status !== 'CONDICIONAL') fields.push('pedido_condicional_id = NULL');
       addField('disponibilidade', disponibilidade);
       addField('formato', formato);
       addField('estilo', estilo);
@@ -998,13 +1106,13 @@ async function startServer() {
         values.push(valor);
       }
 
-      if (fields.length === 0 && !mexeNasFotos) {
+      if (fields.length === 0 && !mexeNasFotos && !mexeNoEstoque) {
         await client.query('ROLLBACK');
         return res.status(400).json({ error: 'Nenhum campo para atualizar' });
       }
 
       // Lê as fotos atuais para montar a nova lista e apagar as que saírem (FOR UPDATE trava a linha até o COMMIT)
-      const anterior = await client.query(`SELECT imagem_url, fotos FROM produtos WHERE id = $1 FOR UPDATE`, [id]);
+      const anterior = await client.query(`SELECT imagem_url, fotos, status FROM produtos WHERE id = $1 FOR UPDATE`, [id]);
       if (anterior.rows.length === 0) {
         await client.query('ROLLBACK');
         return res.status(404).json({ error: 'Produto não encontrado' });
@@ -1032,7 +1140,13 @@ async function startServer() {
       values.push(id);
 
       const query = `UPDATE produtos SET ${fields.join(', ')} WHERE id = $${paramCount} RETURNING *`;
-      const result = await client.query(query, values);
+      let result = await client.query(query, values);
+      if (mexeNoEstoque) {
+        // O formulário reenvia o status de sempre: só um status diferente mexe nas peças
+        if (status !== undefined && status !== anterior.rows[0].status) await aplicarStatusManual(client, result.rows[0].id, status);
+        if (estoque !== null) await client.query('UPDATE produtos SET estoque = $2 WHERE id = $1', [result.rows[0].id, estoque]);
+        result = { rows: await recalcularStatus(client, [result.rows[0].id]) };
+      }
 
       const idsRemovidos = removidas.map(idDaImagem).filter(Boolean);
       if (idsRemovidos.length) await client.query(`DELETE FROM imagens WHERE id = ANY($1)`, [idsRemovidos]);
@@ -1057,6 +1171,9 @@ async function startServer() {
   // Duplicados não barram: a linha cujo SKU ou código do fornecedor (do mesmo
   // fornecedor) já existe no banco, ou repete uma linha anterior do lote, é
   // ignorada e volta em `ignorados`; as demais são gravadas.
+  // Com Quantidade preenchida, o duplicado vira reposição: soma as peças no
+  // estoque do produto que já existe e registra a compra com o custo da linha
+  // (volta em `repostos`). Quantidade também é o estoque inicial do produto novo.
   async function handleCreateLote(req, res) {
     const linhas = req.body && req.body.produtos;
     if (!Array.isArray(linhas) || linhas.length === 0) {
@@ -1088,36 +1205,52 @@ async function startServer() {
       );
       const duplicados = encontrarDuplicadosLote(produtos, existentes.rows);
       const ignorados = [];
-      const novos = [];
-      produtos.forEach((p, i) => {
-        const dup = duplicados.get(i);
-        if (dup) ignorados.push({ linha: i, codigo_sku: p.codigo_sku, codigo_fornecedor: p.codigo_fornecedor, ...dup });
-        else novos.push([i, p]);
-      });
+      const repostos = [];
 
       await client.query('BEGIN');
       const criados = [];
-      for (const [i, p] of novos) {
+      for (const [i, p] of produtos.entries()) {
+        const dup = duplicados.get(i);
+        const compra = { quantidade: p.quantidade || 1, data: p.data_compra, pedido: p.pedido_fornecedor };
+        if (dup && p.quantidade) {
+          // Mesmo SKU primeiro; senão o mesmo código do mesmo fornecedor (pode ser um produto criado linhas acima)
+          const alvo = (await client.query(
+            `SELECT id FROM produtos
+             WHERE lower(codigo_sku) = lower($1) OR ($2 <> '' AND lower(codigo_fornecedor) = lower($2) AND lower(fornecedor) = lower($3))
+             ORDER BY (lower(codigo_sku) = lower($1)) DESC, id LIMIT 1 FOR UPDATE`,
+            [p.codigo_sku, p.codigo_fornecedor, p.fornecedor]
+          )).rows[0];
+          if (alvo) {
+            const r = await reporEstoque(client, alvo.id, { custo: p.preco_custo, ...compra });
+            repostos.push({ linha: i, id: r.produto.id, nome: r.produto.nome, codigo_sku: r.produto.codigo_sku, quantidade: p.quantidade, estoque: r.produto.estoque });
+            continue;
+          }
+        }
+        if (dup) {
+          ignorados.push({ linha: i, codigo_sku: p.codigo_sku, codigo_fornecedor: p.codigo_fornecedor, ...dup });
+          continue;
+        }
         // ON CONFLICT cobre outro cadastro do mesmo SKU entre a checagem e o INSERT
         const r = await client.query(
           `INSERT INTO produtos (nome, codigo_sku, preco_custo, preco_venda, status, disponibilidade, formato, estilo, cor_armacao, fornecedor, codigo_fornecedor, link_fornecedor,
-                                 diametro_cm, ponte_cm, largura_total_cm, material, tipo, nome_curto, genero)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
+                                 diametro_cm, ponte_cm, largura_total_cm, material, tipo, nome_curto, genero, estoque)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)
            ON CONFLICT (codigo_sku) DO NOTHING
            RETURNING *`,
           [p.nome, p.codigo_sku, p.preco_custo, p.preco_venda, p.status, p.disponibilidade, p.formato, p.estilo, p.cor_armacao, p.fornecedor, p.codigo_fornecedor, p.link_fornecedor,
-            p.diametro_cm, p.ponte_cm, p.largura_total_cm, p.material, p.tipo, p.nome_curto, p.genero]
+            p.diametro_cm, p.ponte_cm, p.largura_total_cm, p.material, p.tipo, p.nome_curto, p.genero, compra.quantidade]
         );
         if (!r.rows.length) {
           ignorados.push({ linha: i, codigo_sku: p.codigo_sku, codigo_fornecedor: p.codigo_fornecedor, campo: 'codigo_sku', motivo: 'SKU já cadastrado' });
           continue;
         }
-        await registrarCompraCadastro(client, r.rows[0]);
-        criados.push(r.rows[0]);
+        await registrarCompraCadastro(client, r.rows[0], compra);
+        if (p.status !== 'DISPONIVEL') await aplicarStatusManual(client, r.rows[0].id, p.status);
+        criados.push((await recalcularStatus(client, [r.rows[0].id]))[0]);
       }
       await client.query('COMMIT');
       ignorados.sort((a, b) => a.linha - b.linha);
-      res.status(criados.length ? 201 : 200).json({ produtos: criados, ignorados });
+      res.status(criados.length || repostos.length ? 201 : 200).json({ produtos: criados, repostos, ignorados });
     } catch (err) {
       if (client) await client.query('ROLLBACK').catch(() => {});
       console.error(err);
@@ -1138,7 +1271,7 @@ async function startServer() {
     if (!id) return res.status(404).json({ error: 'Produto não encontrado' });
     try {
       const { rows } = await req.db.query(
-        `SELECT id, fornecedor, preco_custo, quantidade, origem, to_char(data_compra, 'YYYY-MM-DD') AS data_compra, created_at
+        `SELECT id, fornecedor, preco_custo, quantidade, origem, to_char(data_compra, 'YYYY-MM-DD') AS data_compra, pedido_fornecedor, created_at
          FROM compras_fornecedor WHERE produto_id = $1
          ORDER BY data_compra DESC, id DESC LIMIT 100`,
         [id]
@@ -1150,9 +1283,9 @@ async function startServer() {
     }
   }
 
-  // Registra uma reposição: custo unitário pago, quantidade e data (padrão hoje).
-  // O custo do produto passa a ser o da compra mais recente; com reativar=true
-  // um produto ESGOTADO volta a DISPONIVEL.
+  // Registra uma reposição: custo unitário pago, quantidade, data (padrão hoje) e
+  // nº do pedido no fornecedor. As peças somam no estoque (produto ESGOTADO volta
+  // a DISPONIVEL) e o custo do produto passa a ser o da compra mais recente.
   async function handleCreateCompra(req, res) {
     const id = idProduto(req.params.id);
     if (!id) return res.status(404).json({ error: 'Produto não encontrado' });
@@ -1161,41 +1294,21 @@ async function startServer() {
     if (!Number.isFinite(custo) || custo < 0 || custo >= 1e8) return res.status(400).json({ error: 'Custo inválido' });
     const quantidade = b.quantidade === undefined || b.quantidade === '' ? 1 : Number(b.quantidade);
     if (!Number.isInteger(quantidade) || quantidade < 1 || quantidade > 100000) return res.status(400).json({ error: 'Quantidade inválida' });
-    let data = null;
-    if (b.data_compra !== undefined && b.data_compra !== '') {
-      const d = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(b.data_compra));
-      const dt = d && new Date(Date.UTC(+d[1], +d[2] - 1, +d[3]));
-      if (!d || dt.getUTCMonth() !== +d[2] - 1 || dt.getUTCDate() !== +d[3] || +d[1] < 2000) {
-        return res.status(400).json({ error: 'Data inválida' });
-      }
-      data = b.data_compra;
-    }
+    const data = lerDataCompra(b.data_compra);
+    if (data === false) return res.status(400).json({ error: 'Data inválida' });
 
     let client;
     try {
       client = await req.db.connect();
       await client.query('BEGIN');
-      const prod = await client.query('SELECT id, fornecedor, status FROM produtos WHERE id = $1 FOR UPDATE', [id]);
+      const prod = await client.query('SELECT id FROM produtos WHERE id = $1 FOR UPDATE', [id]);
       if (!prod.rows.length) {
         await client.query('ROLLBACK');
         return res.status(404).json({ error: 'Produto não encontrado' });
       }
-      const compra = await client.query(
-        `INSERT INTO compras_fornecedor (produto_id, fornecedor, preco_custo, quantidade, origem, data_compra)
-         VALUES ($1, $2, $3, $4, 'REPOSICAO', COALESCE($5::date, CURRENT_DATE))
-         RETURNING id, fornecedor, preco_custo, quantidade, origem, to_char(data_compra, 'YYYY-MM-DD') AS data_compra, created_at`,
-        [id, prod.rows[0].fornecedor, custo, quantidade, data]
-      );
-      const produto = await client.query(
-        `UPDATE produtos SET
-           preco_custo = (SELECT preco_custo FROM compras_fornecedor WHERE produto_id = $1 ORDER BY data_compra DESC, id DESC LIMIT 1),
-           status = CASE WHEN $2 AND status = 'ESGOTADO' THEN 'DISPONIVEL' ELSE status END,
-           updated_at = CURRENT_TIMESTAMP
-         WHERE id = $1 RETURNING *`,
-        [id, b.reativar === true]
-      );
+      const r = await reporEstoque(client, id, { custo, quantidade, data, pedido: textoCurto(b.pedido_fornecedor, 60) });
       await client.query('COMMIT');
-      res.status(201).json({ compra: compra.rows[0], produto: produto.rows[0] });
+      res.status(201).json(r);
     } catch (err) {
       if (client) await client.query('ROLLBACK').catch(() => {});
       console.error(err);
@@ -1332,8 +1445,8 @@ async function startServer() {
                 COUNT(p.id) FILTER (WHERE p.status IN ('NOVO', 'EM_ANDAMENTO'))::int AS pedidos_abertos,
                 (SELECT COUNT(*)::int FROM encomendas e WHERE e.cliente_id = c.id
                    AND e.status IN ('AGUARDANDO_FABRICANTE', 'EM_TRANSITO', 'PRONTO_ENTREGA')) AS encomendas_abertas,
-                (SELECT COUNT(DISTINCT pr.pedido_condicional_id)::int FROM produtos pr JOIN pedidos p3 ON p3.id = pr.pedido_condicional_id
-                   WHERE pr.status = 'CONDICIONAL' AND p3.cliente_id = c.id) AS maletas_na_rua
+                (SELECT COUNT(DISTINCT mp.pedido_id)::int FROM maleta_pecas mp JOIN pedidos p3 ON p3.id = mp.pedido_id
+                   WHERE p3.cliente_id = c.id) AS maletas_na_rua
          FROM clientes c
          LEFT JOIN pedidos p ON p.cliente_id = c.id
          GROUP BY c.id
@@ -1414,7 +1527,7 @@ async function startServer() {
     const ids = pedidos.map(p => p.id);
     const acertos = (await db.query('SELECT pedido_id, comprados, devolvidos FROM acertos WHERE pedido_id = ANY($1)', [ids])).rows;
     const naRua = (await db.query(
-      `SELECT id, pedido_condicional_id FROM produtos WHERE status = 'CONDICIONAL' AND pedido_condicional_id = ANY($1)`, [ids])).rows;
+      `SELECT produto_id AS id, pedido_id AS pedido_condicional_id FROM maleta_pecas WHERE pedido_id = ANY($1)`, [ids])).rows;
     return pedidos.map(p => {
       const doPedido = acertos.filter(a => a.pedido_id === p.id);
       const pecas = resultadoMaleta(p.itens,
@@ -1536,14 +1649,19 @@ async function startServer() {
         return res.status(400).json({ error: 'Este pedido não tem peças para provar na maleta' });
       }
 
-      const enviados = (await client.query(
-        `UPDATE produtos SET status = 'CONDICIONAL', pedido_condicional_id = $2, updated_at = CURRENT_TIMESTAMP
-         WHERE id = ANY($1) AND status = 'DISPONIVEL'
-         RETURNING id`,
-        [ids, pedidoId]
-      )).rows.map((r) => r.id);
+      // Uma peça de cada produto sai do estoque para a maleta (a que já está nela fica)
+      const enviados = [];
+      for (const pid of ids) {
+        const ja = await client.query('SELECT 1 FROM maleta_pecas WHERE produto_id = $1 AND pedido_id = $2', [pid, pedidoId]);
+        if (ja.rows.length) continue;
+        const saiu = await client.query('UPDATE produtos SET estoque = estoque - 1 WHERE id = $1 AND estoque > 0 RETURNING id', [pid]);
+        if (!saiu.rows.length) continue;
+        await client.query('INSERT INTO maleta_pecas (produto_id, pedido_id) VALUES ($1, $2)', [pid, pedidoId]);
+        enviados.push(pid);
+      }
+      await recalcularStatus(client, enviados);
       const naMaleta = (await client.query(
-        `SELECT id FROM produtos WHERE id = ANY($1) AND status = 'CONDICIONAL' AND pedido_condicional_id = $2`,
+        `SELECT DISTINCT produto_id AS id FROM maleta_pecas WHERE produto_id = ANY($1) AND pedido_id = $2`,
         [ids, pedidoId]
       )).rows.map((r) => r.id);
       const indisponiveis = prova
@@ -1584,8 +1702,8 @@ async function startServer() {
   // Peças da maleta deste pedido que ainda estão com a cliente
   async function pecasNaRua(db, pedidoId) {
     const { rows } = await db.query(
-      `SELECT id FROM produtos WHERE status = 'CONDICIONAL' AND pedido_condicional_id = $1`, [pedidoId]);
-    return rows.length;
+      `SELECT COUNT(*)::int AS n FROM maleta_pecas WHERE pedido_id = $1`, [pedidoId]);
+    return rows[0].n;
   }
 
   // Devolve ao estoque os acessórios lançados no fechamento do pedido
@@ -1738,12 +1856,12 @@ async function startServer() {
         }
         const levar = idsCompra.filter(id => !removidos.includes(id));
         if (levar.length) {
+          // Compra direta: uma peça de cada sai do estoque
           const baixados = (await client.query(
-            `UPDATE produtos SET status = 'ESGOTADO', pedido_condicional_id = NULL, updated_at = CURRENT_TIMESTAMP
-             WHERE id = ANY($1) AND (status = 'DISPONIVEL' OR (status = 'CONDICIONAL' AND pedido_condicional_id = $2))
-             RETURNING id`,
-            [levar, pedidoId]
+            `UPDATE produtos SET estoque = estoque - 1 WHERE id = ANY($1) AND estoque > 0 RETURNING id`,
+            [levar]
           )).rows.map(r => r.id);
+          await recalcularStatus(client, baixados);
           const indisponiveis = compras
             .filter(i => levar.includes(Number(i.produto_id)) && !baixados.includes(Number(i.produto_id)))
             .map(i => ({ produto_id: Number(i.produto_id), nome: i.nome, codigo_sku: i.codigo_sku }));
@@ -1912,7 +2030,7 @@ async function startServer() {
       if (!item) return falhar(400, { error: 'Este produto não está no pedido' });
       if (intencaoDoItem(item) !== 'ENCOMENDA') {
         const naMaleta = await client.query(
-          `SELECT 1 FROM produtos WHERE id = $1 AND status = 'CONDICIONAL' AND pedido_condicional_id = $2`, [produtoId, pedidoId]);
+          `SELECT 1 FROM maleta_pecas WHERE produto_id = $1 AND pedido_id = $2`, [produtoId, pedidoId]);
         if (naMaleta.rows.length) return falhar(409, { error: 'Esta peça está na maleta com a cliente: faça o acerto antes de encomendar' });
         if ((await client.query('SELECT 1 FROM acertos a WHERE a.pedido_id = $1 AND $2 = ANY(a.comprados)', [pedidoId, produtoId])).rows.length) {
           return falhar(409, { error: 'Esta peça já foi vendida no acerto' });
@@ -2059,31 +2177,21 @@ async function startServer() {
       client = await req.db.connect();
       await client.query('BEGIN');
 
-      // Só produtos em CONDICIONAL participam do acerto: evita que um produto
-      // já vendido (ESGOTADO) volte para DISPONIVEL por engano.
-      let vendidos = [];
-      let totalCentavos = 0;
-      if (comprados.length > 0) {
-        const r = await client.query(
-          `UPDATE produtos SET status = 'ESGOTADO', pedido_condicional_id = NULL, updated_at = CURRENT_TIMESTAMP
-           WHERE id = ANY($1) AND status = 'CONDICIONAL'
-           RETURNING id, preco_venda`,
-          [comprados]
-        );
-        vendidos = r.rows.map((row) => row.id);
-        totalCentavos = r.rows.reduce((t, row) => t + Math.round(Number(row.preco_venda) * 100), 0);
+      // Só peças que estão numa maleta participam do acerto: evita que um produto
+      // já vendido volte ao estoque por engano. Vendida sai da maleta; devolvida
+      // volta para o estoque.
+      const vendidos = [];
+      for (const pid of comprados) {
+        if (await tirarDaMaleta(client, pid, pedidoId)) vendidos.push(pid);
       }
-
-      let retornados = [];
-      if (devolvidos.length > 0) {
-        const r = await client.query(
-          `UPDATE produtos SET status = 'DISPONIVEL', pedido_condicional_id = NULL, updated_at = CURRENT_TIMESTAMP
-           WHERE id = ANY($1) AND status = 'CONDICIONAL'
-           RETURNING id`,
-          [devolvidos]
-        );
-        retornados = r.rows.map((row) => row.id);
+      const retornados = [];
+      for (const pid of devolvidos) {
+        if (await tirarDaMaleta(client, pid, pedidoId)) retornados.push(pid);
       }
+      if (retornados.length) await client.query('UPDATE produtos SET estoque = estoque + 1 WHERE id = ANY($1)', [retornados]);
+      const atualizados = await recalcularStatus(client, [...vendidos, ...retornados]);
+      const totalCentavos = atualizados.filter((row) => vendidos.includes(row.id))
+        .reduce((t, row) => t + Math.round(Number(row.preco_venda) * 100), 0);
 
       const ignorados = [...comprados, ...devolvidos].filter(
         (id) => !vendidos.includes(id) && !retornados.includes(id)
@@ -2293,7 +2401,7 @@ async function startServer() {
       const antes = await contarDadosDeTeste(client);
       const logo = idDaImagem((await lojaDaEmpresa(req.empresa)).logo);
       if (escopo === 'tudo') {
-        const tabelas = ['produtos', 'compras_fornecedor', 'acertos', 'pedidos', 'clientes', 'encomendas'];
+        const tabelas = ['produtos', 'compras_fornecedor', 'maleta_pecas', 'acertos', 'pedidos', 'clientes', 'encomendas'];
         if (acessorios === true) tabelas.push('acessorios');
         await client.query(`TRUNCATE ${tabelas.join(', ')} RESTART IDENTITY`);
         // Sem produtos, a única imagem que ainda serve é a logo
@@ -2321,21 +2429,23 @@ async function startServer() {
 
   async function handleMetrics(req, res) {
     try {
-      const totalEstoque = await req.db.query(
-        `SELECT COUNT(*) as total FROM produtos WHERE status IN ('DISPONIVEL', 'CONDICIONAL')`
+      // Peças = estoque na loja + peças em maletas
+      const { rows: [m] } = await req.db.query(
+        `WITH u AS (
+           SELECT p.preco_custo, p.preco_venda, p.estoque,
+                  (SELECT COUNT(*) FROM maleta_pecas mp WHERE mp.produto_id = p.id) AS rua
+           FROM produtos p
+         )
+         SELECT COALESCE(SUM(estoque + rua), 0) AS total,
+                COALESCE(SUM(preco_custo * (estoque + rua)), 0) AS investido,
+                COALESCE(SUM((preco_venda - preco_custo) * (estoque + rua)), 0) AS lucro,
+                COALESCE(SUM(preco_venda * rua), 0) AS em_rua
+         FROM u`
       );
-
-      const valorInvestido = await req.db.query(
-        `SELECT COALESCE(SUM(preco_custo), 0) as total FROM produtos WHERE status IN ('DISPONIVEL', 'CONDICIONAL')`
-      );
-
-      const lucroPotencial = await req.db.query(
-        `SELECT COALESCE(SUM(preco_venda - preco_custo), 0) as total FROM produtos WHERE status IN ('DISPONIVEL', 'CONDICIONAL')`
-      );
-
-      const valorEmRua = await req.db.query(
-        `SELECT COALESCE(SUM(preco_venda), 0) as total FROM produtos WHERE status = 'CONDICIONAL'`
-      );
+      const totalEstoque = { rows: [{ total: m.total }] };
+      const valorInvestido = { rows: [{ total: m.investido }] };
+      const lucroPotencial = { rows: [{ total: m.lucro }] };
+      const valorEmRua = { rows: [{ total: m.em_rua }] };
 
       const topMaleta = await req.db.query(
         `SELECT id, nome, codigo_sku, vezes_em_maleta, imagem_url
