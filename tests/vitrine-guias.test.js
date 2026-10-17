@@ -1,4 +1,4 @@
-// Vitrine: atalhos Coleção / Disponíveis / Sob Encomenda, contagem das pílulas
+// Vitrine: atalhos Coleção / Pronta Entrega / Sob Encomenda, contagem das pílulas
 // de filtro e o texto de orientação acima dos cards.
 const { describe, it } = require('node:test');
 const assert = require('node:assert/strict');
@@ -30,15 +30,17 @@ const produtos = [
 ];
 
 describe('vitrine: atalhos e pílulas de filtro', () => {
-  it('o topo tem Coleção, Disponíveis e Sob Encomenda no lugar de "Ver Coleção"', () => {
+  it('o topo tem Coleção, Pronta Entrega e Sob Encomenda no lugar de "Ver Coleção"', () => {
     assert.ok(!html.includes('>Ver Coleção<'));
+    assert.match(html, /data-atalho-filtro="DISPONIVEL"[^>]*>Pronta Entrega </);
+    assert.match(html, /data-atalho-filtro="SOB_ENCOMENDA"[^>]*>Sob Encomenda </);
     for (const filtro of ['""', '"DISPONIVEL"', '"SOB_ENCOMENDA"']) {
       assert.match(html, new RegExp(`data-atalho-filtro=${filtro}`));
       assert.match(html, new RegExp(`data-filtro=${filtro}`));
     }
   });
 
-  it('conta todos na Coleção, só pronta entrega livre em Disponíveis e só encomendas em Sob Encomenda', () => {
+  it('conta todos na Coleção, só pronta entrega livre em Pronta Entrega e só encomendas em Sob Encomenda', () => {
     const c = ctx.contagemFiltros(produtos);
     assert.equal(c[''], 4);
     assert.equal(c.DISPONIVEL, 2);
@@ -58,6 +60,12 @@ describe('vitrine: atalhos e pílulas de filtro', () => {
     for (const id of ['barraMaleta', 'finalizarPedido', 'enviarCliente', 'sairCliente', 'fotoProvador', 'maletaProvador', 'whatsappLink']) {
       assert.match(html, new RegExp(`id="${id}"[^>]*class="[^"]*\\bbtn\\b`), id);
     }
+  });
+
+  it('o botão principal é prateado como o "Coleção" e o atalho escolhido fica prateado', () => {
+    assert.match(html, /\.btn-primario, \.btn\.atalho-topo\[aria-pressed="true"\][^{]*\{ background: linear-gradient\(180deg, #f5f5f5/);
+    assert.match(html, /data-atalho-filtro="" aria-pressed="true"/);
+    assert.match(html, /querySelectorAll\('\[data-atalho-filtro\]'\)\.forEach\(a => a\.setAttribute\('aria-pressed'/);
   });
 
   it('as animações de orientação param com prefers-reduced-motion', () => {
