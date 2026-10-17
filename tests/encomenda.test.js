@@ -162,9 +162,10 @@ describe('vitrine: produtos Sob Encomenda', () => {
     assert.equal(ctx.calcularSinal(120), 60);
   });
 
-  it('mostra etiqueta verde DISPONÍVEL e azul SOB ENCOMENDA, e os dois vão para a maleta', () => {
-    const { cards } = vitrine([pronta, encomenda]);
-    assert.match(cards[0], /bg-green-100 text-green-700">DISPONÍVEL</);
+  it('só a encomenda ganha etiqueta (azul SOB ENCOMENDA), e os dois vão para a maleta', () => {
+    const { ctx, cards } = vitrine([pronta, encomenda]);
+    assert.doesNotMatch(cards[0], /DISPONÍVEL|SOB ENCOMENDA/);
+    assert.equal(ctx.etiquetaProduto(pronta).texto, 'DISPONÍVEL');
     assert.doesNotMatch(cards[0], /50% sinal/);
     assert.match(cards[0], /toggleMaleta\(1\)/);
 
@@ -179,10 +180,10 @@ describe('vitrine: produtos Sob Encomenda', () => {
   it('filtra Sob Encomenda e tira as encomendas de "Disponíveis"', () => {
     const so = vitrine([pronta, condicional, encomenda], 'SOB_ENCOMENDA').cards;
     assert.equal(so.length, 1);
-    assert.match(so[0], /CE-09/);
+    assert.match(so[0], /toggleMaleta\(3\)/);
     const disp = vitrine([pronta, condicional, encomenda], 'DISPONIVEL').cards;
     assert.equal(disp.length, 1);
-    assert.match(disp[0], /AV-01/);
+    assert.match(disp[0], /toggleMaleta\(1\)/);
     assert.equal(vitrine([pronta, condicional, encomenda], '').cards.length, 3);
   });
 });

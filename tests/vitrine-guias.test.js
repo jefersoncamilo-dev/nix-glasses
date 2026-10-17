@@ -47,12 +47,14 @@ describe('vitrine: atalhos e pílulas de filtro', () => {
     assert.equal(c.SOB_ENCOMENDA, 1);
   });
 
-  it('o texto de orientação explica o filtro e o próximo passo', () => {
-    assert.match(ctx.textoGuiaCatalogo('', 0), /Coleção completa.*\+ Maleta.*provar em casa/);
+  it('a orientação é uma linha: o primeiro passo na Coleção ou o que o filtro mostra', () => {
+    assert.match(ctx.textoGuiaCatalogo('', 0), /\+ Maleta.*provar em casa/);
     assert.match(ctx.textoGuiaCatalogo('DISPONIVEL', 0), /Pronta entrega/);
     assert.match(ctx.textoGuiaCatalogo('SOB_ENCOMENDA', 0), /sinal de 50%/);
-    assert.match(ctx.textoGuiaCatalogo('', 1), /1 modelo\. .*WhatsApp/);
-    assert.match(ctx.textoGuiaCatalogo('', 3), /3 modelos/);
+    // com modelos escolhidos a barra "Ver maleta" já mostra o próximo passo
+    assert.equal(ctx.textoGuiaCatalogo('', 2), '');
+    assert.match(ctx.textoGuiaCatalogo('SOB_ENCOMENDA', 2), /sinal de 50%/);
+    assert.doesNotMatch(html, /id="guiaCatalogo"[^>]*bg-orange-50/);
   });
 
   it('os botões de ação usam o padrão .btn (sem laranja/azul/verde soltos)', () => {
@@ -68,8 +70,28 @@ describe('vitrine: atalhos e pílulas de filtro', () => {
     assert.match(html, /querySelectorAll\('\[data-atalho-filtro\]'\)\.forEach\(a => a\.setAttribute\('aria-pressed'/);
   });
 
+  it('maleta: endereço editável que aparece depois do CEP e texto que serve para qualquer loja', () => {
+    assert.doesNotMatch(html, /id="(ruaCliente|bairroCliente|cidadeCliente)"[^>]*readonly/);
+    assert.match(html, /<div id="enderecoCliente" class="hidden /);
+    assert.match(extrairFuncao('mostrarEndereco'), /enderecoCliente'\)\.classList\.remove\('hidden'\)/);
+    assert.doesNotMatch(html, /Adicione óculos/);
+    assert.match(html, /id="verModelosMaleta"/);
+  });
+
+  it('o filtro de formato só aparece com dois formatos ou mais', () => {
+    const el = { innerHTML: '', appendChild() {}, classList: { toggle: (c, v) => { el.escondido = v; } } };
+    const c = vm.createContext({ document: { createElement: () => ({}) }, filtroFormato: el });
+    vm.runInContext(`${extrairFuncao('preencherFiltroFormato')}; this.f = preencherFiltroFormato;`, c);
+    c.produtos = [{ formato: 'Aviador' }, { formato: 'Aviador' }];
+    vm.runInContext('produtos = this.produtos; f();', c);
+    assert.equal(el.escondido, true);
+    c.produtos = [{ formato: 'Aviador' }, { formato: 'Redondo' }];
+    vm.runInContext('produtos = this.produtos; f();', c);
+    assert.equal(el.escondido, false);
+  });
+
   it('as animações de orientação param com prefers-reduced-motion', () => {
-    const bloco = html.match(/@media \(prefers-reduced-motion: reduce\) \{\s*\.guia-seta[^}]*\}/);
+    const bloco = html.match(/@media \(prefers-reduced-motion: reduce\) \{\s*\.guia-cutuca[^}]*\}/);
     assert.ok(bloco, 'faltou desligar as animações de guia');
   });
 });
