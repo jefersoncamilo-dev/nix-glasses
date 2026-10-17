@@ -2231,6 +2231,77 @@ async function startServer() {
     }
   }
 
+  // ---------- Zerar dados de teste ----------
+  // Apaga dados só do banco da empresa logada (req.db). Configurações da loja,
+  // logo, WhatsApp e login do admin ficam. Não tem volta: o painel pede para
+  // digitar ZERAR e o servidor confere de novo.
+  // escopo 'tudo': produtos, fotos, compras, clientes, pedidos/maletas, acertos e
+  //   encomendas, com a numeração (ids) voltando a 1.
+  // escopo 'produtos': só produtos, fotos e compras; o histórico de pedidos fica.
+  const CONFIRMACAO_ZERAR = 'ZERAR';
+
+  async function contarDadosDeTeste(db) {
+    const r = await db.query(`
+      SELECT (SELECT COUNT(*) FROM produtos)::int AS produtos,
+             (SELECT COUNT(*) FROM clientes)::int AS clientes,
+             (SELECT COUNT(*) FROM pedidos)::int AS pedidos,
+             (SELECT COUNT(*) FROM acertos)::int AS acertos,
+             (SELECT COUNT(*) FROM encomendas)::int AS encomendas,
+             (SELECT COUNT(*) FROM acessorios)::int AS acessorios
+    `);
+    return r.rows[0];
+  }
+
+  async function handleContagemZerar(req, res) {
+    try {
+      res.json(await contarDadosDeTeste(req.db));
+    } catch (err) {
+      console.error(err);
+      res.status(500).json({ error: 'Erro ao contar os dados' });
+    }
+  }
+
+  async function handleZerarDados(req, res) {
+    const { confirmacao, escopo, acessorios } = req.body || {};
+    if (confirmacao !== CONFIRMACAO_ZERAR) {
+      return res.status(400).json({ error: `Digite ${CONFIRMACAO_ZERAR} para confirmar` });
+    }
+    if (escopo !== 'tudo' && escopo !== 'produtos') {
+      return res.status(400).json({ error: 'Escolha o que zerar' });
+    }
+    let client;
+    try {
+      client = await req.db.connect();
+      await client.query('BEGIN');
+      const antes = await contarDadosDeTeste(client);
+      const logo = idDaImagem((await lojaDaEmpresa(req.empresa)).logo);
+      if (escopo === 'tudo') {
+        const tabelas = ['produtos', 'compras_fornecedor', 'acertos', 'pedidos', 'clientes', 'encomendas'];
+        if (acessorios === true) tabelas.push('acessorios');
+        await client.query(`TRUNCATE ${tabelas.join(', ')} RESTART IDENTITY`);
+        // Sem produtos, a única imagem que ainda serve é a logo
+        await client.query('DELETE FROM imagens WHERE id IS DISTINCT FROM $1', [logo]);
+      } else {
+        const fotos = await client.query(
+          `SELECT DISTINCT unnest(fotos || ARRAY[imagem_url]) AS url FROM produtos`
+        );
+        const ids = fotos.rows.map((r) => idDaImagem(r.url)).filter((id) => id && id !== logo);
+        await client.query('DELETE FROM produtos');
+        if (ids.length) await client.query('DELETE FROM imagens WHERE id = ANY($1)', [ids]);
+        if (acessorios === true) await client.query('DELETE FROM acessorios');
+      }
+      await client.query('COMMIT');
+      console.log(`[${req.empresa.slug}] dados zerados (escopo ${escopo}) por ${req.admin && req.admin.user}`);
+      res.json({ apagados: antes, agora: await contarDadosDeTeste(req.db) });
+    } catch (err) {
+      if (client) await client.query('ROLLBACK').catch(() => {});
+      console.error(err);
+      res.status(500).json({ error: 'Erro ao zerar os dados. Nada foi apagado.' });
+    } finally {
+      if (client) client.release();
+    }
+  }
+
   async function handleMetrics(req, res) {
     try {
       const totalEstoque = await req.db.query(
@@ -2332,6 +2403,8 @@ async function startServer() {
   app.put('/api/admin/loja', requireAdmin, handleUpdateLoja);
   app.post('/api/admin/loja/logo', requireAdmin, uploadImagem, handleUpdateLogo);
   app.delete('/api/admin/loja/logo', requireAdmin, handleDeleteLogo);
+  app.get('/api/admin/zerar', requireAdmin, handleContagemZerar);
+  app.post('/api/admin/zerar', requireAdmin, handleZerarDados);
   app.get('/api/admin/clientes', requireAdmin, handleListClientes);
   app.get('/api/admin/pedidos', requireAdmin, handleListPedidos);
   app.get('/api/admin/clientes/:id/perfil', requireAdmin, handlePerfilCliente);

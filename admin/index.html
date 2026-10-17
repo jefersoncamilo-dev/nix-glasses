@@ -565,6 +565,30 @@
           </div>
           <button id="btnSalvarLoja" class="mt-6 bg-orange-500 hover:bg-orange-600 text-white px-6 py-2 rounded-lg font-medium transition-colors">Salvar dados da loja</button>
         </div>
+
+        <!-- Zerar dados de teste: só o banco da empresa logada, com confirmação digitada -->
+        <div class="bg-white rounded-xl border border-red-200 p-6 max-w-xl mt-6">
+          <h4 class="text-base font-semibold text-red-700 mb-1">Zerar dados de teste</h4>
+          <p class="text-sm text-gray-600 mb-4">Apaga os dados desta loja para começar com os produtos reais. <strong>Não tem como desfazer.</strong> Antes, faça um backup do banco (no Neon: crie uma branch a partir da main). Nome, textos, logo, WhatsApp e login do admin continuam.</p>
+          <p id="zerarContagem" class="text-sm text-gray-700 mb-4">Carregando o que existe hoje...</p>
+          <div class="space-y-2 mb-4">
+            <label class="flex items-start gap-3">
+              <input type="radio" name="zerarEscopo" value="tudo" checked class="mt-1 h-4 w-4 accent-red-600">
+              <span class="text-sm text-gray-700"><strong>Tudo</strong><br><span class="text-gray-500">Produtos, fotos, compras, clientes, pedidos, maletas, acertos e encomendas. A numeração volta a 1.</span></span>
+            </label>
+            <label class="flex items-start gap-3">
+              <input type="radio" name="zerarEscopo" value="produtos" class="mt-1 h-4 w-4 accent-red-600">
+              <span class="text-sm text-gray-700"><strong>Só produtos</strong><br><span class="text-gray-500">Produtos, fotos e compras. Clientes e pedidos ficam.</span></span>
+            </label>
+            <label class="flex items-start gap-3 pt-2">
+              <input type="checkbox" id="zerarAcessorios" class="mt-1 h-4 w-4 accent-red-600">
+              <span class="text-sm text-gray-700">Apagar também os acessórios</span>
+            </label>
+          </div>
+          <label for="zerarConfirmacao" class="block text-sm font-medium text-gray-700 mb-1">Para confirmar, digite ZERAR</label>
+          <input type="text" id="zerarConfirmacao" autocomplete="off" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 mb-4">
+          <button id="btnZerarDados" disabled class="bg-red-600 hover:bg-red-700 disabled:opacity-40 disabled:cursor-not-allowed text-white px-6 py-2 rounded-lg font-medium transition-colors">Zerar dados</button>
+        </div>
       </div>
     </div>
   </main>
@@ -986,7 +1010,7 @@
         if (target === 'encomendas') carregarEncomendas();
         if (target === 'acessorios') carregarAcessorios();
         if (target === 'metricas') { carregarMetricas(); carregarResumoFornecedores(); carregarRelatorioMaletas(); }
-        if (target === 'config') { carregarWhatsApp(); carregarLoja(); }
+        if (target === 'config') { carregarWhatsApp(); carregarLoja(); carregarContagemZerar(); }
         sidebar.classList.remove('open');
         sidebarOverlay.classList.add('hidden');
       });
@@ -3450,6 +3474,57 @@
         mostrarToast('Logo removida');
       } catch (err) {
         mostrarToast(err.message, 'error');
+      }
+    });
+
+    // Zerar dados de teste
+    function textoContagemZerar(c) {
+      const partes = [['produtos', 'produto', 'produtos'], ['clientes', 'cliente', 'clientes'], ['pedidos', 'pedido', 'pedidos'],
+        ['acertos', 'acerto', 'acertos'], ['encomendas', 'encomenda', 'encomendas'], ['acessorios', 'acessório', 'acessórios']]
+        .map(([campo, um, varios]) => { const n = Number(c[campo]) || 0; return n + ' ' + (n === 1 ? um : varios); });
+      return 'Hoje existem ' + partes.join(', ') + '.';
+    }
+
+    async function carregarContagemZerar() {
+      const el = document.getElementById('zerarContagem');
+      try {
+        const res = await fetchAdmin('/api/admin/zerar');
+        if (!res.ok) throw new Error();
+        el.textContent = textoContagemZerar(await res.json());
+      } catch (err) {
+        el.textContent = 'Não foi possível contar os dados agora.';
+      }
+    }
+
+    document.getElementById('zerarConfirmacao').addEventListener('input', (e) => {
+      document.getElementById('btnZerarDados').disabled = e.target.value.trim() !== 'ZERAR';
+    });
+
+    document.getElementById('btnZerarDados').addEventListener('click', async () => {
+      const botao = document.getElementById('btnZerarDados');
+      const campo = document.getElementById('zerarConfirmacao');
+      botao.disabled = true;
+      try {
+        const res = await fetchAdmin('/api/admin/zerar', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            confirmacao: campo.value.trim(),
+            escopo: document.querySelector('input[name="zerarEscopo"]:checked').value,
+            acessorios: document.getElementById('zerarAcessorios').checked
+          })
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.error || 'Erro ao zerar os dados');
+        campo.value = '';
+        document.getElementById('zerarContagem').textContent = textoContagemZerar(data.agora);
+        mostrarToast('Dados zerados. Pode cadastrar os produtos reais.');
+        carregarProdutos();
+        carregarPedidosGeral();
+        carregarEncomendas();
+      } catch (err) {
+        mostrarToast(err.message, 'error');
+        botao.disabled = campo.value.trim() !== 'ZERAR';
       }
     });
 
