@@ -4,24 +4,93 @@ const multer = require('multer');
 const path = require('path');
 const cors = require('cors');
 const crypto = require('crypto');
-const { pool, initTables } = require('./db');
+const fs = require('fs');
+const { criarPool, initTables } = require('./db');
+const { lerEmpresas, empresaDoHost } = require('./empresas');
+const { CAMPOS_TEXTO, RECURSOS, limparTextoLoja, montarLoja, renderizarPagina } = require('./loja');
 const { importarProduto, ErroImportacao } = require('./importar-produto');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+// Empresas atendidas por este serviço (ver empresas.js). Cada uma com o seu banco.
+const EMPRESAS = lerEmpresas(process.env);
+for (const empresa of EMPRESAS) empresa.pool = criarPool(empresa.databaseUrl);
+
 app.use(cors());
 app.use(express.json());
+
+// Empresa da requisição pelo endereço (Host). Todas as rotas usam req.db, o banco dela.
+function escolherEmpresa(req, res, next) {
+  req.empresa = empresaDoHost(EMPRESAS, req.hostname);
+  if (!req.empresa) {
+    return res.status(404).type('text').send('Loja não encontrada neste endereço.');
+  }
+  req.db = req.empresa.pool;
+  next();
+}
+// Health check do Render: responde antes de escolher a empresa, então não depende do endereço.
+app.get('/saude', (req, res) => res.type('text').send('ok'));
+app.use(escolherEmpresa);
+
+// Dados da loja (nome, textos, logo, recursos) por empresa, guardados em memória
+// até o admin salvar de novo. Só um processo no Render, então o cache não fica velho.
+const cacheLoja = new Map();
+async function lojaDaEmpresa(empresa) {
+  if (!cacheLoja.has(empresa.slug)) {
+    const { rows } = await empresa.pool.query(`SELECT chave, valor FROM configuracoes WHERE chave LIKE 'loja\\_%'`);
+    cacheLoja.set(empresa.slug, montarLoja(empresa, rows));
+  }
+  return cacheLoja.get(empresa.slug);
+}
+
 // Serve front-end estático (site público + admin) — necessário no Render.
 // Só arquivos da lista abaixo saem da raiz: server.js, db.js, .env, package*.json,
 // node_modules/ e scripts/ NUNCA podem ser servidos.
-const PUBLIC_ROOT_FILES = new Set(['index.html', 'logo.png', 'favicon.ico', 'apple-touch-icon.png', 'robots.txt']);
-app.get('/', (req, res) => res.sendFile(path.join(__dirname, 'index.html')));
+// As páginas HTML saem com os textos da loja da empresa (loja.js).
+const PAGINAS = new Map([
+  ['/', 'index.html'],
+  ['/index.html', 'index.html'],
+  ['/admin/', 'admin/index.html'],
+  ['/admin/index.html', 'admin/index.html'],
+  ['/admin/login.html', 'admin/login.html'],
+  ['/admin/acerto.html', 'admin/acerto.html'],
+]);
+const cachePaginas = new Map();
+async function servirPagina(req, res, next) {
+  const arquivo = PAGINAS.get(req.path);
+  if (!arquivo) return next();
+  try {
+    if (!cachePaginas.has(arquivo)) cachePaginas.set(arquivo, fs.readFileSync(path.join(__dirname, arquivo), 'utf8'));
+    const html = renderizarPagina(cachePaginas.get(arquivo), await lojaDaEmpresa(req.empresa));
+    res.set('Cache-Control', 'no-cache').type('html').send(html);
+  } catch (err) {
+    next(err);
+  }
+}
+app.get([...PAGINAS.keys()], servirPagina);
+
+// Logo: a enviada no painel (no banco da empresa) ou, na empresa padrão, o logo.png do repositório.
+// Os ícones do navegador (favicon) são os da Nix: as outras empresas ficam sem.
+async function servirLogo(req, res, next) {
+  try {
+    const { logo } = await lojaDaEmpresa(req.empresa);
+    if (logo) return res.redirect(302, logo);
+  } catch (err) {
+    return next(err);
+  }
+  if (!req.empresa.padrao) return res.status(404).end();
+  next();
+}
+app.get('/logo.png', servirLogo);
+const PUBLIC_ROOT_FILES = new Set(['logo.png', 'favicon.ico', 'apple-touch-icon.png', 'robots.txt']);
+const SO_DA_PADRAO = new Set(['favicon.ico', 'apple-touch-icon.png']);
 app.get('/:file', (req, res, next) => {
   if (!PUBLIC_ROOT_FILES.has(req.params.file)) return next();
+  if (SO_DA_PADRAO.has(req.params.file) && !req.empresa.padrao) return res.status(404).end();
   res.sendFile(path.join(__dirname, req.params.file), (err) => err && next());
 });
-app.use('/admin', express.static(path.join(__dirname, 'admin')));
+app.use('/admin', express.static(path.join(__dirname, 'admin'), { index: false }));
 
 // Só imagens comuns; SVG/HTML ficam de fora porque seriam servidos pelo mesmo domínio em /imagens.
 // O tipo gravado vem da assinatura do arquivo (bytes iniciais), não do que o cliente declarou.
@@ -132,17 +201,19 @@ function sanitizeWhatsapp(num) {
 // ---------- Auth admin (login + token, sem dependências externas) ----------
 // Env: ADMIN_USER, ADMIN_PASS_HASH (formato salt:hashHex via scrypt), JWT_SECRET.
 // Senha NUNCA é commitada: gere com `node scripts/generate-admin-hash.js "sua-senha-forte"`.
-function getAuthConfig() {
+// Cada empresa tem o seu login (empresas.js). O segredo dos tokens é derivado por
+// empresa, então o token do admin de uma loja não abre o painel de outra. A empresa
+// padrão usa o JWT_SECRET puro, como antes (sessões abertas continuam valendo).
+function getAuthConfig(empresa) {
   return {
-    user: process.env.ADMIN_USER || '',
-    passHash: process.env.ADMIN_PASS_HASH || '',
-    secret: process.env.JWT_SECRET || process.env.ADMIN_TOKEN_SECRET || '',
+    user: empresa.adminUser,
+    passHash: empresa.adminPassHash,
   };
 }
 
 let _fallbackSecret = null;
-function getTokenSecret() {
-  const { secret } = getAuthConfig();
+function segredoBase() {
+  const secret = process.env.JWT_SECRET || process.env.ADMIN_TOKEN_SECRET || '';
   if (secret) return secret;
   if (!_fallbackSecret) {
     _fallbackSecret = crypto.randomBytes(32).toString('hex');
@@ -151,8 +222,13 @@ function getTokenSecret() {
   return _fallbackSecret;
 }
 
-function isAdminAuthEnabled() {
-  const { user, passHash } = getAuthConfig();
+function getTokenSecret(empresa) {
+  if (empresa.padrao) return segredoBase();
+  return crypto.createHmac('sha256', segredoBase()).update(`empresa:${empresa.slug}`).digest('hex');
+}
+
+function isAdminAuthEnabled(empresa) {
+  const { user, passHash } = getAuthConfig(empresa);
   return !!(user && passHash);
 }
 
@@ -181,18 +257,18 @@ function verifyPassword(pass, stored) {
   }
 }
 
-function signToken(username, expiresInHours = 12) {
+function signToken(empresa, username, expiresInHours = 12) {
   const now = Math.floor(Date.now() / 1000);
   const payload = { u: username, iat: now, exp: now + expiresInHours * 3600 };
   const body = b64urlEncode(payload);
-  const sig = crypto.createHmac('sha256', getTokenSecret()).update(body).digest('hex');
+  const sig = crypto.createHmac('sha256', getTokenSecret(empresa)).update(body).digest('hex');
   return `${body}.${sig}`;
 }
 
-function verifyToken(token) {
+function verifyToken(empresa, token) {
   const [body, sig] = String(token || '').split('.');
   if (!body || !sig) throw new Error('Token inválido');
-  const expected = crypto.createHmac('sha256', getTokenSecret()).update(body).digest('hex');
+  const expected = crypto.createHmac('sha256', getTokenSecret(empresa)).update(body).digest('hex');
   const a = Buffer.from(String(sig));
   const b = Buffer.from(expected);
   if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) throw new Error('Token inválido');
@@ -203,14 +279,14 @@ function verifyToken(token) {
 
 function requireAdmin(req, res, next) {
   // Sem ADMIN_USER/ADMIN_PASS_HASH configurados, o admin fica FECHADO (nunca aberto por padrão).
-  if (!isAdminAuthEnabled()) {
+  if (!isAdminAuthEnabled(req.empresa)) {
     return res.status(503).json({ error: 'Admin não configurado (defina ADMIN_USER e ADMIN_PASS_HASH)' });
   }
   const h = req.headers.authorization || '';
   const token = h.startsWith('Bearer ') ? h.slice(7) : null;
   if (!token) return res.status(401).json({ error: 'Não autorizado' });
   try {
-    req.admin = verifyToken(token);
+    req.admin = verifyToken(req.empresa, token);
     return next();
   } catch (e) {
     return res.status(401).json({ error: 'Sessão expirada. Faça login novamente.' });
@@ -222,10 +298,10 @@ async function handleLogin(req, res) {
   const loginUser = user || username || '';
   const loginPass = password || pass || '';
 
-  if (!isAdminAuthEnabled()) {
+  if (!isAdminAuthEnabled(req.empresa)) {
     return res.status(500).json({ error: 'Login admin não configurado (defina ADMIN_USER e ADMIN_PASS_HASH)' });
   }
-  const cfg = getAuthConfig();
+  const cfg = getAuthConfig(req.empresa);
   const userOk =
     String(loginUser).length === String(cfg.user).length &&
     crypto.timingSafeEqual(Buffer.from(String(loginUser)), Buffer.from(String(cfg.user)));
@@ -235,7 +311,7 @@ async function handleLogin(req, res) {
     // Resposta genérica para não vazar qual campo errou
     return res.status(401).json({ error: 'Usuário ou senha inválidos' });
   }
-  const token = signToken(cfg.user);
+  const token = signToken(req.empresa, cfg.user);
   res.json({ token, expiresIn: '12h', user: cfg.user });
 }
 
@@ -261,21 +337,21 @@ async function conferirSenhaCliente(senha, stored) {
 // Usado quando o e-mail não existe, para o login levar o mesmo tempo nos dois casos
 const HASH_FALSO = `${'0'.repeat(32)}:${'0'.repeat(128)}`;
 
-function chaveTokenCliente() {
-  return crypto.createHmac('sha256', getTokenSecret()).update('nix-glasses:clientes').digest();
+function chaveTokenCliente(empresa) {
+  return crypto.createHmac('sha256', getTokenSecret(empresa)).update('nix-glasses:clientes').digest();
 }
 
-function assinarTokenCliente(id, dias = 30) {
+function assinarTokenCliente(empresa, id, dias = 30) {
   const now = Math.floor(Date.now() / 1000);
   const body = b64urlEncode({ c: id, t: 'cliente', iat: now, exp: now + dias * 86400 });
-  return `${body}.${crypto.createHmac('sha256', chaveTokenCliente()).update(body).digest('hex')}`;
+  return `${body}.${crypto.createHmac('sha256', chaveTokenCliente(empresa)).update(body).digest('hex')}`;
 }
 
-function verificarTokenCliente(token) {
+function verificarTokenCliente(empresa, token) {
   const [body, sig] = String(token || '').split('.');
   if (!body || !sig) throw new Error('Token inválido');
   const a = Buffer.from(sig);
-  const b = Buffer.from(crypto.createHmac('sha256', chaveTokenCliente()).update(body).digest('hex'));
+  const b = Buffer.from(crypto.createHmac('sha256', chaveTokenCliente(empresa)).update(body).digest('hex'));
   if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) throw new Error('Token inválido');
   const payload = JSON.parse(b64urlDecode(body));
   if (payload.t !== 'cliente' || !Number.isInteger(payload.c)) throw new Error('Token inválido');
@@ -322,13 +398,13 @@ async function handleCadastroCliente(req, res) {
   }
   const nomeOk = typeof nome === 'string' ? nome.trim().replace(/\s+/g, ' ').slice(0, 100) : '';
   try {
-    const { rows } = await pool.query(
+    const { rows } = await req.db.query(
       `INSERT INTO clientes (email, nome, senha_hash) VALUES ($1, $2, $3)
        ON CONFLICT (email) DO NOTHING RETURNING id, email, nome`,
       [emailOk, nomeOk, await hashSenhaCliente(senha)]
     );
     if (!rows.length) return res.status(409).json({ error: 'Já existe uma conta com este e-mail. Faça login.' });
-    res.status(201).json({ token: assinarTokenCliente(rows[0].id), cliente: clientePublico(rows[0]) });
+    res.status(201).json({ token: assinarTokenCliente(req.empresa, rows[0].id), cliente: clientePublico(rows[0]) });
   } catch (err) {
     console.error('Erro ao cadastrar cliente:', err);
     res.status(500).json({ error: 'Erro ao criar conta' });
@@ -339,18 +415,19 @@ async function handleLoginCliente(req, res) {
   const { email, senha } = req.body || {};
   const emailOk = validarEmailCliente(email);
   if (!emailOk || typeof senha !== 'string') return res.status(401).json({ error: 'E-mail ou senha inválidos' });
-  if (loginBloqueado(emailOk)) {
+  const chaveTentativas = `${req.empresa.slug}:${emailOk}`;
+  if (loginBloqueado(chaveTentativas)) {
     return res.status(429).json({ error: 'Muitas tentativas. Aguarde alguns minutos e tente de novo.' });
   }
   try {
-    const { rows } = await pool.query('SELECT id, email, nome, senha_hash FROM clientes WHERE email = $1', [emailOk]);
+    const { rows } = await req.db.query('SELECT id, email, nome, senha_hash FROM clientes WHERE email = $1', [emailOk]);
     const ok = await conferirSenhaCliente(senha.slice(0, SENHA_MAX), rows[0] ? rows[0].senha_hash : HASH_FALSO);
     if (!rows[0] || !ok) {
-      registrarFalhaLogin(emailOk);
+      registrarFalhaLogin(chaveTentativas);
       return res.status(401).json({ error: 'E-mail ou senha inválidos' });
     }
-    tentativasLogin.delete(emailOk);
-    res.json({ token: assinarTokenCliente(rows[0].id), cliente: clientePublico(rows[0]) });
+    tentativasLogin.delete(chaveTentativas);
+    res.json({ token: assinarTokenCliente(req.empresa, rows[0].id), cliente: clientePublico(rows[0]) });
   } catch (err) {
     console.error('Erro no login do cliente:', err);
     res.status(500).json({ error: 'Erro ao entrar' });
@@ -361,12 +438,12 @@ async function handleClienteAtual(req, res) {
   const h = req.headers.authorization || '';
   let payload;
   try {
-    payload = verificarTokenCliente(h.startsWith('Bearer ') ? h.slice(7) : '');
+    payload = verificarTokenCliente(req.empresa, h.startsWith('Bearer ') ? h.slice(7) : '');
   } catch {
     return res.status(401).json({ error: 'Sessão expirada. Entre novamente.' });
   }
   try {
-    const { rows } = await pool.query('SELECT id, email, nome FROM clientes WHERE id = $1', [payload.c]);
+    const { rows } = await req.db.query('SELECT id, email, nome FROM clientes WHERE id = $1', [payload.c]);
     if (!rows.length) return res.status(401).json({ error: 'Conta não encontrada' });
     res.json({ cliente: clientePublico(rows[0]) });
   } catch (err) {
@@ -384,7 +461,7 @@ function clienteDoToken(req) {
   const h = req.headers.authorization || '';
   if (!h.startsWith('Bearer ')) return null;
   try {
-    return verificarTokenCliente(h.slice(7)).c;
+    return verificarTokenCliente(req.empresa, h.slice(7)).c;
   } catch {
     return null;
   }
@@ -702,11 +779,29 @@ function calcularFechamento(itens, extras, desconto) {
   };
 }
 
-async function startServer() {
-  if (!isAdminAuthEnabled()) {
-    console.warn('[auth] ADMIN_USER/ADMIN_PASS_HASH não definidos: rotas admin ficarão bloqueadas (503).');
+// Cada banco guarda de qual empresa ele é. Se duas empresas apontarem para o mesmo banco
+// (mesmo com connection strings diferentes), a segunda encontra a marca da primeira e o
+// boot para, em vez de misturar os dados.
+async function conferirDonoDoBanco(empresa) {
+  await empresa.pool.query(
+    `INSERT INTO configuracoes (chave, valor) VALUES ('empresa_dona', $1) ON CONFLICT (chave) DO NOTHING`,
+    [empresa.slug]
+  );
+  const { rows } = await empresa.pool.query(`SELECT valor FROM configuracoes WHERE chave = 'empresa_dona'`);
+  if (rows[0].valor !== empresa.slug) {
+    throw new Error(`O banco da empresa "${empresa.slug}" já é da empresa "${rows[0].valor}": cada empresa precisa do seu banco`);
   }
-  await initTables();
+}
+
+async function startServer() {
+  for (const empresa of EMPRESAS) {
+    if (!isAdminAuthEnabled(empresa)) {
+      console.warn(`[auth] Empresa "${empresa.slug}": login do admin não definido, rotas admin ficarão bloqueadas (503).`);
+    }
+    await initTables(empresa.pool);
+    await conferirDonoDoBanco(empresa);
+  }
+  console.log(`Empresas: ${EMPRESAS.map((e) => e.slug).join(', ')}`);
 
   // ---------- Handlers reutilizáveis ----------
 
@@ -714,7 +809,7 @@ async function startServer() {
 
   async function handleListPublicos(req, res) {
     try {
-      const result = await pool.query(
+      const result = await req.db.query(
         `SELECT id, nome, nome_curto, codigo_sku, preco_venda, imagem_url, fotos, status, disponibilidade, formato, estilo, cor_armacao,
                 diametro_cm, ponte_cm, largura_total_cm, material, tipo
          FROM produtos
@@ -732,7 +827,7 @@ async function startServer() {
   // compra anterior (para a variação de preço do fornecedor).
   async function handleListAdmin(req, res) {
     try {
-      const result = await pool.query(
+      const result = await req.db.query(
         `SELECT p.id, p.nome, p.nome_curto, p.codigo_sku, p.preco_custo, p.preco_venda, p.imagem_url, p.fotos, p.status, p.disponibilidade,
                 p.formato, p.estilo, p.cor_armacao, p.diametro_cm, p.ponte_cm, p.largura_total_cm, p.material, p.tipo,
                 p.fornecedor, p.codigo_fornecedor, p.link_fornecedor, p.vezes_em_maleta, p.pedido_condicional_id,
@@ -759,7 +854,7 @@ async function startServer() {
 
   async function handleListConditional(req, res) {
     try {
-      const result = await pool.query(
+      const result = await req.db.query(
         `SELECT id, nome, nome_curto, codigo_sku, preco_custo, preco_venda, imagem_url, fotos, status, disponibilidade, formato, estilo, cor_armacao, diametro_cm, ponte_cm, largura_total_cm, material, tipo, fornecedor, codigo_fornecedor, link_fornecedor, vezes_em_maleta
          FROM produtos
          WHERE status = 'CONDICIONAL'
@@ -800,7 +895,7 @@ async function startServer() {
 
     let client;
     try {
-      client = await pool.connect();
+      client = await req.db.connect();
       await client.query('BEGIN');
       const fotos = [];
       for (const file of req.fotosEnviadas || []) {
@@ -851,7 +946,7 @@ async function startServer() {
 
     let client;
     try {
-      client = await pool.connect();
+      client = await req.db.connect();
       await client.query('BEGIN');
 
       const fields = [];
@@ -967,7 +1062,7 @@ async function startServer() {
 
     let client;
     try {
-      client = await pool.connect();
+      client = await req.db.connect();
       const existentes = await client.query(
         `SELECT lower(codigo_sku) AS sku, lower(fornecedor) AS fornecedor, lower(codigo_fornecedor) AS codigo
          FROM produtos
@@ -1025,7 +1120,7 @@ async function startServer() {
     const id = idProduto(req.params.id);
     if (!id) return res.status(404).json({ error: 'Produto não encontrado' });
     try {
-      const { rows } = await pool.query(
+      const { rows } = await req.db.query(
         `SELECT id, fornecedor, preco_custo, quantidade, origem, to_char(data_compra, 'YYYY-MM-DD') AS data_compra, created_at
          FROM compras_fornecedor WHERE produto_id = $1
          ORDER BY data_compra DESC, id DESC LIMIT 100`,
@@ -1061,7 +1156,7 @@ async function startServer() {
 
     let client;
     try {
-      client = await pool.connect();
+      client = await req.db.connect();
       await client.query('BEGIN');
       const prod = await client.query('SELECT id, fornecedor, status FROM produtos WHERE id = $1 FOR UPDATE', [id]);
       if (!prod.rows.length) {
@@ -1097,7 +1192,7 @@ async function startServer() {
   // custo na última compra e a variação média (última vs. anterior).
   async function handleResumoFornecedores(req, res) {
     try {
-      const { rows } = await pool.query(
+      const { rows } = await req.db.query(
         `WITH ult AS (
            SELECT p.fornecedor, uc.data_compra, uc.preco_custo AS custo_ult, ca.preco_custo AS custo_ant
            FROM produtos p
@@ -1159,7 +1254,7 @@ async function startServer() {
 
     let client;
     try {
-      client = await pool.connect();
+      client = await req.db.connect();
       await client.query('BEGIN');
 
       const result = await client.query(
@@ -1212,7 +1307,7 @@ async function startServer() {
   // Admin: clientes com resumo dos pedidos (nunca devolve senha_hash)
   async function handleListClientes(req, res) {
     try {
-      const { rows } = await pool.query(
+      const { rows } = await req.db.query(
         `SELECT c.id, c.email, c.nome, c.created_at,
                 COUNT(p.id)::int AS pedidos,
                 COALESCE(SUM(p.total), 0) AS total_pedidos,
@@ -1256,7 +1351,7 @@ async function startServer() {
     }
     const where = condicoes.length ? `WHERE ${condicoes.join(' AND ')}` : '';
     try {
-      res.json(await listarPedidos(pool, where, params));
+      res.json(await listarPedidos(req.db, where, params));
     } catch (err) {
       console.error(err);
       res.status(500).json({ error: 'Erro ao buscar pedidos' });
@@ -1319,15 +1414,15 @@ async function startServer() {
     if (!/^\d{1,9}$/.test(req.params.id)) return res.status(400).json({ error: 'Cliente inválido' });
     const id = Number(req.params.id);
     try {
-      const cli = (await pool.query('SELECT id, email, nome, created_at FROM clientes WHERE id = $1', [id])).rows[0];
+      const cli = (await req.db.query('SELECT id, email, nome, created_at FROM clientes WHERE id = $1', [id])).rows[0];
       if (!cli) return res.status(404).json({ error: 'Cliente não encontrada' });
-      const pedidos = await listarPedidos(pool, 'WHERE p.cliente_id = $1', [id]);
-      const encomendas = (await pool.query(
+      const pedidos = await listarPedidos(req.db, 'WHERE p.cliente_id = $1', [id]);
+      const encomendas = (await req.db.query(
         `SELECT ${CAMPOS_ENCOMENDA} FROM encomendas
          WHERE cliente_id = $1 OR pedido_id IN (SELECT id FROM pedidos WHERE cliente_id = $1)
          ORDER BY created_at DESC, id DESC`, [id])).rows;
-      const maletas = await carregarMaletas(pool, 'p.cliente_id = $1', [id]);
-      const acertos = (await pool.query(
+      const maletas = await carregarMaletas(req.db, 'p.cliente_id = $1', [id]);
+      const acertos = (await req.db.query(
         `SELECT a.id, a.pedido_id, a.observacoes, a.created_at,
                 COALESCE((SELECT json_agg(json_build_object('id', pr.id, 'nome', pr.nome, 'codigo_sku', pr.codigo_sku, 'preco', pr.preco_venda) ORDER BY pr.id)
                           FROM produtos pr WHERE pr.id = ANY(a.comprados)), '[]') AS comprados,
@@ -1337,7 +1432,7 @@ async function startServer() {
          WHERE p.cliente_id = $1 ORDER BY a.created_at DESC, a.id DESC`, [id])).rows;
       // Histórico de provas: cada peça que ela recebeu numa maleta, com o resultado e a foto atual
       const provas = maletas.flatMap(m => m.pecas.map(pc => ({ ...pc, pedido_id: m.pedido_id, data: m.enviada_em })));
-      const fotos = new Map((await pool.query('SELECT id, imagem_url FROM produtos WHERE id = ANY($1)', [provas.map(p => p.produto_id)])).rows
+      const fotos = new Map((await req.db.query('SELECT id, imagem_url FROM produtos WHERE id = ANY($1)', [provas.map(p => p.produto_id)])).rows
         .map(r => [r.id, r.imagem_url]));
       for (const p of provas) p.imagem_url = fotos.get(p.produto_id) || null;
       const entregues = pedidos.filter(p => p.status === 'ENTREGUE');
@@ -1369,8 +1464,8 @@ async function startServer() {
     const params = dias ? [Number(dias)] : [];
     const periodo = (col) => (dias ? `${col} >= CURRENT_TIMESTAMP - make_interval(days => $1)` : '');
     try {
-      const maletas = await carregarMaletas(pool, periodo('p.maleta_enviada_em'), params);
-      const avulsos = (await pool.query(
+      const maletas = await carregarMaletas(req.db, periodo('p.maleta_enviada_em'), params);
+      const avulsos = (await req.db.query(
         `SELECT COALESCE(SUM(cardinality(comprados)), 0)::int AS vendidas, COALESCE(SUM(cardinality(devolvidos)), 0)::int AS devolvidas,
                 COUNT(*)::int AS acertos
          FROM acertos WHERE pedido_id IS NULL ${dias ? 'AND ' + periodo('created_at') : ''}`, params)).rows[0];
@@ -1405,7 +1500,7 @@ async function startServer() {
 
     let client;
     try {
-      client = await pool.connect();
+      client = await req.db.connect();
       await client.query('BEGIN');
       const { rows } = await client.query('SELECT id, itens, status FROM pedidos WHERE id = $1 FOR UPDATE', [pedidoId]);
       if (!rows.length) {
@@ -1497,7 +1592,7 @@ async function startServer() {
     }
     let client;
     try {
-      client = await pool.connect();
+      client = await req.db.connect();
       await client.query('BEGIN');
       const { rows } = await client.query('SELECT id, status, extras FROM pedidos WHERE id = $1 FOR UPDATE', [pedidoId]);
       if (!rows.length) {
@@ -1557,7 +1652,7 @@ async function startServer() {
       res.status(status).json(payload);
     };
     try {
-      client = await pool.connect();
+      client = await req.db.connect();
       await client.query('BEGIN');
       const { rows } = await client.query('SELECT * FROM pedidos WHERE id = $1 FOR UPDATE', [pedidoId]);
       if (!rows.length) return falhar(404, { error: 'Pedido não encontrado' });
@@ -1710,7 +1805,7 @@ async function startServer() {
       condicoes.push(`cliente_id = $${params.length}`);
     }
     try {
-      const { rows } = await pool.query(
+      const { rows } = await req.db.query(
         `SELECT ${CAMPOS_ENCOMENDA} FROM encomendas ${condicoes.length ? 'WHERE ' + condicoes.join(' AND ') : ''}
          ORDER BY created_at DESC, id DESC LIMIT 300`, params);
       res.json(rows);
@@ -1729,7 +1824,7 @@ async function startServer() {
     const clienteId = req.body.cliente_id === undefined || req.body.cliente_id === null || req.body.cliente_id === '' ? null : Number(req.body.cliente_id);
     if (clienteId !== null && !(Number.isInteger(clienteId) && clienteId > 0 && clienteId < 2 ** 31)) return res.status(400).json({ error: 'Cliente inválido' });
     try {
-      const { rows } = await pool.query(
+      const { rows } = await req.db.query(
         `INSERT INTO encomendas (cliente_id, origem, nome_cliente, telefone, modelo, codigo_sku, especificacoes, valor, sinal_pago, status, observacoes)
          VALUES ((SELECT id FROM clientes WHERE id = $1), 'MANUAL', $2, $3, $4, $5, $6, $7, $8, $9, $10)
          RETURNING ${CAMPOS_ENCOMENDA}`,
@@ -1750,7 +1845,7 @@ async function startServer() {
     if (!campos.length) return res.status(400).json({ error: 'Nada para alterar' });
     if (e.modelo === '') return res.status(400).json({ error: 'Informe o modelo encomendado' });
     try {
-      const atual = await pool.query('SELECT valor, sinal_pago FROM encomendas WHERE id = $1', [Number(req.params.id)]);
+      const atual = await req.db.query('SELECT valor, sinal_pago FROM encomendas WHERE id = $1', [Number(req.params.id)]);
       if (!atual.rows.length) return res.status(404).json({ error: 'Encomenda não encontrada' });
       const valor = e.valor !== undefined ? e.valor : Number(atual.rows[0].valor);
       const sinal = e.sinal_pago !== undefined ? e.sinal_pago : Number(atual.rows[0].sinal_pago);
@@ -1761,7 +1856,7 @@ async function startServer() {
         params.push(e.status === 'ENTREGUE');
         sets.push(`entregue_em = CASE WHEN $${params.length}::boolean THEN COALESCE(entregue_em, CURRENT_TIMESTAMP) ELSE NULL END`);
       }
-      const { rows } = await pool.query(
+      const { rows } = await req.db.query(
         `UPDATE encomendas SET ${sets.join(', ')}, updated_at = CURRENT_TIMESTAMP WHERE id = $1 RETURNING ${CAMPOS_ENCOMENDA}`,
         params
       );
@@ -1789,7 +1884,7 @@ async function startServer() {
       res.status(status).json(payload);
     };
     try {
-      client = await pool.connect();
+      client = await req.db.connect();
       await client.query('BEGIN');
       const { rows } = await client.query('SELECT * FROM pedidos WHERE id = $1 FOR UPDATE', [pedidoId]);
       if (!rows.length) return falhar(404, { error: 'Pedido não encontrado' });
@@ -1848,7 +1943,7 @@ async function startServer() {
 
   async function handleListAcessorios(req, res) {
     try {
-      const { rows } = await pool.query(
+      const { rows } = await req.db.query(
         'SELECT id, nome, preco_venda, estoque, ativo, updated_at FROM acessorios ORDER BY ativo DESC, nome, id');
       res.json(rows);
     } catch (err) {
@@ -1861,7 +1956,7 @@ async function startServer() {
     const a = lerAcessorio(req.body);
     if (a.erro) return res.status(400).json({ error: a.erro });
     try {
-      const { rows } = await pool.query(
+      const { rows } = await req.db.query(
         `INSERT INTO acessorios (nome, preco_venda, estoque, ativo) VALUES ($1, $2, $3, $4)
          RETURNING id, nome, preco_venda, estoque, ativo, updated_at`,
         [a.nome, Math.round(a.preco * 100) / 100, a.estoque, a.ativo]
@@ -1878,7 +1973,7 @@ async function startServer() {
     const a = lerAcessorio(req.body);
     if (a.erro) return res.status(400).json({ error: a.erro });
     try {
-      const { rows } = await pool.query(
+      const { rows } = await req.db.query(
         `UPDATE acessorios SET nome = $2, preco_venda = $3, estoque = $4, ativo = $5, updated_at = CURRENT_TIMESTAMP
          WHERE id = $1 RETURNING id, nome, preco_venda, estoque, ativo, updated_at`,
         [Number(req.params.id), a.nome, Math.round(a.preco * 100) / 100, a.estoque, a.ativo]
@@ -1905,7 +2000,7 @@ async function startServer() {
         let resolvedId = id;
         if (!resolvedId && sku) {
           try {
-            const found = await pool.query(`SELECT id FROM produtos WHERE codigo_sku = $1`, [sku]);
+            const found = await req.db.query(`SELECT id FROM produtos WHERE codigo_sku = $1`, [sku]);
             if (found.rows[0]) resolvedId = found.rows[0].id;
           } catch (e) {
             console.error('Erro ao resolver SKU:', e);
@@ -1944,7 +2039,7 @@ async function startServer() {
 
     let client;
     try {
-      client = await pool.connect();
+      client = await req.db.connect();
       await client.query('BEGIN');
 
       // Só produtos em CONDICIONAL participam do acerto: evita que um produto
@@ -2005,7 +2100,7 @@ async function startServer() {
 
   async function handleListAcertos(req, res) {
     try {
-      const result = await pool.query(
+      const result = await req.db.query(
         `SELECT id, comprados, devolvidos, observacoes, pedido_id, created_at
          FROM acertos
          ORDER BY created_at DESC
@@ -2020,7 +2115,7 @@ async function startServer() {
 
   async function handleGetWhatsapp(req, res) {
     try {
-      const result = await pool.query(
+      const result = await req.db.query(
         `SELECT valor FROM configuracoes WHERE chave = 'whatsapp_number'`
       );
       const raw = result.rows[0]?.valor || '';
@@ -2042,7 +2137,7 @@ async function startServer() {
     }
 
     try {
-      await pool.query(
+      await req.db.query(
         `INSERT INTO configuracoes (chave, valor) VALUES ('whatsapp_number', $1)
          ON CONFLICT (chave) DO UPDATE SET valor = $1`,
         [whatsapp]
@@ -2054,25 +2149,107 @@ async function startServer() {
     }
   }
 
+  // ---------- Dados da loja (nome, textos da vitrine, logo, recursos) ----------
+  async function handleGetLoja(req, res) {
+    try {
+      res.json(await lojaDaEmpresa(req.empresa));
+    } catch (err) {
+      console.error(err);
+      res.status(500).json({ error: 'Erro ao buscar dados da loja' });
+    }
+  }
+
+  async function salvarConfiguracoes(db, pares) {
+    for (const [chave, valor] of pares) {
+      await db.query(
+        `INSERT INTO configuracoes (chave, valor) VALUES ($1, $2)
+         ON CONFLICT (chave) DO UPDATE SET valor = $2`,
+        [chave, valor]
+      );
+    }
+  }
+
+  // Só os campos enviados mudam. Texto vazio volta ao padrão da empresa.
+  async function handleUpdateLoja(req, res) {
+    const corpo = req.body || {};
+    const pares = [];
+    for (const campo of Object.keys(CAMPOS_TEXTO)) {
+      if (corpo[campo] === undefined) continue;
+      const v = limparTextoLoja(campo, corpo[campo]);
+      if (v === null) return res.status(400).json({ error: `Campo "${campo}" inválido` });
+      pares.push(['loja_' + campo, v]);
+    }
+    for (const r of RECURSOS) {
+      if (corpo[r] === undefined) continue;
+      if (typeof corpo[r] !== 'boolean') return res.status(400).json({ error: `Campo "${r}" inválido` });
+      pares.push(['loja_' + r, corpo[r] ? '1' : '0']);
+    }
+    try {
+      await salvarConfiguracoes(req.db, pares);
+      cacheLoja.delete(req.empresa.slug);
+      res.json(await lojaDaEmpresa(req.empresa));
+    } catch (err) {
+      console.error(err);
+      res.status(500).json({ error: 'Erro ao salvar dados da loja' });
+    }
+  }
+
+  // Logo enviada no painel: vai para a tabela `imagens` (campo foto1 do upload).
+  async function handleUpdateLogo(req, res) {
+    const file = req.fotosEnviadas[0];
+    if (!file) return res.status(400).json({ error: 'Envie a imagem da logo' });
+    let client;
+    try {
+      client = await req.db.connect();
+      await client.query('BEGIN');
+      const anterior = idDaImagem((await lojaDaEmpresa(req.empresa)).logo);
+      const url = await salvarImagem(client, file);
+      await salvarConfiguracoes(client, [['loja_logo', url]]);
+      if (anterior) await client.query('DELETE FROM imagens WHERE id = $1', [anterior]);
+      await client.query('COMMIT');
+      cacheLoja.delete(req.empresa.slug);
+      res.json(await lojaDaEmpresa(req.empresa));
+    } catch (err) {
+      if (client) await client.query('ROLLBACK').catch(() => {});
+      console.error(err);
+      res.status(500).json({ error: 'Erro ao salvar a logo' });
+    } finally {
+      if (client) client.release();
+    }
+  }
+
+  async function handleDeleteLogo(req, res) {
+    try {
+      const anterior = idDaImagem((await lojaDaEmpresa(req.empresa)).logo);
+      await req.db.query(`DELETE FROM configuracoes WHERE chave = 'loja_logo'`);
+      if (anterior) await req.db.query('DELETE FROM imagens WHERE id = $1', [anterior]);
+      cacheLoja.delete(req.empresa.slug);
+      res.json(await lojaDaEmpresa(req.empresa));
+    } catch (err) {
+      console.error(err);
+      res.status(500).json({ error: 'Erro ao remover a logo' });
+    }
+  }
+
   async function handleMetrics(req, res) {
     try {
-      const totalEstoque = await pool.query(
+      const totalEstoque = await req.db.query(
         `SELECT COUNT(*) as total FROM produtos WHERE status IN ('DISPONIVEL', 'CONDICIONAL')`
       );
 
-      const valorInvestido = await pool.query(
+      const valorInvestido = await req.db.query(
         `SELECT COALESCE(SUM(preco_custo), 0) as total FROM produtos WHERE status IN ('DISPONIVEL', 'CONDICIONAL')`
       );
 
-      const lucroPotencial = await pool.query(
+      const lucroPotencial = await req.db.query(
         `SELECT COALESCE(SUM(preco_venda - preco_custo), 0) as total FROM produtos WHERE status IN ('DISPONIVEL', 'CONDICIONAL')`
       );
 
-      const valorEmRua = await pool.query(
+      const valorEmRua = await req.db.query(
         `SELECT COALESCE(SUM(preco_venda), 0) as total FROM produtos WHERE status = 'CONDICIONAL'`
       );
 
-      const topMaleta = await pool.query(
+      const topMaleta = await req.db.query(
         `SELECT id, nome, codigo_sku, vezes_em_maleta, imagem_url
          FROM produtos
          WHERE vezes_em_maleta > 0
@@ -2103,7 +2280,7 @@ async function startServer() {
   async function handleGetImagem(req, res) {
     if (!/^[0-9a-f]{32}$/.test(req.params.id)) return res.status(404).end();
     try {
-      const result = await pool.query(`SELECT mime_type, dados FROM imagens WHERE id = $1`, [req.params.id]);
+      const result = await req.db.query(`SELECT mime_type, dados FROM imagens WHERE id = $1`, [req.params.id]);
       if (result.rows.length === 0) return res.status(404).end();
       const { mime_type, dados } = result.rows[0];
       // O id muda sempre que a foto é trocada, então o conteúdo de uma URL nunca muda: cache longo.
@@ -2122,7 +2299,7 @@ async function startServer() {
   // ---------- Login admin (público; demais /api/admin exigem Bearer) ----------
   app.post('/api/admin/login', handleLogin);
   app.get('/api/admin/status', (req, res) => {
-    res.json({ authEnabled: isAdminAuthEnabled() });
+    res.json({ authEnabled: isAdminAuthEnabled(req.empresa) });
   });
 
   // ---------- Rotas públicas (vitrine) ----------
@@ -2151,6 +2328,10 @@ async function startServer() {
   app.post('/api/config/whatsapp', requireAdmin, handlePostWhatsapp);
   app.post('/api/admin/whatsapp', requireAdmin, handlePostWhatsapp);
   app.get('/api/admin/metrics', requireAdmin, handleMetrics);
+  app.get('/api/admin/loja', requireAdmin, handleGetLoja);
+  app.put('/api/admin/loja', requireAdmin, handleUpdateLoja);
+  app.post('/api/admin/loja/logo', requireAdmin, uploadImagem, handleUpdateLogo);
+  app.delete('/api/admin/loja/logo', requireAdmin, handleDeleteLogo);
   app.get('/api/admin/clientes', requireAdmin, handleListClientes);
   app.get('/api/admin/pedidos', requireAdmin, handleListPedidos);
   app.get('/api/admin/clientes/:id/perfil', requireAdmin, handlePerfilCliente);
@@ -2188,6 +2369,9 @@ async function startServer() {
   });
 }
 
-startServer().catch(console.error);
+startServer().catch((err) => {
+  console.error(err);
+  process.exit(1);
+});
 
 module.exports = app;

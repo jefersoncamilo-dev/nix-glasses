@@ -7,7 +7,7 @@ services:
     plan: free
     buildCommand: npm install
     startCommand: npm start
-    healthCheckPath: /
+    healthCheckPath: /saude
     autoDeploy: true
     envVars:
       - key: NODE_ENV
@@ -22,3 +22,6 @@ services:
         sync: false
       - key: JWT_SECRET
         generateValue: true
+      # Várias empresas no mesmo serviço: veja .env.example (EMPRESAS e EMPRESA_<SLUG>_*).
+      - key: EMPRESAS
+        sync: false
