@@ -174,7 +174,7 @@ function extrairFuncao(html, nome) {
 }
 
 const FUNCOES = ['escapeHtml', 'fotosDoProduto', 'indiceCircular', 'ehSobEncomenda', 'calcularSinal', 'passaFiltroStatus',
-  'etiquetaProduto', 'nomeCard', 'tagsCard', 'botaoMaletaCard', 'renderizarCatalogo', 'trocarFotoCard', 'especificacoesProduto', 'renderizarDetalhes', 'mostrarFotoDetalhes'];
+  'etiquetaProduto', 'nomeCard', 'tagsCard', 'botaoMaletaCard', 'passaFiltroGenero', 'renderizarCatalogo', 'trocarFotoCard', 'especificacoesProduto', 'renderizarDetalhes', 'mostrarFotoDetalhes'];
 
 function vitrine(produtos) {
   const html = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
@@ -187,6 +187,7 @@ function vitrine(produtos) {
     detalhes: null,
     filtroStatus: { value: '' },
     filtroFormato: { value: '' },
+    filtroGenero: { value: '' },
     catalogoGrid: { innerHTML: '', classList: { add() {}, remove() {} }, appendChild: (c) => cards.push(c), querySelector: () => null },
     emptyState: elemento(),
     detalhesConteudo: elemento(),

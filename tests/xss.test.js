@@ -78,12 +78,13 @@ function semInjecao(html) {
 describe('vitrine (index.html) escapa dados de produto', () => {
   for (const disponibilidade of ['PRONTA_ENTREGA', 'SOB_ENCOMENDA']) it(`no catálogo (${disponibilidade})`, () => {
     const catalogoGrid = elemento();
-    const ctx = carregar('index.html', ['escapeHtml', 'fotosDoProduto', 'indiceCircular', 'ehSobEncomenda', 'calcularSinal', 'passaFiltroStatus', 'etiquetaProduto', 'nomeCard', 'tagsCard', 'botaoMaletaCard', 'renderizarCatalogo'], {
+    const ctx = carregar('index.html', ['escapeHtml', 'fotosDoProduto', 'indiceCircular', 'ehSobEncomenda', 'calcularSinal', 'passaFiltroStatus', 'etiquetaProduto', 'nomeCard', 'tagsCard', 'botaoMaletaCard', 'passaFiltroGenero', 'renderizarCatalogo'], {
       produtos: [produtoMalicioso({ disponibilidade })],
       maleta: { itens: [] },
       fotoCard: {},
       filtroStatus: elemento(),
       filtroFormato: elemento(),
+      filtroGenero: elemento(),
       catalogoGrid,
       emptyState: elemento(),
       formatarMoeda: v => `R$ ${v}`,

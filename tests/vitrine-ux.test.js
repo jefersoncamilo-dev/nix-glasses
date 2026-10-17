@@ -114,7 +114,7 @@ describe('vitrine: botão Voltar fecha o modal', () => {
 // ---------- Card do produto ----------
 
 const VITRINE = ['escapeHtml', 'fotosDoProduto', 'indiceCircular', 'ehSobEncomenda', 'calcularSinal', 'passaFiltroStatus', 'etiquetaProduto',
-  'nomeCard', 'tagsCard', 'botaoMaletaCard', 'atualizarCardMaleta', 'renderizarCatalogo', 'toggleMaleta'];
+  'nomeCard', 'tagsCard', 'botaoMaletaCard', 'atualizarCardMaleta', 'passaFiltroGenero', 'renderizarCatalogo', 'toggleMaleta'];
 
 function elemento() {
   return { innerHTML: '', value: '', dataset: {}, classList: { add() {}, remove() {}, toggle() {} } };
@@ -128,6 +128,7 @@ function vitrine(produtos, extra = {}) {
     fotoCard: {},
     filtroStatus: { value: '' },
     filtroFormato: { value: '' },
+    filtroGenero: { value: '' },
     catalogoGrid: { innerHTML: '', classList: { add() {}, remove() {} }, appendChild: (c) => cards.push(c) },
     emptyState: elemento(),
     document: { createElement: elemento },
@@ -220,7 +221,7 @@ describe('vitrine: botão da maleta muda na hora', () => {
 
 describe('nome curto: painel', () => {
   const painel = carregar('admin/index.html',
-    ['linhaLoteVazia', 'linhaLoteEstaVazia', 'lerPreco', 'lerMedida', 'lerDisponibilidade', 'lerStatus', 'campoDoCabecalho', 'linhasDaPlanilha'],
+    ['linhaLoteVazia', 'linhaLoteEstaVazia', 'lerPreco', 'lerMedida', 'lerDisponibilidade', 'lerStatus', 'lerGenero', 'campoDoCabecalho', 'linhasDaPlanilha'],
     {}, (html) => `${html.match(/const COLUNAS_LOTE = \[[\s\S]*?\n {4}\];/)[0]}\n${html.match(/const CAMPOS_MEDIDA = \[.*\];/)[0]}`);
 
   it('coluna "Nome curto" da planilha vai para nome_curto, sem confundir com Nome', () => {
@@ -232,10 +233,10 @@ describe('nome curto: painel', () => {
     assert.equal(painel.linhaLoteEstaVazia({ ...painel.linhaLoteVazia(), nome_curto: 'X' }), false);
   });
 
-  it('é a última coluna, para planilhas antigas sem cabeçalho manterem a ordem', () => {
+  it('vem depois das colunas antigas (e antes do gênero), para planilhas sem cabeçalho manterem a ordem', () => {
     const html = fs.readFileSync(path.join(__dirname, '..', 'admin', 'index.html'), 'utf8');
     const colunas = vm.runInNewContext(`${html.match(/const COLUNAS_LOTE = \[[\s\S]*?\n {4}\];/)[0]}; COLUNAS_LOTE`);
-    assert.equal(colunas.at(-1).campo, 'nome_curto');
+    assert.deepEqual(JSON.parse(JSON.stringify(colunas.slice(-3).map((c) => c.campo))), ['tipo', 'nome_curto', 'genero']);
     assert.match(html, /\['nome_curto', 'fornecedor', 'codigo_fornecedor'/);
   });
 });

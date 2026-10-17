@@ -511,6 +511,18 @@ function lerMedidaCm(v) {
   return Math.round(n * 10) / 10;
 }
 
+// Gênero do produto: MASCULINO, FEMININO, UNISSEX ou '' (não informado).
+// Aceita o texto da planilha ("Masculino", "unisex"...). Inválido -> null.
+const GENEROS = ['MASCULINO', 'FEMININO', 'UNISSEX'];
+function lerGenero(v) {
+  const t = String(v ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().toLowerCase();
+  if (!t) return '';
+  if (/^masc/.test(t)) return 'MASCULINO';
+  if (/^fem/.test(t)) return 'FEMININO';
+  if (/^unis+e?x/.test(t)) return 'UNISSEX';
+  return null;
+}
+
 // Campos de especificação vindos do formulário/lote (e o nome curto do card, que
 // segue o mesmo caminho). Só inclui os enviados (o PUT não mexe no que não veio).
 // `erro` = a 1ª medida inválida.
@@ -526,6 +538,11 @@ function lerEspecificacoes(body) {
   if (body.material !== undefined) espec.material = textoCurto(body.material, 60);
   if (body.tipo !== undefined) espec.tipo = textoCurto(body.tipo, 100);
   if (body.nome_curto !== undefined) espec.nome_curto = textoCurto(body.nome_curto, 80);
+  if (body.genero !== undefined) {
+    const g = lerGenero(body.genero);
+    if (g === null) erro = erro || { campo: 'genero', mensagem: 'Gênero inválido (Masculino, Feminino ou Unissex)' };
+    else espec.genero = g;
+  }
   return { espec, erro };
 }
 
@@ -559,7 +576,7 @@ function validarProdutoLote(linha) {
     cor_armacao: textoCurto(l.cor_armacao, 100) || null,
   };
   const { espec, erro: erroEspec } = lerEspecificacoes(l);
-  Object.assign(produto, { diametro_cm: null, ponte_cm: null, largura_total_cm: null, material: '', tipo: '', nome_curto: '' }, espec);
+  Object.assign(produto, { diametro_cm: null, ponte_cm: null, largura_total_cm: null, material: '', tipo: '', nome_curto: '', genero: '' }, espec);
   if (erroEspec) erros.push(erroEspec);
   if (!produto.nome) erros.push({ campo: 'nome', mensagem: 'Informe o nome' });
   if (!produto.codigo_sku) erros.push({ campo: 'codigo_sku', mensagem: 'Informe o SKU' });
@@ -811,7 +828,7 @@ async function startServer() {
     try {
       const result = await req.db.query(
         `SELECT id, nome, nome_curto, codigo_sku, preco_venda, imagem_url, fotos, status, disponibilidade, formato, estilo, cor_armacao,
-                diametro_cm, ponte_cm, largura_total_cm, material, tipo
+                diametro_cm, ponte_cm, largura_total_cm, material, tipo, genero
          FROM produtos
          WHERE status IN ('DISPONIVEL', 'CONDICIONAL')
          ORDER BY created_at DESC`
@@ -829,7 +846,7 @@ async function startServer() {
     try {
       const result = await req.db.query(
         `SELECT p.id, p.nome, p.nome_curto, p.codigo_sku, p.preco_custo, p.preco_venda, p.imagem_url, p.fotos, p.status, p.disponibilidade,
-                p.formato, p.estilo, p.cor_armacao, p.diametro_cm, p.ponte_cm, p.largura_total_cm, p.material, p.tipo,
+                p.formato, p.estilo, p.cor_armacao, p.diametro_cm, p.ponte_cm, p.largura_total_cm, p.material, p.tipo, p.genero,
                 p.fornecedor, p.codigo_fornecedor, p.link_fornecedor, p.vezes_em_maleta, p.pedido_condicional_id,
                 to_char(uc.data_compra, 'YYYY-MM-DD') AS ultima_compra, uc.preco_custo AS custo_ultima_compra,
                 ca.preco_custo AS custo_compra_anterior, COALESCE(nc.total, 0)::int AS total_compras
@@ -855,7 +872,7 @@ async function startServer() {
   async function handleListConditional(req, res) {
     try {
       const result = await req.db.query(
-        `SELECT id, nome, nome_curto, codigo_sku, preco_custo, preco_venda, imagem_url, fotos, status, disponibilidade, formato, estilo, cor_armacao, diametro_cm, ponte_cm, largura_total_cm, material, tipo, fornecedor, codigo_fornecedor, link_fornecedor, vezes_em_maleta
+        `SELECT id, nome, nome_curto, codigo_sku, preco_custo, preco_venda, imagem_url, fotos, status, disponibilidade, formato, estilo, cor_armacao, diametro_cm, ponte_cm, largura_total_cm, material, tipo, genero, fornecedor, codigo_fornecedor, link_fornecedor, vezes_em_maleta
          FROM produtos
          WHERE status = 'CONDICIONAL'
          ORDER BY created_at DESC`
@@ -903,11 +920,11 @@ async function startServer() {
       }
       const result = await client.query(
         `INSERT INTO produtos (nome, codigo_sku, preco_custo, preco_venda, imagem_url, fotos, disponibilidade, formato, estilo, cor_armacao, fornecedor, codigo_fornecedor, link_fornecedor,
-                               diametro_cm, ponte_cm, largura_total_cm, material, tipo, nome_curto)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
+                               diametro_cm, ponte_cm, largura_total_cm, material, tipo, nome_curto, genero)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)
          RETURNING *`,
         [nome, codigoFinal, preco_custo, preco_venda, fotos[0] || null, fotos, disponibilidade, formato, estilo, cor_armacao, fornecedor, codigoFornecedor, linkFornecedor,
-          espec.diametro_cm ?? null, espec.ponte_cm ?? null, espec.largura_total_cm ?? null, espec.material || '', espec.tipo || '', espec.nome_curto || '']
+          espec.diametro_cm ?? null, espec.ponte_cm ?? null, espec.largura_total_cm ?? null, espec.material || '', espec.tipo || '', espec.nome_curto || '', espec.genero || '']
       );
       await registrarCompraCadastro(client, result.rows[0]);
       await client.query('COMMIT');
@@ -1084,12 +1101,12 @@ async function startServer() {
         // ON CONFLICT cobre outro cadastro do mesmo SKU entre a checagem e o INSERT
         const r = await client.query(
           `INSERT INTO produtos (nome, codigo_sku, preco_custo, preco_venda, status, disponibilidade, formato, estilo, cor_armacao, fornecedor, codigo_fornecedor, link_fornecedor,
-                                 diametro_cm, ponte_cm, largura_total_cm, material, tipo, nome_curto)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
+                                 diametro_cm, ponte_cm, largura_total_cm, material, tipo, nome_curto, genero)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
            ON CONFLICT (codigo_sku) DO NOTHING
            RETURNING *`,
           [p.nome, p.codigo_sku, p.preco_custo, p.preco_venda, p.status, p.disponibilidade, p.formato, p.estilo, p.cor_armacao, p.fornecedor, p.codigo_fornecedor, p.link_fornecedor,
-            p.diametro_cm, p.ponte_cm, p.largura_total_cm, p.material, p.tipo, p.nome_curto]
+            p.diametro_cm, p.ponte_cm, p.largura_total_cm, p.material, p.tipo, p.nome_curto, p.genero]
         );
         if (!r.rows.length) {
           ignorados.push({ linha: i, codigo_sku: p.codigo_sku, codigo_fornecedor: p.codigo_fornecedor, campo: 'codigo_sku', motivo: 'SKU já cadastrado' });

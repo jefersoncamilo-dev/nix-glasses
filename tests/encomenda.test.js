@@ -100,7 +100,7 @@ function extrairFuncao(html, nome) {
 }
 
 const FUNCOES = ['escapeHtml', 'fotosDoProduto', 'indiceCircular', 'ehSobEncomenda', 'calcularSinal', 'passaFiltroStatus', 'etiquetaProduto',
-  'nomeCard', 'tagsCard', 'botaoMaletaCard', 'atualizarCardMaleta', 'itemEhEncomenda', 'resumoMaleta', 'renderizarCatalogo', 'toggleMaleta', 'salvarMaleta', 'textoGuiaCatalogo', 'atualizarGuias', 'atualizarMaletaUI', 'montarTextoWhatsapp'];
+  'nomeCard', 'tagsCard', 'botaoMaletaCard', 'atualizarCardMaleta', 'itemEhEncomenda', 'resumoMaleta', 'passaFiltroGenero', 'renderizarCatalogo', 'toggleMaleta', 'salvarMaleta', 'textoGuiaCatalogo', 'atualizarGuias', 'atualizarMaletaUI', 'montarTextoWhatsapp'];
 
 function elemento() {
   return {
@@ -134,6 +134,7 @@ function vitrine(produtos, filtro = '', itens = []) {
     maleta: { itens },
     filtroStatus: { value: filtro },
     filtroFormato: { value: '' },
+    filtroGenero: { value: '' },
     catalogoGrid,
     emptyState: novoElemento(),
     ...els,
