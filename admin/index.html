@@ -563,10 +563,15 @@
               <textarea id="loja_sobre" data-campo-loja="sobre" rows="6" maxlength="2000" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500"></textarea>
               <p class="text-xs text-gray-500 mt-1">Deixe uma linha em branco entre os parágrafos.</p>
             </div>
-            <label class="flex items-start gap-3">
-              <input type="checkbox" id="loja_oculos" class="mt-1 h-4 w-4 accent-orange-500">
-              <span class="text-sm text-gray-700"><strong>Loja de óculos</strong><br><span class="text-gray-500">Mostra o provador virtual na vitrine e fala em "óculos" nas mensagens da maleta.</span></span>
-            </label>
+            <div>
+              <label for="loja_nicho" class="block text-sm font-medium text-gray-700 mb-1">Tipo de loja</label>
+              <select id="loja_nicho" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500">
+                <option value="oculos">Óculos</option>
+                <option value="roupas">Roupas e moda</option>
+                <option value="geral">Outros produtos</option>
+              </select>
+              <p class="text-xs text-gray-500 mt-1">Troca os campos do cadastro e da vitrine. Óculos: provador virtual e medidas da armação. Roupas: tamanhos (cada um com o seu estoque), cor, tecido e categoria.</p>
+            </div>
           </div>
           <button id="btnSalvarLoja" class="mt-6 bg-orange-500 hover:bg-orange-600 text-white px-6 py-2 rounded-lg font-medium transition-colors">Salvar dados da loja</button>
         </div>
@@ -658,26 +663,26 @@
           </div>
           <fieldset class="md:col-span-2 border border-gray-200 rounded-lg p-4">
             <legend class="px-1 text-sm font-semibold text-gray-800">Especificações Técnicas</legend>
-            <p class="text-xs text-gray-500 mb-3">Aparecem para o cliente nos detalhes do produto. Medidas em cm (ex.: 5,0).</p>
+            <p id="textoEspecificacoes" class="text-xs text-gray-500 mb-3">Aparecem para o cliente nos detalhes do produto. Medidas em cm (ex.: 5,0).</p>
             <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <div>
+            <div data-so-nicho="oculos">
               <label for="diametro_cm" class="block text-sm font-medium text-gray-700 mb-1">Diâmetro (cm)</label>
               <input type="text" id="diametro_cm" name="diametro_cm" inputmode="decimal" maxlength="8" placeholder="Ex: 5,0" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500">
             </div>
-            <div>
+            <div data-so-nicho="oculos">
               <label for="ponte_cm" class="block text-sm font-medium text-gray-700 mb-1">Ponte (cm)</label>
               <input type="text" id="ponte_cm" name="ponte_cm" inputmode="decimal" maxlength="8" placeholder="Ex: 2,0" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500">
             </div>
-            <div>
+            <div data-so-nicho="oculos">
               <label for="largura_total_cm" class="block text-sm font-medium text-gray-700 mb-1">Largura Total (cm)</label>
               <input type="text" id="largura_total_cm" name="largura_total_cm" inputmode="decimal" maxlength="8" placeholder="Ex: 14,0" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500">
             </div>
             <div>
-              <label for="material" class="block text-sm font-medium text-gray-700 mb-1">Material</label>
+              <label for="material" data-rotulo="material" class="block text-sm font-medium text-gray-700 mb-1">Material</label>
               <input type="text" id="material" name="material" maxlength="60" placeholder="Ex: Metal, Acetato" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500">
             </div>
             <div>
-              <label for="formato" class="block text-sm font-medium text-gray-700 mb-1">Formato da lente</label>
+              <label for="formato" data-rotulo="formato" class="block text-sm font-medium text-gray-700 mb-1">Formato da lente</label>
               <input type="text" id="formato" name="formato" maxlength="100" placeholder="Ex: Hexagonal, Redondo" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500">
             </div>
             <div>
@@ -685,7 +690,7 @@
               <input type="text" id="cor_armacao" name="cor_armacao" maxlength="100" placeholder="Ex: Preto, Dourado" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500">
             </div>
             <div>
-              <label for="tipo" class="block text-sm font-medium text-gray-700 mb-1">Tipo</label>
+              <label for="tipo" data-rotulo="tipo" class="block text-sm font-medium text-gray-700 mb-1">Tipo</label>
               <input type="text" id="tipo" name="tipo" maxlength="100" placeholder="Ex: Polarizado Premium" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500">
             </div>
             <div>
@@ -697,7 +702,25 @@
                 <option value="UNISSEX">Unissex</option>
               </select>
             </div>
+            <div data-so-nicho="roupas" class="hidden">
+              <label for="tamanho" class="block text-sm font-medium text-gray-700 mb-1">Tamanho</label>
+              <input type="text" id="tamanho" name="tamanho" maxlength="20" placeholder="Ex: P, M, 38, Único" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500">
             </div>
+            <div data-so-nicho="roupas" class="hidden sm:col-span-2">
+              <label for="grade" class="block text-sm font-medium text-gray-700 mb-1">Código do modelo</label>
+              <input type="text" id="grade" name="grade" maxlength="100" placeholder="Ex: VEST-FLORAL" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500">
+              <p class="text-xs text-gray-500 mt-1">Produtos com o mesmo código aparecem num card só na vitrine, com os botões de tamanho.</p>
+            </div>
+            </div>
+          </fieldset>
+          <!-- Roupas, produto novo: um produto por tamanho, cada um com o seu estoque -->
+          <fieldset id="gradeTamanhos" class="hidden md:col-span-2 border border-gray-200 rounded-lg p-4">
+            <legend class="px-1 text-sm font-semibold text-gray-800">Tamanhos e quantidades</legend>
+            <p class="text-xs text-gray-500 mb-3">Preencha a quantidade de peças de cada tamanho que tem (0 = cadastrado, mas esgotado). Cada tamanho vira um produto com o seu estoque e SKU próprio (ex.: VEST-01-M), e todos aparecem num card só na vitrine. Deixe em branco para cadastrar uma peça só.</p>
+            <div id="gradeTamanhosPadrao" class="grid grid-cols-3 sm:grid-cols-6 gap-3"></div>
+            <label for="gradeOutros" class="block text-sm font-medium text-gray-700 mt-3 mb-1">Outros tamanhos</label>
+            <input type="text" id="gradeOutros" placeholder="Ex: 36:2, 38:1, 40:3 ou Único:5" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500">
+            <p id="gradeResumo" class="text-xs text-gray-600 mt-2"></p>
           </fieldset>
           <div>
             <label for="estoque" class="block text-sm font-medium text-gray-700 mb-1">Estoque (peças na loja) *</label>
@@ -716,7 +739,7 @@
         <div>
           <label class="block text-sm font-medium text-gray-700 mb-1">Fotos (até 4)</label>
           <p class="text-xs text-gray-500 mb-2">A foto 1 é a capa do produto na vitrine. Arraste várias fotos de uma vez para cá: elas ocupam as posições livres, em ordem.</p>
-          <p class="text-xs text-gray-500 mb-2">O Provador Virtual usa a foto 1: fica melhor com o óculos de frente, em PNG de fundo transparente e recortado rente à armação. Fundo branco liso também funciona (ele é removido na hora).</p>
+          <p data-so-nicho="oculos" class="text-xs text-gray-500 mb-2">O Provador Virtual usa a foto 1: fica melhor com o óculos de frente, em PNG de fundo transparente e recortado rente à armação. Fundo branco liso também funciona (ele é removido na hora).</p>
           <div id="slotsFotos" class="grid grid-cols-2 sm:grid-cols-4 gap-3"></div>
           <input type="file" id="imagemCamera" accept="image/*" capture="environment" class="hidden">
         </div>
@@ -1061,6 +1084,9 @@
       { campo: 'quantidade', titulo: 'Quantidade', largura: 'w-20' },
       { campo: 'pedido_fornecedor', titulo: 'Pedido fornecedor', largura: 'w-28' },
       { campo: 'data_compra', titulo: 'Data da compra', largura: 'w-28' },
+      // Roupas: tamanho da peça e o código do modelo que junta os tamanhos na vitrine
+      { campo: 'tamanho', titulo: 'Tamanho', largura: 'w-20' },
+      { campo: 'grade', titulo: 'Código do modelo', largura: 'w-32' },
     ];
     const CAMPOS_MEDIDA = ['diametro_cm', 'ponte_cm', 'largura_total_cm'];
     const MAX_LOTE = 100;
@@ -1068,12 +1094,17 @@
     let errosLote = [];
     const tabelaLote = document.getElementById('tabelaLote');
 
+    // Título da coluna no tipo de loja (ex.: "Formato da lente" vira "Categoria" nas roupas)
+    function tituloColunaLote(c) {
+      return rotulosPainel()[c.campo] || c.titulo;
+    }
+
     function linhaLoteVazia() {
-      return { nome: '', codigo_sku: '', fornecedor: '', codigo_fornecedor: '', link_fornecedor: '', preco_custo: '', preco_venda: '', disponibilidade: 'PRONTA_ENTREGA', status: 'DISPONIVEL', formato: '', estilo: '', cor_armacao: '', diametro_cm: '', ponte_cm: '', largura_total_cm: '', material: '', tipo: '', nome_curto: '', genero: '', quantidade: '', pedido_fornecedor: '', data_compra: '' };
+      return { nome: '', codigo_sku: '', fornecedor: '', codigo_fornecedor: '', link_fornecedor: '', preco_custo: '', preco_venda: '', disponibilidade: 'PRONTA_ENTREGA', status: 'DISPONIVEL', formato: '', estilo: '', cor_armacao: '', diametro_cm: '', ponte_cm: '', largura_total_cm: '', material: '', tipo: '', nome_curto: '', genero: '', quantidade: '', pedido_fornecedor: '', data_compra: '', tamanho: '', grade: '' };
     }
 
     function linhaLoteEstaVazia(l) {
-      return ['nome', 'codigo_sku', 'fornecedor', 'codigo_fornecedor', 'link_fornecedor', 'preco_custo', 'preco_venda', 'formato', 'estilo', 'cor_armacao', 'diametro_cm', 'ponte_cm', 'largura_total_cm', 'material', 'tipo', 'nome_curto'].every(c => !String(l[c] || '').trim());
+      return ['nome', 'codigo_sku', 'fornecedor', 'codigo_fornecedor', 'link_fornecedor', 'preco_custo', 'preco_venda', 'formato', 'estilo', 'cor_armacao', 'diametro_cm', 'ponte_cm', 'largura_total_cm', 'material', 'tipo', 'nome_curto', 'tamanho', 'grade'].every(c => !String(l[c] || '').trim());
     }
 
     // "R$ 1.234,56", "199,90" ou "199.90" -> 1234.56 / 199.9. Vazio ou inválido -> NaN.
@@ -1137,6 +1168,11 @@
       if (/^forn/.test(t)) return 'fornecedor';
       if (/^(sku|codigo sku|codigo)$/.test(t)) return 'codigo_sku';
       if (/^(nome curto|apelido)/.test(t)) return 'nome_curto';
+      if (/^(grade|codigo do modelo|cod do modelo|cod modelo)/.test(t)) return 'grade';
+      if (/^(tamanho|tam\b)/.test(t)) return 'tamanho';
+      if (/^categoria/.test(t)) return 'formato';
+      if (/^(tecido|composicao)/.test(t)) return 'material';
+      if (/^modelagem/.test(t)) return 'tipo';
       if (/^(nome|produto|modelo)/.test(t)) return 'nome';
       if (/custo/.test(t)) return 'preco_custo';
       if (/venda|^preco$/.test(t)) return 'preco_venda';
@@ -1289,9 +1325,9 @@
     function iniciarLote() {
       if (!document.getElementById('loteCabecalho').innerHTML) {
         document.getElementById('loteCabecalho').innerHTML = '<th class="px-3 py-3 text-left text-xs font-semibold text-gray-500 uppercase">#</th>'
-          + COLUNAS_LOTE.map(c => `<th class="px-2 py-3 text-left text-xs font-semibold text-gray-500 uppercase whitespace-nowrap">${c.titulo}</th>`).join('')
+          + COLUNAS_LOTE.map(c => `<th class="px-2 py-3 text-left text-xs font-semibold text-gray-500 uppercase whitespace-nowrap">${tituloColunaLote(c)}</th>`).join('')
           + '<th class="px-2 py-3"></th>';
-        document.getElementById('loteOrdemColunas').textContent = COLUNAS_LOTE.map(c => c.titulo.replace(' *', '')).join(', ');
+        document.getElementById('loteOrdemColunas').textContent = COLUNAS_LOTE.map(c => tituloColunaLote(c).replace(' *', '')).join(', ');
       }
       if (!linhasLote.length) linhasLote = [linhaLoteVazia(), linhaLoteVazia(), linhaLoteVazia()];
       renderizarLote();
@@ -1580,7 +1616,7 @@
           </td>
           <td class="px-4 sm:px-6 py-4">
             <p class="font-medium text-gray-900 text-sm sm:text-base">${escapeHtml(p.nome)}</p>
-            <p class="text-xs sm:text-sm text-gray-500">${escapeHtml(p.codigo_sku)}</p>
+            <p class="text-xs sm:text-sm text-gray-500">${escapeHtml(p.codigo_sku)}${p.tamanho ? ` • Tam. ${escapeHtml(p.tamanho)}` : ''}</p>
             ${p.fornecedor || p.codigo_fornecedor ? `<p class="text-xs text-gray-400">Forn.: ${escapeHtml(p.fornecedor || '-')}${p.codigo_fornecedor ? ' • Cód. ' + escapeHtml(p.codigo_fornecedor) : ''}</p>` : ''}
           </td>
           <td class="hidden md:table-cell px-4 sm:px-6 py-4 text-sm text-gray-500">
@@ -1705,8 +1741,83 @@
       }
     }
 
+    // Tipo de loja (Configurações > Dados da loja): rótulos e campos do cadastro
+    const ROTULOS_PAINEL = {
+      oculos: { formato: 'Formato da lente', material: 'Material', tipo: 'Tipo' },
+      roupas: { formato: 'Categoria', material: 'Tecido / composição', tipo: 'Modelagem' },
+      geral: { formato: 'Categoria', material: 'Material', tipo: 'Tipo' },
+    };
+    const EXEMPLOS_PAINEL = {
+      oculos: { formato: 'Ex: Hexagonal, Redondo', material: 'Ex: Metal, Acetato', tipo: 'Ex: Polarizado Premium', cor_armacao: 'Ex: Preto, Dourado', estilo: 'Ex: Clássico, Esportivo, Fashion' },
+      roupas: { formato: 'Ex: Vestido, Blusa, Calça', material: 'Ex: 100% algodão, Viscose', tipo: 'Ex: Slim, Oversized, Reta', cor_armacao: 'Ex: Preto, Off-white, Estampado', estilo: 'Ex: Casual, Festa, Trabalho' },
+      geral: { formato: 'Ex: Linha, Coleção', material: 'Ex: Madeira, Alumínio', tipo: 'Ex: Modelo, Versão', cor_armacao: 'Ex: Preto, Branco', estilo: 'Ex: Moderno, Clássico' },
+    };
+    function nichoPainel() {
+      const n = globalThis.LOJA?.nicho;
+      return ROTULOS_PAINEL[n] ? n : (globalThis.LOJA?.oculos === false ? 'geral' : 'oculos');
+    }
+    function rotulosPainel() {
+      return ROTULOS_PAINEL[nichoPainel()];
+    }
+
+    const TAMANHOS_PADRAO = ['PP', 'P', 'M', 'G', 'GG', 'XG'];
+
+    function aplicarNichoPainel() {
+      const nicho = nichoPainel();
+      document.querySelectorAll('[data-so-nicho]').forEach(el => el.classList.toggle('hidden', el.dataset.soNicho !== nicho));
+      document.querySelectorAll('[data-rotulo]').forEach(el => { el.textContent = rotulosPainel()[el.dataset.rotulo]; });
+      Object.entries(EXEMPLOS_PAINEL[nicho]).forEach(([id, exemplo]) => { const el = document.getElementById(id); if (el) el.placeholder = exemplo; });
+      document.getElementById('textoEspecificacoes').textContent = nicho === 'oculos'
+        ? 'Aparecem para o cliente nos detalhes do produto. Medidas em cm (ex.: 5,0).'
+        : 'Aparecem para o cliente nos detalhes do produto.';
+      // Cabeçalho do lote é montado de novo com os títulos do nicho
+      document.getElementById('loteCabecalho').innerHTML = '';
+      if (!document.getElementById('gradeTamanhosPadrao').innerHTML) {
+        document.getElementById('gradeTamanhosPadrao').innerHTML = TAMANHOS_PADRAO.map(t => `
+          <label class="block">
+            <span class="block text-sm font-semibold text-gray-700 mb-1 text-center">${t}</span>
+            <input type="number" min="0" step="1" data-grade-tamanho="${t}" placeholder="—" class="w-full px-2 py-2 border border-gray-300 rounded-lg text-center focus:outline-none focus:ring-2 focus:ring-orange-500">
+          </label>`).join('');
+      }
+    }
+
+    // Tamanhos preenchidos no cadastro de roupas -> [{ tamanho, estoque }]. Em branco não entra.
+    // "Outros tamanhos": "36:2, 38:1" (tamanho sem número = 1 peça). null = texto inválido.
+    function lerGradeFormulario() {
+      const grade = [];
+      document.querySelectorAll('[data-grade-tamanho]').forEach(el => {
+        if (el.value.trim() !== '') grade.push({ tamanho: el.dataset.gradeTamanho, estoque: Number(el.value) });
+      });
+      for (const parte of document.getElementById('gradeOutros').value.split(/[,;\n]/)) {
+        const t = parte.trim();
+        if (!t) continue;
+        const m = /^(.+?)\s*(?::|=|\s)\s*(\d+)$/.exec(t);
+        const tamanho = (m ? m[1] : t).trim();
+        if (!tamanho || tamanho.length > 20) return null;
+        grade.push({ tamanho, estoque: m ? Number(m[2]) : 1 });
+      }
+      const vistos = new Set();
+      for (const g of grade) {
+        if (!Number.isInteger(g.estoque) || g.estoque < 0 || vistos.has(g.tamanho.toLowerCase())) return null;
+        vistos.add(g.tamanho.toLowerCase());
+      }
+      return grade;
+    }
+
+    function atualizarResumoGrade() {
+      const grade = lerGradeFormulario();
+      const resumo = document.getElementById('gradeResumo');
+      const sku = document.getElementById('codigo_sku').value.trim() || 'SKU';
+      if (grade === null) resumo.textContent = 'Confira os tamanhos: cada um uma vez, com a quantidade em número (ex.: 38:2).';
+      else if (!grade.length) resumo.textContent = '';
+      else resumo.textContent = `Vai cadastrar ${grade.length} tamanho(s), ${grade.reduce((t, g) => t + g.estoque, 0)} peça(s): ${grade.map(g => `${sku}-${g.tamanho} (${g.estoque})`).join(', ')}.`;
+    }
+    document.getElementById('gradeTamanhos').addEventListener('input', atualizarResumoGrade);
+    document.getElementById('codigo_sku').addEventListener('input', atualizarResumoGrade);
+
     // Modal Produto
     function abrirModal(produto = null) {
+      aplicarNichoPainel();
       produtoEditando = produto;
       formProduto.reset();
       document.getElementById('produtoId').value = '';
@@ -1727,6 +1838,8 @@
         document.getElementById('material').value = produto.material || '';
         document.getElementById('tipo').value = produto.tipo || '';
         document.getElementById('genero').value = produto.genero || '';
+        document.getElementById('tamanho').value = produto.tamanho || '';
+        document.getElementById('grade').value = produto.grade || '';
         document.getElementById('fornecedor').value = produto.fornecedor || '';
         document.getElementById('codigo_fornecedor').value = produto.codigo_fornecedor || '';
         document.getElementById('link_fornecedor').value = produto.link_fornecedor || '';
@@ -1739,6 +1852,9 @@
       } else {
         modalTitulo.textContent = 'Novo Produto';
       }
+      // A grade de tamanhos só no cadastro de uma roupa nova (na edição, cada tamanho é um produto)
+      document.getElementById('gradeTamanhos').classList.toggle('hidden', !!produto || nichoPainel() !== 'roupas');
+      atualizarResumoGrade();
       atualizarAvisoSinal();
       atualizarAbrirLink();
       document.getElementById('importarStatus').textContent = 'Preenche nome, preço de custo, código e link. Confira os dados antes de salvar.';
@@ -1837,7 +1953,12 @@
         if (val) formData.append(field, val);
       });
       // Sempre enviados, para que apagar o fornecedor ou uma especificação na edição também valha
-      ['nome_curto', 'fornecedor', 'codigo_fornecedor', 'link_fornecedor', ...CAMPOS_MEDIDA, 'material', 'tipo', 'genero'].forEach(field => formData.append(field, document.getElementById(field).value.trim()));
+      ['nome_curto', 'fornecedor', 'codigo_fornecedor', 'link_fornecedor', ...CAMPOS_MEDIDA, 'material', 'tipo', 'genero', 'tamanho', 'grade'].forEach(field => formData.append(field, document.getElementById(field).value.trim()));
+      if (!id && nichoPainel() === 'roupas') {
+        const grade = lerGradeFormulario();
+        if (grade === null) return mostrarToast('Confira os tamanhos: cada um uma vez, com a quantidade em número', 'error');
+        if (grade.length) formData.append('tamanhos', JSON.stringify(grade));
+      }
       for (let i = 0; i < MAX_FOTOS; i++) {
         const file = slotsFotos[i]?.file;
         if (file) formData.append(`foto${i + 1}`, await prepararImagem(file));
@@ -1853,7 +1974,8 @@
           const err = await res.json();
           throw new Error(err.error || 'Erro ao salvar');
         }
-        mostrarToast(id ? 'Produto atualizado!' : 'Produto criado!');
+        const salvo = await res.json().catch(() => ({}));
+        mostrarToast(id ? 'Produto atualizado!' : Array.isArray(salvo.produtos) ? `${salvo.produtos.length} tamanhos cadastrados!` : 'Produto criado!');
         fecharModal();
         carregarProdutos();
       } catch (err) {
@@ -2266,7 +2388,7 @@
       const vendidos = condicionais.filter(p => comprados.includes(p.id));
       const voltaram = condicionais.filter(p => devolvidos.includes(p.id));
       const loja = globalThis.LOJA || { nome: 'Nix Glasses', oculos: true };
-      const emoji = loja.oculos ? ' 🕶️' : '';
+      const emoji = loja.oculos ? ' 🕶️' : loja.nicho === 'roupas' ? ' 👗' : '';
       if (!vendidos.length && !voltaram.length) {
         return [
           `*${loja.nome}: sua maleta*${emoji}`,
@@ -3500,7 +3622,13 @@
 
     function preencherLoja(loja) {
       document.querySelectorAll('[data-campo-loja]').forEach(el => { el.value = loja[el.dataset.campoLoja] || ''; });
-      document.getElementById('loja_oculos').checked = !!loja.oculos;
+      document.getElementById('loja_nicho').value = loja.nicho || (loja.oculos ? 'oculos' : 'geral');
+      // O cadastro de produtos acompanha o tipo de loja salvo
+      if (globalThis.LOJA && loja.nicho && globalThis.LOJA.nicho !== loja.nicho) {
+        globalThis.LOJA.nicho = loja.nicho;
+        globalThis.LOJA.oculos = loja.nicho === 'oculos';
+        aplicarNichoPainel();
+      }
       mostrarLogoLoja(loja.logo);
     }
 
@@ -3521,7 +3649,7 @@
     }
 
     document.getElementById('btnSalvarLoja').addEventListener('click', async () => {
-      const corpo = { oculos: document.getElementById('loja_oculos').checked };
+      const corpo = { nicho: document.getElementById('loja_nicho').value };
       document.querySelectorAll('[data-campo-loja]').forEach(el => { corpo[el.dataset.campoLoja] = el.value; });
       try {
         await respostaLoja(await fetchAdmin('/api/admin/loja', {

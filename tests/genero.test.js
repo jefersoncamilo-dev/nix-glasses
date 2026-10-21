@@ -113,7 +113,7 @@ describe('gênero: painel', () => {
 });
 
 describe('gênero: vitrine', () => {
-  const vitrine = carregar('index.html', ['passaFiltroGenero', 'especificacoesProduto']);
+  const vitrine = carregar('index.html', ['passaFiltroGenero', 'especificacoesProduto'], () => "const rotulos = { formato: 'Formato da lente', formatos: 'Todos os formatos', material: 'Material', tipo: 'Tipo' };");
 
   it('Masculino e Feminino também mostram os Unissex', () => {
     const p = (genero) => ({ genero });

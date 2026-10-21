@@ -113,7 +113,7 @@ describe('vitrine: botão Voltar fecha o modal', () => {
 
 // ---------- Card do produto ----------
 
-const VITRINE = ['escapeHtml', 'fotosDoProduto', 'indiceCircular', 'ehSobEncomenda', 'calcularSinal', 'passaFiltroStatus', 'etiquetaProduto',
+const VITRINE = ['ordemTamanho', 'agruparCards', 'nomeModelo', 'tamanhosCard', 'botaoGrupoCard', 'escapeHtml', 'fotosDoProduto', 'indiceCircular', 'ehSobEncomenda', 'calcularSinal', 'passaFiltroStatus', 'etiquetaProduto',
   'nomeCard', 'tagsCard', 'botaoMaletaCard', 'atualizarCardMaleta', 'passaFiltroGenero', 'renderizarCatalogo', 'toggleMaleta'];
 
 function elemento() {
@@ -129,6 +129,7 @@ function vitrine(produtos, extra = {}) {
     filtroStatus: { value: '' },
     filtroFormato: { value: '' },
     filtroGenero: { value: '' },
+    NICHO: 'oculos', rotulos: { formato: 'Formato da lente', formatos: 'Todos os formatos', material: 'Material', tipo: 'Tipo' }, ORDEM_TAMANHOS: [], filtroTamanho: { value: '' },
     catalogoGrid: { innerHTML: '', classList: { add() {}, remove() {} }, appendChild: (c) => cards.push(c) },
     emptyState: elemento(),
     document: { createElement: elemento },
@@ -198,9 +199,9 @@ describe('vitrine: botão da maleta muda na hora', () => {
     const acao = { innerHTML: '', querySelector: () => botao, contains: () => false };
     let seloEscondido = true;
     const selo = { classList: { toggle: (c, v) => { seloEscondido = v; } } };
-    const card = { querySelector: (s) => ({ '[data-acao-maleta]': acao, '[data-selo-maleta]': selo })[s] };
+    const card = { dataset: { produtos: '5' }, querySelector: (s) => ({ '[data-acao-maleta]': acao, '[data-selo-maleta]': selo })[s] };
     let redesenhos = 0;
-    const grid = { innerHTML: '', classList: { add() {}, remove() {} }, appendChild() { redesenhos++; }, querySelector: (s) => (s === '[data-card="5"]' ? card : null) };
+    const grid = { innerHTML: '', classList: { add() {}, remove() {} }, appendChild() { redesenhos++; }, querySelector: (s) => (s === '[data-produtos~="5"]' ? card : null) };
     const { ctx } = vitrine([hexagonal], { catalogoGrid: grid, document: { createElement: elemento, activeElement: null } });
     redesenhos = 0;
 
@@ -236,7 +237,7 @@ describe('nome curto: painel', () => {
   it('vem depois das colunas antigas (e antes do gênero e da compra), para planilhas sem cabeçalho manterem a ordem', () => {
     const html = fs.readFileSync(path.join(__dirname, '..', 'admin', 'index.html'), 'utf8');
     const colunas = vm.runInNewContext(`${html.match(/const COLUNAS_LOTE = \[[\s\S]*?\n {4}\];/)[0]}; COLUNAS_LOTE`);
-    assert.deepEqual(JSON.parse(JSON.stringify(colunas.slice(-6).map((c) => c.campo))), ['tipo', 'nome_curto', 'genero', 'quantidade', 'pedido_fornecedor', 'data_compra']);
+    assert.deepEqual(JSON.parse(JSON.stringify(colunas.slice(-8).map((c) => c.campo))), ['tipo', 'nome_curto', 'genero', 'quantidade', 'pedido_fornecedor', 'data_compra', 'tamanho', 'grade']);
     assert.match(html, /\['nome_curto', 'fornecedor', 'codigo_fornecedor'/);
   });
 });

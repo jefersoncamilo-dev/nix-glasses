@@ -19,7 +19,7 @@ function extrairFuncao(nome) {
 }
 
 const FUNCOES = ['ehSobEncomenda', 'passaFiltroStatus', 'contagemFiltros', 'textoGuiaCatalogo'];
-const ctx = vm.createContext({});
+const ctx = vm.createContext({ NICHO: 'oculos' });
 vm.runInContext(`${FUNCOES.map(extrairFuncao).join('\n')}\n${FUNCOES.map((f) => `this.${f} = ${f};`).join('\n')}`, ctx);
 
 const produtos = [
@@ -79,8 +79,8 @@ describe('vitrine: atalhos e pílulas de filtro', () => {
   });
 
   it('o filtro de formato só aparece com dois formatos ou mais', () => {
-    const el = { innerHTML: '', appendChild() {}, classList: { toggle: (c, v) => { el.escondido = v; } } };
-    const c = vm.createContext({ document: { createElement: () => ({}) }, filtroFormato: el });
+    const el = { innerHTML: '', appendChild() {}, setAttribute() {}, classList: { toggle: (c, v) => { el.escondido = v; } } };
+    const c = vm.createContext({ document: { createElement: () => ({}) }, filtroFormato: el, rotulos: { formato: 'Formato da lente', formatos: 'Todos os formatos' } });
     vm.runInContext(`${extrairFuncao('preencherFiltroFormato')}; this.f = preencherFiltroFormato;`, c);
     c.produtos = [{ formato: 'Aviador' }, { formato: 'Aviador' }];
     vm.runInContext('produtos = this.produtos; f();', c);
