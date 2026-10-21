@@ -1,4 +1,4 @@
-// Dados da loja de cada empresa (nome, textos da vitrine, logo e recursos), guardados
+// Dados da loja de cada empresa (nome, textos da vitrine, logo e tipo de loja), guardados
 // na tabela `configuracoes` do banco da própria empresa e editados no painel.
 // As páginas (index.html e admin) saem do servidor já com os textos da loja: os
 // elementos marcados com data-loja="campo" recebem o valor, e window.LOJA leva os
@@ -14,8 +14,13 @@ const CAMPOS_TEXTO = {
   sobre_titulo: 80,
   sobre: 2000,
 };
-// oculos: loja de óculos (provador virtual na vitrine, 🕶️ e "óculos" nas mensagens).
-const RECURSOS = ['oculos'];
+// Tipo de loja (loja_nicho): troca os campos do produto e os textos de cada nicho.
+//   oculos: provador virtual, medidas da armação, formato da lente, 🕶️ nas mensagens.
+//   roupas: tamanhos (cada tamanho com o seu estoque), cor, tecido e categoria.
+//   geral: só os campos comuns.
+// Bancos de antes do nicho seguem o loja_oculos ('1' = oculos, '0' = geral).
+// loja.oculos continua existindo (= nicho oculos) para quem só lê ele.
+const NICHOS = ['oculos', 'roupas', 'geral'];
 
 // Textos de hoje da Nix Glasses: a empresa padrão continua igual sem mexer em nada.
 const PADRAO_NIX = {
@@ -31,7 +36,15 @@ const PADRAO_NIX = {
     'Todos nossos modelos possuem lentes com proteção UV400, armações em acetato italiano ou metal premium, e passam por rigoroso controle de qualidade.',
     'Trabalhamos com o sistema de maleta: você experimenta em casa, escolhe seus favoritos e finaliza o pedido pelo WhatsApp.',
   ].join('\n\n'),
+  nicho: 'oculos',
   oculos: true,
+};
+
+// Textos de partida de uma loja de roupas (só onde a empresa não escreveu os seus).
+const TEXTOS_ROUPAS = {
+  chamada: 'Moda para provar em casa',
+  descricao: 'Escolha as peças e os tamanhos, receba a maleta e prove em casa antes de decidir.',
+  sobre: 'Trabalhamos com o sistema de maleta: você escolhe as peças e os tamanhos, recebe em casa, prova com calma e fica só com o que gostar. O pedido é finalizado pelo WhatsApp.',
 };
 
 function lojaPadrao(empresa) {
@@ -47,8 +60,13 @@ function lojaPadrao(empresa) {
     descricao: 'Monte sua maleta com os produtos que quiser e finalize o pedido pelo WhatsApp.',
     sobre_titulo: 'Sobre nós',
     sobre: 'Trabalhamos com o sistema de maleta: você escolhe os produtos, recebe em casa e finaliza o pedido pelo WhatsApp.',
+    nicho: 'geral',
     oculos: false,
   };
+}
+
+function lerNicho(v) {
+  return NICHOS.includes(v) ? v : null;
 }
 
 // Texto de uma linha (ou com parágrafos, no "sobre"), sem espaços sobrando.
@@ -65,14 +83,15 @@ function limparTextoLoja(campo, v) {
 function montarLoja(empresa, linhas) {
   const loja = lojaPadrao(empresa);
   const salvo = new Map(linhas.map((r) => [r.chave, r.valor]));
+  const oculosAntigo = salvo.get('loja_oculos');
+  if (oculosAntigo === '1' || oculosAntigo === '0') loja.nicho = oculosAntigo === '1' ? 'oculos' : 'geral';
+  loja.nicho = lerNicho(salvo.get('loja_nicho')) || loja.nicho;
+  if (loja.nicho === 'roupas') Object.assign(loja, TEXTOS_ROUPAS);
   for (const campo of Object.keys(CAMPOS_TEXTO)) {
     const v = salvo.get('loja_' + campo);
     if (v) loja[campo] = v;
   }
-  for (const r of RECURSOS) {
-    const v = salvo.get('loja_' + r);
-    if (v === '1' || v === '0') loja[r] = v === '1';
-  }
+  loja.oculos = loja.nicho === 'oculos';
   loja.logo = salvo.get('loja_logo') || '';
   return loja;
 }
@@ -99,8 +118,8 @@ function renderizarPagina(html, loja) {
       .join('') + fecha
   );
   out = out.replace(/\salt="NIX"/g, ` alt="${escapeHtml(loja.marca)}"`);
-  const publico = { nome: loja.nome, marca: loja.marca, oculos: loja.oculos };
+  const publico = { nome: loja.nome, marca: loja.marca, oculos: loja.oculos, nicho: loja.nicho };
   return out.replace('</head>', `  <script>window.LOJA = ${jsonParaScript(publico)};</script>\n</head>`);
 }
 
-module.exports = { CAMPOS_TEXTO, RECURSOS, PADRAO_NIX, lojaPadrao, limparTextoLoja, montarLoja, renderizarPagina, escapeHtml };
+module.exports = { CAMPOS_TEXTO, NICHOS, PADRAO_NIX, lojaPadrao, lerNicho, limparTextoLoja, montarLoja, renderizarPagina, escapeHtml };

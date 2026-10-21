@@ -7,7 +7,7 @@ const crypto = require('crypto');
 const fs = require('fs');
 const { criarPool, initTables } = require('./db');
 const { lerEmpresas, empresaDoHost } = require('./empresas');
-const { CAMPOS_TEXTO, RECURSOS, limparTextoLoja, montarLoja, renderizarPagina } = require('./loja');
+const { CAMPOS_TEXTO, lerNicho, limparTextoLoja, montarLoja, renderizarPagina } = require('./loja');
 const { importarProduto, ErroImportacao } = require('./importar-produto');
 
 const app = express();
@@ -523,6 +523,12 @@ function lerGenero(v) {
   return null;
 }
 
+// Tamanho da roupa: letras em maiúsculas (p -> P, gg -> GG); o resto como veio ("38", "Único").
+function lerTamanho(v) {
+  const t = textoCurto(v, 20);
+  return /^[a-z]{1,4}$/i.test(t) ? t.toUpperCase() : t;
+}
+
 // Campos de especificação vindos do formulário/lote (e o nome curto do card, que
 // segue o mesmo caminho). Só inclui os enviados (o PUT não mexe no que não veio).
 // `erro` = a 1ª medida inválida.
@@ -538,6 +544,8 @@ function lerEspecificacoes(body) {
   if (body.material !== undefined) espec.material = textoCurto(body.material, 60);
   if (body.tipo !== undefined) espec.tipo = textoCurto(body.tipo, 100);
   if (body.nome_curto !== undefined) espec.nome_curto = textoCurto(body.nome_curto, 80);
+  if (body.tamanho !== undefined) espec.tamanho = lerTamanho(body.tamanho);
+  if (body.grade !== undefined) espec.grade = textoCurto(body.grade, 100);
   if (body.genero !== undefined) {
     const g = lerGenero(body.genero);
     if (g === null) erro = erro || { campo: 'genero', mensagem: 'Gênero inválido (Masculino, Feminino ou Unissex)' };
@@ -579,7 +587,7 @@ function validarProdutoLote(linha) {
     data_compra: lerDataCompra(l.data_compra),
   };
   const { espec, erro: erroEspec } = lerEspecificacoes(l);
-  Object.assign(produto, { diametro_cm: null, ponte_cm: null, largura_total_cm: null, material: '', tipo: '', nome_curto: '', genero: '' }, espec);
+  Object.assign(produto, { diametro_cm: null, ponte_cm: null, largura_total_cm: null, material: '', tipo: '', nome_curto: '', genero: '', tamanho: '', grade: '' }, espec);
   if (erroEspec) erros.push(erroEspec);
   if (!produto.nome) erros.push({ campo: 'nome', mensagem: 'Informe o nome' });
   if (!produto.codigo_sku) erros.push({ campo: 'codigo_sku', mensagem: 'Informe o SKU' });
@@ -600,6 +608,29 @@ function lerQuantidade(v) {
   if (v === undefined || v === null || (typeof v === 'string' && v.trim() === '')) return null;
   const n = typeof v === 'number' ? v : /^\s*\d{1,6}\s*$/.test(String(v)) ? Number(v) : NaN;
   return Number.isInteger(n) && n >= 0 && n <= 100000 ? n : false;
+}
+
+// Grade de tamanhos do cadastro de roupas: [{ tamanho, estoque }] (ou o JSON dela, vindo
+// do formulário). Vazio = null (produto único), inválida = false. Tamanhos repetidos
+// não entram (cada um vira um produto com SKU próprio).
+const MAX_TAMANHOS = 30;
+function lerGradeTamanhos(v) {
+  if (v === undefined || v === null || v === '') return null;
+  let lista = v;
+  if (typeof v === 'string') {
+    try { lista = JSON.parse(v); } catch { return false; }
+  }
+  if (!Array.isArray(lista) || lista.length === 0 || lista.length > MAX_TAMANHOS) return false;
+  const vistos = new Set();
+  const grade = [];
+  for (const item of lista) {
+    const tamanho = lerTamanho(item && item.tamanho);
+    const estoque = lerQuantidade(item && item.estoque);
+    if (!tamanho || estoque === false || vistos.has(tamanho.toLowerCase())) return false;
+    vistos.add(tamanho.toLowerCase());
+    grade.push({ tamanho, estoque: estoque ?? 0 });
+  }
+  return grade;
 }
 
 // Data da compra em AAAA-MM-DD ou DD/MM/AAAA: vazio = null, inválida = false.
@@ -927,7 +958,7 @@ async function startServer() {
     try {
       const result = await req.db.query(
         `SELECT id, nome, nome_curto, codigo_sku, preco_venda, imagem_url, fotos, status, disponibilidade, formato, estilo, cor_armacao,
-                diametro_cm, ponte_cm, largura_total_cm, material, tipo, genero
+                diametro_cm, ponte_cm, largura_total_cm, material, tipo, genero, tamanho, grade
          FROM produtos
          WHERE status IN ('DISPONIVEL', 'CONDICIONAL')
          ORDER BY created_at DESC`
@@ -945,7 +976,7 @@ async function startServer() {
     try {
       const result = await req.db.query(
         `SELECT p.id, p.nome, p.nome_curto, p.codigo_sku, p.preco_custo, p.preco_venda, p.imagem_url, p.fotos, p.status, p.disponibilidade,
-                p.formato, p.estilo, p.cor_armacao, p.diametro_cm, p.ponte_cm, p.largura_total_cm, p.material, p.tipo, p.genero,
+                p.formato, p.estilo, p.cor_armacao, p.diametro_cm, p.ponte_cm, p.largura_total_cm, p.material, p.tipo, p.genero, p.tamanho, p.grade,
                 p.fornecedor, p.codigo_fornecedor, p.link_fornecedor, p.vezes_em_maleta, p.pedido_condicional_id,
                 p.estoque, COALESCE(mp.pedidos, '{}') AS maletas, COALESCE(cardinality(mp.pedidos), 0)::int AS em_maleta,
                 to_char(uc.data_compra, 'YYYY-MM-DD') AS ultima_compra, uc.preco_custo AS custo_ultima_compra,
@@ -973,7 +1004,7 @@ async function startServer() {
   async function handleListConditional(req, res) {
     try {
       const result = await req.db.query(
-        `SELECT id, nome, nome_curto, codigo_sku, preco_custo, preco_venda, imagem_url, fotos, status, disponibilidade, formato, estilo, cor_armacao, diametro_cm, ponte_cm, largura_total_cm, material, tipo, genero, fornecedor, codigo_fornecedor, link_fornecedor, vezes_em_maleta, estoque
+        `SELECT id, nome, nome_curto, codigo_sku, preco_custo, preco_venda, imagem_url, fotos, status, disponibilidade, formato, estilo, cor_armacao, diametro_cm, ponte_cm, largura_total_cm, material, tipo, genero, tamanho, grade, fornecedor, codigo_fornecedor, link_fornecedor, vezes_em_maleta, estoque
          FROM produtos p
          WHERE EXISTS (SELECT 1 FROM maleta_pecas m WHERE m.produto_id = p.id)
          ORDER BY created_at DESC`
@@ -1012,6 +1043,17 @@ async function startServer() {
     if (erroEspec) return res.status(400).json({ error: erroEspec.mensagem });
     const estoque = lerQuantidade(req.body.estoque);
     if (estoque === false) return res.status(400).json({ error: 'Estoque inválido' });
+    // Roupas: com a grade de tamanhos, cada tamanho vira um produto com o seu estoque,
+    // SKU "<SKU>-<tamanho>", nome "<nome> - <tamanho>", as mesmas fotos e grade = SKU
+    // (o código do modelo, que junta os tamanhos num card só na vitrine).
+    const tamanhos = lerGradeTamanhos(req.body.tamanhos);
+    if (tamanhos === false) return res.status(400).json({ error: 'Tamanhos inválidos (cada tamanho uma vez, com a quantidade em peças)' });
+    const pecas = tamanhos
+      ? tamanhos.map((t) => ({
+        nome: `${nome} - ${t.tamanho}`, sku: `${codigoFinal}-${t.tamanho}`, estoque: t.estoque,
+        espec: { ...espec, tamanho: t.tamanho, grade: textoCurto(codigoFinal, 100) },
+      }))
+      : [{ nome, sku: codigoFinal, estoque: estoque ?? 1, espec }];
 
     let client;
     try {
@@ -1021,24 +1063,30 @@ async function startServer() {
       for (const file of req.fotosEnviadas || []) {
         if (file) fotos.push(await salvarImagem(client, file));
       }
-      const result = await client.query(
-        `INSERT INTO produtos (nome, codigo_sku, preco_custo, preco_venda, imagem_url, fotos, disponibilidade, formato, estilo, cor_armacao, fornecedor, codigo_fornecedor, link_fornecedor,
-                               diametro_cm, ponte_cm, largura_total_cm, material, tipo, nome_curto, genero, estoque)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21)
-         RETURNING *`,
-        [nome, codigoFinal, preco_custo, preco_venda, fotos[0] || null, fotos, disponibilidade, formato, estilo, cor_armacao, fornecedor, codigoFornecedor, linkFornecedor,
-          espec.diametro_cm ?? null, espec.ponte_cm ?? null, espec.largura_total_cm ?? null, espec.material || '', espec.tipo || '', espec.nome_curto || '', espec.genero || '',
-          estoque ?? 1]
-      );
-      await registrarCompraCadastro(client, result.rows[0], { quantidade: estoque || 1 });
-      const [produto] = await recalcularStatus(client, [result.rows[0].id]);
+      const criados = [];
+      for (const peca of pecas) {
+        const e = peca.espec;
+        const result = await client.query(
+          `INSERT INTO produtos (nome, codigo_sku, preco_custo, preco_venda, imagem_url, fotos, disponibilidade, formato, estilo, cor_armacao, fornecedor, codigo_fornecedor, link_fornecedor,
+                                 diametro_cm, ponte_cm, largura_total_cm, material, tipo, nome_curto, genero, estoque, tamanho, grade)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23)
+           RETURNING *`,
+          [peca.nome, peca.sku, preco_custo, preco_venda, fotos[0] || null, fotos, disponibilidade, formato, estilo, cor_armacao, fornecedor, codigoFornecedor, linkFornecedor,
+            e.diametro_cm ?? null, e.ponte_cm ?? null, e.largura_total_cm ?? null, e.material || '', e.tipo || '', e.nome_curto || '', e.genero || '',
+            peca.estoque, e.tamanho || '', e.grade || '']
+        );
+        // A compra do cadastro conta ao menos 1 peça (o custo fica registrado mesmo sem estoque)
+        await registrarCompraCadastro(client, result.rows[0], { quantidade: peca.estoque || 1 });
+        criados.push(...(await recalcularStatus(client, [result.rows[0].id])));
+      }
       await client.query('COMMIT');
-      res.status(201).json(produto);
+      // Um produto: a resposta de sempre. Grade: o 1º tamanho e a lista completa.
+      res.status(201).json(tamanhos ? { ...criados[0], produtos: criados } : criados[0]);
     } catch (err) {
       if (client) await client.query('ROLLBACK').catch(() => {});
       console.error(err);
       if (err.code === '23505') {
-        return res.status(400).json({ error: 'SKU já cadastrado' });
+        return res.status(400).json({ error: tamanhos ? 'SKU já cadastrado (algum tamanho já existe com esse código)' : 'SKU já cadastrado' });
       }
       res.status(500).json({ error: 'Erro ao cadastrar produto' });
     } finally {
@@ -1148,8 +1196,28 @@ async function startServer() {
         result = { rows: await recalcularStatus(client, [result.rows[0].id]) };
       }
 
-      const idsRemovidos = removidas.map(idDaImagem).filter(Boolean);
-      if (idsRemovidos.length) await client.query(`DELETE FROM imagens WHERE id = ANY($1)`, [idsRemovidos]);
+      // Roupas: as fotos valem para todos os tamanhos do mesmo modelo (grade)
+      const grade = result.rows[0].grade;
+      if (mexeNasFotos && grade) {
+        const irmaos = await client.query(
+          `UPDATE produtos p SET fotos = $1, imagem_url = $2, updated_at = CURRENT_TIMESTAMP
+           FROM (SELECT id, fotos FROM produtos WHERE grade = $3 AND id <> $4 FOR UPDATE) antes
+           WHERE p.id = antes.id
+           RETURNING antes.fotos`,
+          [result.rows[0].fotos, result.rows[0].imagem_url, grade, result.rows[0].id]
+        );
+        for (const r of irmaos.rows) removidas.push(...(r.fotos || []).filter((url) => !result.rows[0].fotos.includes(url)));
+      }
+
+      // Apaga as fotos que saíram, menos as que outro produto ainda usa
+      const idsRemovidos = [...new Set(removidas.map(idDaImagem).filter(Boolean))];
+      if (idsRemovidos.length) {
+        await client.query(
+          `DELETE FROM imagens i WHERE i.id = ANY($1)
+           AND NOT EXISTS (SELECT 1 FROM produtos p WHERE ('/imagens/' || i.id) = ANY(p.fotos) OR p.imagem_url = '/imagens/' || i.id)`,
+          [idsRemovidos]
+        );
+      }
 
       await client.query('COMMIT');
       res.json(result.rows[0]);
@@ -1233,12 +1301,12 @@ async function startServer() {
         // ON CONFLICT cobre outro cadastro do mesmo SKU entre a checagem e o INSERT
         const r = await client.query(
           `INSERT INTO produtos (nome, codigo_sku, preco_custo, preco_venda, status, disponibilidade, formato, estilo, cor_armacao, fornecedor, codigo_fornecedor, link_fornecedor,
-                                 diametro_cm, ponte_cm, largura_total_cm, material, tipo, nome_curto, genero, estoque)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)
+                                 diametro_cm, ponte_cm, largura_total_cm, material, tipo, nome_curto, genero, estoque, tamanho, grade)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22)
            ON CONFLICT (codigo_sku) DO NOTHING
            RETURNING *`,
           [p.nome, p.codigo_sku, p.preco_custo, p.preco_venda, p.status, p.disponibilidade, p.formato, p.estilo, p.cor_armacao, p.fornecedor, p.codigo_fornecedor, p.link_fornecedor,
-            p.diametro_cm, p.ponte_cm, p.largura_total_cm, p.material, p.tipo, p.nome_curto, p.genero, compra.quantidade]
+            p.diametro_cm, p.ponte_cm, p.largura_total_cm, p.material, p.tipo, p.nome_curto, p.genero, compra.quantidade, p.tamanho, p.grade]
         );
         if (!r.rows.length) {
           ignorados.push({ linha: i, codigo_sku: p.codigo_sku, codigo_fornecedor: p.codigo_fornecedor, campo: 'codigo_sku', motivo: 'SKU já cadastrado' });
@@ -2304,11 +2372,17 @@ async function startServer() {
       if (v === null) return res.status(400).json({ error: `Campo "${campo}" inválido` });
       pares.push(['loja_' + campo, v]);
     }
-    for (const r of RECURSOS) {
-      if (corpo[r] === undefined) continue;
-      if (typeof corpo[r] !== 'boolean') return res.status(400).json({ error: `Campo "${r}" inválido` });
-      pares.push(['loja_' + r, corpo[r] ? '1' : '0']);
+    // Tipo de loja: `nicho` (oculos, roupas, geral) ou o `oculos` de antes (true/false)
+    let nicho = null;
+    if (corpo.oculos !== undefined) {
+      if (typeof corpo.oculos !== 'boolean') return res.status(400).json({ error: 'Campo "oculos" inválido' });
+      nicho = corpo.oculos ? 'oculos' : 'geral';
     }
+    if (corpo.nicho !== undefined) {
+      nicho = lerNicho(corpo.nicho);
+      if (!nicho) return res.status(400).json({ error: 'Tipo de loja inválido' });
+    }
+    if (nicho) pares.push(['loja_nicho', nicho], ['loja_oculos', nicho === 'oculos' ? '1' : '0']);
     try {
       await salvarConfiguracoes(req.db, pares);
       cacheLoja.delete(req.empresa.slug);

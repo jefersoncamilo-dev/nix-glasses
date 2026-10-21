@@ -173,7 +173,7 @@ function extrairFuncao(html, nome) {
   }
 }
 
-const FUNCOES = ['escapeHtml', 'fotosDoProduto', 'indiceCircular', 'ehSobEncomenda', 'calcularSinal', 'passaFiltroStatus',
+const FUNCOES = ['ordemTamanho', 'agruparCards', 'nomeModelo', 'tamanhosCard', 'botaoGrupoCard', 'grupoDoProduto', 'botoesTamanho', 'escapeHtml', 'fotosDoProduto', 'indiceCircular', 'ehSobEncomenda', 'calcularSinal', 'passaFiltroStatus',
   'etiquetaProduto', 'nomeCard', 'tagsCard', 'botaoMaletaCard', 'passaFiltroGenero', 'renderizarCatalogo', 'trocarFotoCard', 'especificacoesProduto', 'renderizarDetalhes', 'mostrarFotoDetalhes'];
 
 function vitrine(produtos) {
@@ -188,6 +188,7 @@ function vitrine(produtos) {
     filtroStatus: { value: '' },
     filtroFormato: { value: '' },
     filtroGenero: { value: '' },
+    NICHO: 'oculos', rotulos: { formato: 'Formato da lente', formatos: 'Todos os formatos', material: 'Material', tipo: 'Tipo' }, ORDEM_TAMANHOS: [], filtroTamanho: { value: '' },
     catalogoGrid: { innerHTML: '', classList: { add() {}, remove() {} }, appendChild: (c) => cards.push(c), querySelector: () => null },
     emptyState: elemento(),
     detalhesConteudo: elemento(),

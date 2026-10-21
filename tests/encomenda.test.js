@@ -99,7 +99,7 @@ function extrairFuncao(html, nome) {
   }
 }
 
-const FUNCOES = ['escapeHtml', 'fotosDoProduto', 'indiceCircular', 'ehSobEncomenda', 'calcularSinal', 'passaFiltroStatus', 'etiquetaProduto',
+const FUNCOES = ['ordemTamanho', 'agruparCards', 'nomeModelo', 'tamanhosCard', 'botaoGrupoCard', 'escapeHtml', 'fotosDoProduto', 'indiceCircular', 'ehSobEncomenda', 'calcularSinal', 'passaFiltroStatus', 'etiquetaProduto',
   'nomeCard', 'tagsCard', 'botaoMaletaCard', 'atualizarCardMaleta', 'itemEhEncomenda', 'resumoMaleta', 'passaFiltroGenero', 'renderizarCatalogo', 'toggleMaleta', 'salvarMaleta', 'textoGuiaCatalogo', 'atualizarGuias', 'atualizarMaletaUI', 'montarTextoWhatsapp'];
 
 function elemento() {
@@ -135,6 +135,7 @@ function vitrine(produtos, filtro = '', itens = []) {
     filtroStatus: { value: filtro },
     filtroFormato: { value: '' },
     filtroGenero: { value: '' },
+    NICHO: 'oculos', rotulos: { formato: 'Formato da lente', formatos: 'Todos os formatos', material: 'Material', tipo: 'Tipo' }, ORDEM_TAMANHOS: [], filtroTamanho: { value: '' },
     catalogoGrid,
     emptyState: novoElemento(),
     ...els,

@@ -143,7 +143,7 @@ describe('renderizarPagina', () => {
     for (const p of paginas) {
       const html = ler(p);
       const out = renderizarPagina(html, PADRAO_NIX);
-      assert.match(out, /<script>window\.LOJA = \{"nome":"Nix Glasses","marca":"NIX","oculos":true\};<\/script>/, p);
+      assert.match(out, /<script>window\.LOJA = \{"nome":"Nix Glasses","marca":"NIX","oculos":true,"nicho":"oculos"\};<\/script>/, p);
       assert.equal(semScriptLoja(out), html, p);
     }
   });

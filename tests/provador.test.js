@@ -194,12 +194,13 @@ describe('Provador: desenharOculos', () => {
 
 describe('Provador: botão nos detalhes do produto', () => {
   const FUNCOES = ['escapeHtml', 'fotosDoProduto', 'indiceCircular', 'ehSobEncomenda', 'calcularSinal',
-    'etiquetaProduto', 'especificacoesProduto', 'renderizarDetalhes'];
+    'etiquetaProduto', 'especificacoesProduto', 'renderizarDetalhes', 'ordemTamanho', 'agruparCards', 'nomeModelo', 'grupoDoProduto', 'botoesTamanho'];
 
   function detalhesDe(produto) {
     const detalhesConteudo = { innerHTML: '' };
     const ctx = carregar(FUNCOES, {
       produtos: [produto],
+      NICHO: 'oculos', rotulos: { formato: 'Formato da lente', formatos: 'Todos os formatos', material: 'Material', tipo: 'Tipo' }, ORDEM_TAMANHOS: [],
       maleta: { itens: [] },
       detalhes: { id: produto.id, indice: 0 },
       detalhesConteudo,

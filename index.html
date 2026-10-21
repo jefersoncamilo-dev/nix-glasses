@@ -160,6 +160,9 @@
           <select id="filtroFormato" class="hidden w-full sm:w-auto px-3 sm:px-4 py-1.5 sm:py-2 text-sm text-gray-700 border border-gray-200 rounded-full focus:outline-none focus:ring-2 focus:ring-gray-400" aria-label="Formato">
             <option value="">Todos os formatos</option>
           </select>
+          <select id="filtroTamanho" class="hidden w-full sm:w-auto px-3 sm:px-4 py-1.5 sm:py-2 text-sm text-gray-700 border border-gray-200 rounded-full focus:outline-none focus:ring-2 focus:ring-gray-400" aria-label="Tamanho">
+            <option value="">Todos os tamanhos</option>
+          </select>
           <select id="filtroGenero" class="hidden w-full sm:w-auto px-3 sm:px-4 py-1.5 sm:py-2 text-sm text-gray-700 border border-gray-200 rounded-full focus:outline-none focus:ring-2 focus:ring-gray-400" aria-label="Gênero">
             <option value="">Todos os gêneros</option>
           </select>
@@ -396,6 +399,7 @@
     const filtroStatus = document.getElementById('filtroStatus');
     const filtroFormato = document.getElementById('filtroFormato');
     const filtroGenero = document.getElementById('filtroGenero');
+    const filtroTamanho = document.getElementById('filtroTamanho');
     const modalMaleta = document.getElementById('modalMaleta');
     const btnMaleta = document.getElementById('btnMaleta');
     const fecharMaleta = document.getElementById('fecharMaleta');
@@ -411,6 +415,16 @@
     const cepInput = document.getElementById('cepCliente');
     const modalDetalhes = document.getElementById('modalDetalhes');
     const detalhesConteudo = document.getElementById('detalhesConteudo');
+
+    // Tipo de loja (painel > Configurações > Dados da loja): óculos, roupas ou geral.
+    // Troca os rótulos dos campos e, nas roupas, junta os tamanhos de um modelo num card.
+    const NICHO = globalThis.LOJA?.nicho || (globalThis.LOJA?.oculos === false ? 'geral' : 'oculos');
+    const ROTULOS_NICHO = {
+      oculos: { formato: 'Formato da lente', formatos: 'Todos os formatos', material: 'Material', tipo: 'Tipo' },
+      roupas: { formato: 'Categoria', formatos: 'Todas as categorias', material: 'Tecido / composição', tipo: 'Modelagem' },
+      geral: { formato: 'Categoria', formatos: 'Todas as categorias', material: 'Material', tipo: 'Tipo' },
+    };
+    const rotulos = ROTULOS_NICHO[NICHO] || ROTULOS_NICHO.geral;
 
     // Foto mostrada em cada card (id do produto -> índice) e o produto aberto nos detalhes
     const fotoCard = {};
@@ -505,6 +519,7 @@
           mostrarToast(saiu === 1 ? '1 peça saiu da maleta porque não está mais disponível' : `${saiu} peças saíram da maleta porque não estão mais disponíveis`);
         }
         preencherFiltroFormato();
+        preencherFiltroTamanho();
         preencherFiltroGenero();
         atualizarContagemFiltros();
         renderizarCatalogo();
@@ -517,7 +532,8 @@
     // Preencher filtro de formato
     function preencherFiltroFormato() {
       const formatos = [...new Set(produtos.map(p => p.formato).filter(Boolean))];
-      filtroFormato.innerHTML = '<option value="">Todos os formatos</option>';
+      filtroFormato.innerHTML = `<option value="">${rotulos.formatos}</option>`;
+      filtroFormato.setAttribute('aria-label', rotulos.formato);
       formatos.forEach(f => {
         const opt = document.createElement('option');
         opt.value = f;
@@ -526,6 +542,62 @@
       });
       // Com um formato só (ou nenhum) o filtro não ajuda: fica escondido
       filtroFormato.classList.toggle('hidden', formatos.length < 2);
+    }
+
+    // Ordem dos tamanhos: letras (PP ao EGG), depois a numeração (34, 36...), depois o resto
+    const ORDEM_TAMANHOS = ['RN', 'PP', 'P', 'M', 'G', 'GG', 'XG', 'XGG', 'EG', 'EGG', 'G1', 'G2', 'G3', 'G4', 'U', 'ÚNICO', 'UNICO'];
+    function ordemTamanho(t) {
+      const s = String(t ?? '').trim().toUpperCase();
+      const i = ORDEM_TAMANHOS.indexOf(s);
+      if (i >= 0) return i;
+      const n = Number(s.replace(',', '.'));
+      return s && Number.isFinite(n) ? 100 + n : 1000;
+    }
+
+    function ordenarTamanhos(lista) {
+      return [...lista].sort((a, b) => ordemTamanho(a) - ordemTamanho(b) || String(a).localeCompare(String(b)));
+    }
+
+    // Filtro de tamanho (só nas roupas): os tamanhos que têm peça na vitrine
+    function preencherFiltroTamanho() {
+      const tamanhos = NICHO === 'roupas' ? ordenarTamanhos([...new Set(produtos.map(p => String(p.tamanho || '').trim()).filter(Boolean))]) : [];
+      filtroTamanho.innerHTML = '<option value="">Todos os tamanhos</option>';
+      tamanhos.forEach(t => {
+        const opt = document.createElement('option');
+        opt.value = t;
+        opt.textContent = `Tamanho ${t}`;
+        filtroTamanho.appendChild(opt);
+      });
+      filtroTamanho.classList.toggle('hidden', tamanhos.length < 2);
+    }
+
+    // Roupas: os tamanhos do mesmo modelo (mesma grade) viram um card só, do menor
+    // para o maior. Nos outros nichos, ou sem grade, cada produto é o seu card.
+    function agruparCards(lista) {
+      const grupos = [];
+      const porGrade = new Map();
+      for (const p of lista) {
+        const grade = NICHO === 'roupas' ? String(p.grade || '').trim() : '';
+        if (grade && porGrade.has(grade)) { porGrade.get(grade).push(p); continue; }
+        const grupo = [p];
+        if (grade) porGrade.set(grade, grupo);
+        grupos.push(grupo);
+      }
+      return grupos.map(g => g.sort((a, b) => ordemTamanho(a.tamanho) - ordemTamanho(b.tamanho)));
+    }
+
+    // Todos os tamanhos do modelo de um produto (o próprio produto, se não tiver grade)
+    function grupoDoProduto(produto) {
+      const grade = NICHO === 'roupas' ? String(produto.grade || '').trim() : '';
+      if (!grade) return [produto];
+      return agruparCards(produtos.filter(p => String(p.grade || '').trim() === grade))[0];
+    }
+
+    // Nome do modelo: o nome do produto sem o " - M" do tamanho no fim
+    function nomeModelo(p) {
+      const nome = String(p.nome ?? '');
+      const sufixo = p.tamanho ? ` - ${p.tamanho}` : '';
+      return sufixo && nome.endsWith(sufixo) ? nome.slice(0, -sufixo.length) : nome;
     }
 
     const NOMES_GENERO = { MASCULINO: 'Masculino', FEMININO: 'Feminino', UNISSEX: 'Unissex' };
@@ -584,6 +656,8 @@
     function contagemFiltros(lista) {
       const contagem = { '': lista.length };
       for (const filtro of ['DISPONIVEL', 'SOB_ENCOMENDA']) contagem[filtro] = lista.filter(p => passaFiltroStatus(p, filtro)).length;
+      // Roupas: conta modelos (cards), não cada tamanho
+      if (NICHO === 'roupas') for (const filtro of Object.keys(contagem)) contagem[filtro] = agruparCards(lista.filter(p => passaFiltroStatus(p, filtro))).length;
       return contagem;
     }
 
@@ -592,7 +666,10 @@
     function textoGuiaCatalogo(filtro, itensNaMaleta) {
       if (filtro === 'DISPONIVEL') return '<strong>Pronta entrega:</strong> vão na maleta e chegam para você provar em casa.';
       if (filtro === 'SOB_ENCOMENDA') return '<strong>Sob encomenda:</strong> pedimos para você com sinal de 50%.';
-      return itensNaMaleta > 0 ? '' : 'Toque em <strong>+ Maleta</strong> nos modelos que quer provar em casa.';
+      if (itensNaMaleta > 0) return '';
+      return NICHO === 'roupas'
+        ? 'Escolha o <strong>tamanho</strong> das peças que quer provar em casa e coloque na maleta.'
+        : 'Toque em <strong>+ Maleta</strong> nos modelos que quer provar em casa.';
     }
 
     // Troca o filtro de disponibilidade (pílulas do catálogo e atalhos do topo)
@@ -629,7 +706,7 @@
     // Nome do card: o "Nome curto" cadastrado no painel ou, sem ele, o nome completo
     // (que o card limita a 2 linhas). Detalhes, maleta e WhatsApp usam o nome completo.
     function nomeCard(p) {
-      return String(p.nome_curto || '').trim() || String(p.nome ?? '');
+      return String(p.nome_curto || '').trim() || nomeModelo(p);
     }
 
     // Etiquetas discretas do card: material, formato e cor, só o que foi preenchido
@@ -644,6 +721,24 @@
       const curto = jaNaMaleta ? '✓ Na Maleta' : encomenda ? '+ Encomenda' : '+ Maleta';
       const longo = jaNaMaleta ? '✓ Na Maleta · Remover' : encomenda ? 'Encomendar (na Maleta)' : 'Adicionar à Maleta';
       return `<button type="button" data-btn-maleta onclick="toggleMaleta(${Number(produto.id)})" aria-pressed="${jaNaMaleta}" class="btn btn-sm btn-maleta w-full ${cor}"><span class="sm:hidden">${curto}</span><span class="hidden sm:inline">${longo}</span></button>`;
+    }
+
+    // Botão do card de um modelo com vários tamanhos: abre os detalhes para escolher o
+    // tamanho. Com tamanhos já na maleta, mostra quais.
+    function botaoGrupoCard(grupo) {
+      const naMaleta = grupo.filter(p => maleta.itens.some(i => i.id === p.id));
+      const encomenda = grupo.every(ehSobEncomenda);
+      const alvo = Number((naMaleta[0] || grupo[0]).id);
+      const cor = naMaleta.length ? 'btn-na-maleta' : encomenda ? 'btn-encomenda' : 'btn-primario';
+      const tamanhos = naMaleta.map(p => p.tamanho).filter(Boolean).join(', ');
+      const curto = naMaleta.length ? `✓ ${escapeHtml(tamanhos || 'Na Maleta')}` : 'Tamanho';
+      const longo = naMaleta.length ? `✓ Na Maleta · ${escapeHtml(tamanhos)}` : 'Escolher tamanho';
+      return `<button type="button" data-btn-maleta onclick="abrirDetalhes(${alvo})" aria-pressed="${naMaleta.length > 0}" class="btn btn-sm btn-maleta w-full ${cor}"><span class="sm:hidden">${curto}</span><span class="hidden sm:inline">${longo}</span></button>`;
+    }
+
+    // Tamanhos do card (roupas): "P · M · G" ou o tamanho único do produto
+    function tamanhosCard(grupo) {
+      return NICHO === 'roupas' ? grupo.map(p => String(p.tamanho || '').trim()).filter(Boolean) : [];
     }
 
     // Itens da maleta marcados como encomenda (guardados assim ao adicionar)
@@ -668,11 +763,13 @@
       const statusFiltro = filtroStatus.value;
       const formatoFiltro = filtroFormato.value;
       const generoFiltro = filtroGenero.value;
+      const tamanhoFiltro = filtroTamanho.value;
 
       const filtrados = produtos.filter(p => {
         if (!passaFiltroStatus(p, statusFiltro)) return false;
         if (formatoFiltro && p.formato !== formatoFiltro) return false;
         if (!passaFiltroGenero(p, generoFiltro)) return false;
+        if (tamanhoFiltro && String(p.tamanho || '').trim() !== tamanhoFiltro) return false;
         return true;
       });
 
@@ -687,8 +784,12 @@
       catalogoGrid.classList.remove('hidden');
       emptyState.classList.add('hidden');
 
-      filtrados.forEach(produto => {
-        const jaNaMaleta = maleta.itens.some(i => i.id === produto.id);
+      agruparCards(filtrados).forEach(grupo => {
+        const produto = grupo[0];
+        const jaNaMaleta = grupo.some(p => maleta.itens.some(i => i.id === p.id));
+        const tamanhos = tamanhosCard(grupo);
+        const precos = grupo.map(p => Number(p.preco_venda));
+        const variaPreco = Math.min(...precos) !== Math.max(...precos);
         const encomenda = ehSobEncomenda(produto);
         const etiqueta = etiquetaProduto(produto);
         const id = Number(produto.id);
@@ -696,6 +797,7 @@
         const indice = fotos.length ? indiceCircular(fotoCard[id] || 0, fotos.length) : 0;
         const card = document.createElement('div');
         card.dataset.card = id;
+        card.dataset.produtos = grupo.map(p => Number(p.id)).join(' ');
         const tags = tagsCard(produto);
         // "Disponível" é o normal da vitrine: só encomenda e condicional ganham etiqueta
         const mostraEtiqueta = encomenda || produto.status !== 'DISPONIVEL';
@@ -719,11 +821,13 @@
           <div class="p-2 sm:p-4 flex-1 flex flex-col">
             <h3 class="font-semibold text-gray-900 text-xs sm:text-base leading-snug mb-0.5 line-clamp-2 break-words" title="${escapeHtml(produto.nome)}">${escapeHtml(nomeCard(produto))}</h3>
             ${tags.length ? `<p data-tags-card class="hidden sm:block text-xs text-gray-500 mb-2 truncate">${tags.map(escapeHtml).join(' · ')}</p>` : ''}
+            ${tamanhos.length ? `<p data-tamanhos-card class="text-[10px] sm:text-xs font-medium text-gray-700 mb-1 sm:mb-2 truncate" title="Tamanhos">${tamanhos.map(escapeHtml).join(' · ')}</p>` : ''}
             <div class="mt-auto mb-2 sm:mb-3">
-              <span class="block text-sm sm:text-xl font-bold text-gray-900">${formatarMoeda(produto.preco_venda)}</span>
+              ${variaPreco ? '<span class="block text-[10px] sm:text-xs text-gray-500">a partir de</span>' : ''}
+              <span class="block text-sm sm:text-xl font-bold text-gray-900">${formatarMoeda(Math.min(...precos))}</span>
               ${encomenda ? `<span data-selo-sinal class="block text-[10px] sm:text-xs font-medium text-blue-700 whitespace-nowrap" title="50% de sinal agora e 50% na entrega">Sinal: ${formatarMoeda(calcularSinal(produto.preco_venda))}</span>` : ''}
             </div>
-            <div data-acao-maleta>${botaoMaletaCard(produto, jaNaMaleta)}</div>
+            <div data-acao-maleta>${grupo.length > 1 ? botaoGrupoCard(grupo) : botaoMaletaCard(produto, jaNaMaleta)}</div>
           </div>
         `;
         catalogoGrid.appendChild(card);
@@ -752,12 +856,14 @@
     // resposta é imediata e as fotos não são recarregadas. Sem o card na tela, redesenha tudo.
     function atualizarCardMaleta(produtoId) {
       const produto = produtos.find(p => p.id === produtoId);
-      const card = produto && catalogoGrid.querySelector ? catalogoGrid.querySelector(`[data-card="${Number(produtoId)}"]`) : null;
+      // O card de um modelo com vários tamanhos lista os ids de todos em data-produtos
+      const card = produto && catalogoGrid.querySelector ? catalogoGrid.querySelector(`[data-produtos~="${Number(produtoId)}"]`) : null;
       const acao = card && card.querySelector('[data-acao-maleta]');
       if (!acao) return renderizarCatalogo();
-      const jaNaMaleta = maleta.itens.some(i => i.id === produtoId);
+      const grupo = String(card.dataset.produtos || '').split(' ').map(Number).map(id => produtos.find(p => p.id === id)).filter(Boolean);
+      const jaNaMaleta = (grupo.length ? grupo : [produto]).some(p => maleta.itens.some(i => i.id === p.id));
       const tinhaFoco = acao.contains(document.activeElement);
-      acao.innerHTML = botaoMaletaCard(produto, jaNaMaleta);
+      acao.innerHTML = grupo.length > 1 ? botaoGrupoCard(grupo) : botaoMaletaCard(produto, jaNaMaleta);
       const botao = acao.querySelector('[data-btn-maleta]');
       botao.classList.add('pulso');
       if (tinhaFoco) botao.focus();
@@ -767,8 +873,12 @@
 
     // Detalhes do produto: foto grande com setas, deslizar e miniaturas
     function abrirDetalhes(produtoId) {
-      if (!produtos.some(p => p.id === produtoId)) return;
-      detalhes = { id: produtoId, indice: fotoCard[produtoId] || 0 };
+      const produto = produtos.find(p => p.id === produtoId);
+      if (!produto) return;
+      // Modelo com vários tamanhos: a cliente escolhe o tamanho antes de pôr na maleta
+      // (já vem escolhido se esse tamanho está na maleta)
+      const escolhido = grupoDoProduto(produto).length < 2 || maleta.itens.some(i => i.id === produtoId);
+      detalhes = { id: produtoId, indice: fotoCard[produtoId] || 0, escolhido };
       renderizarDetalhes();
       modalDetalhes.classList.remove('hidden');
       document.body.style.overflow = 'hidden';
@@ -782,6 +892,24 @@
       detalhesConteudo.innerHTML = '';
       document.body.style.overflow = '';
       sairModalHistorico('detalhes');
+    }
+
+    function escolherTamanho(produtoId) {
+      if (!detalhes || !produtos.some(p => p.id === produtoId)) return;
+      detalhes.id = produtoId;
+      detalhes.escolhido = true;
+      renderizarDetalhes();
+    }
+
+    // Botões de tamanho dos detalhes: o escolhido fica marcado, os que estão na maleta ganham ✓
+    function botoesTamanho(grupo, escolhidoId) {
+      return grupo.map(p => {
+        const id = Number(p.id);
+        const marcado = id === escolhidoId;
+        const naMaleta = maleta.itens.some(i => i.id === p.id);
+        const titulo = p.status === 'CONDICIONAL' ? ' title="Em condicional com outra cliente"' : '';
+        return `<button type="button" onclick="escolherTamanho(${id})" aria-pressed="${marcado}"${titulo} class="min-w-[2.75rem] h-11 px-3 rounded-full border text-sm font-semibold ${marcado ? 'bg-gray-900 text-white border-gray-900' : 'bg-white text-gray-800 border-gray-300 hover:border-gray-500'}${p.status === 'CONDICIONAL' ? ' opacity-60' : ''}">${escapeHtml(p.tamanho || '?')}${naMaleta ? ' ✓' : ''}</button>`;
+      }).join('');
     }
 
     function mostrarFotoDetalhes(indice) {
@@ -806,10 +934,10 @@
         ['Diâmetro', cm(produto.diametro_cm)],
         ['Ponte', cm(produto.ponte_cm)],
         ['Largura Total', cm(produto.largura_total_cm)],
-        ['Material', produto.material],
-        ['Formato da lente', produto.formato],
+        [rotulos.material, produto.material],
+        [rotulos.formato, produto.formato],
         ['Cor', produto.cor_armacao],
-        ['Tipo', produto.tipo],
+        [rotulos.tipo, produto.tipo],
         ['Gênero', { MASCULINO: 'Masculino', FEMININO: 'Feminino', UNISSEX: 'Unissex' }[produto.genero] || ''],
       ].filter(([, valor]) => valor);
     }
@@ -825,6 +953,10 @@
       const etiqueta = etiquetaProduto(produto);
       const jaNaMaleta = maleta.itens.some(i => i.id === produto.id);
       const especificacoes = especificacoesProduto(produto);
+      const grupo = grupoDoProduto(produto);
+      const comTamanhos = NICHO === 'roupas' && grupo.some(p => p.tamanho);
+      const falteTamanho = grupo.length > 1 && !detalhes.escolhido;
+      const textoBotao = falteTamanho ? 'Escolha o tamanho' : jaNaMaleta ? '✓ Na Maleta · Remover' : encomenda ? 'Encomendar (adicionar à Maleta)' : 'Adicionar à Maleta';
       detalhesConteudo.innerHTML = `
         <div class="grid md:grid-cols-2">
           <div class="p-3 sm:p-4">
@@ -844,9 +976,12 @@
           </div>
           <div class="p-4 sm:p-6 md:pl-2 flex flex-col">
             <span class="self-start px-2 py-1 text-xs font-medium rounded-full mb-3 ${etiqueta.classe}">${escapeHtml(etiqueta.texto)}</span>
-            <h3 class="text-xl sm:text-2xl font-bold text-gray-900 mb-1">${escapeHtml(produto.nome)}</h3>
+            <h3 class="text-xl sm:text-2xl font-bold text-gray-900 mb-1">${escapeHtml(comTamanhos ? nomeModelo(produto) : produto.nome)}</h3>
             <p class="text-sm text-gray-500 mb-4">Ref: ${escapeHtml(produto.codigo_sku)}</p>
             <p class="text-2xl sm:text-3xl font-bold text-gray-900 mb-4">${formatarMoeda(produto.preco_venda)}</p>
+            ${comTamanhos ? `
+            <h4 class="text-sm font-semibold text-gray-900 mb-2">Tamanho${falteTamanho ? '' : `: <span class="font-normal">${escapeHtml(produto.tamanho)}</span>`}</h4>
+            <div data-tamanhos class="flex flex-wrap gap-2 mb-4" role="group" aria-label="Tamanhos">${botoesTamanho(grupo, falteTamanho ? null : id)}</div>` : ''}
             ${produto.estilo ? `<p class="text-sm text-gray-500 mb-4">Estilo: <span class="text-gray-900">${escapeHtml(produto.estilo)}</span></p>` : ''}
             ${especificacoes.length ? `
             <h4 class="text-sm font-semibold text-gray-900 mb-2">Especificações Técnicas</h4>
@@ -856,7 +991,7 @@
             ${encomenda ? `<p class="text-sm text-blue-700 bg-blue-50 rounded-lg px-3 py-2 mb-4">50% sinal + 50% na entrega (sinal de ${formatarMoeda(calcularSinal(produto.preco_venda))})</p>` : ''}
             <div class="mt-auto">
               ${fotos.length && globalThis.LOJA?.oculos !== false ? `<button type="button" onclick="abrirProvador(${id})" class="btn btn-secundario w-full mb-2">Provar virtualmente</button>` : ''}
-              <button type="button" onclick="toggleMaleta(${id}); renderizarDetalhes()" aria-pressed="${jaNaMaleta}" class="btn btn-maleta w-full ${jaNaMaleta ? 'btn-na-maleta' : encomenda ? 'btn-encomenda' : 'btn-primario'}">${jaNaMaleta ? '✓ Na Maleta · Remover' : encomenda ? 'Encomendar (adicionar à Maleta)' : 'Adicionar à Maleta'}</button>
+              <button type="button" onclick="toggleMaleta(${id}); renderizarDetalhes()" aria-pressed="${jaNaMaleta}"${falteTamanho ? ' disabled' : ''} class="btn btn-maleta w-full ${jaNaMaleta ? 'btn-na-maleta' : encomenda ? 'btn-encomenda' : 'btn-primario'}">${textoBotao}</button>
             </div>
           </div>
         </div>
@@ -1299,7 +1434,8 @@
       if (index < 0 && typeof navigator !== 'undefined' && navigator.vibrate) navigator.vibrate(12);
       salvarMaleta();
       atualizarMaletaUI();
-      const nome = nomeCard(produto);
+      // Roupas: o nome completo leva o tamanho ("Vestido - M")
+      const nome = NICHO === 'roupas' && produto.tamanho ? produto.nome : nomeCard(produto);
       mostrarToast(index >= 0 ? `${nome} removido da maleta` : `${nome} adicionado à maleta${encomenda ? ' (sob encomenda)' : ''}`);
     }
 
@@ -1735,6 +1871,7 @@
     });
     filtroFormato.addEventListener('change', renderizarCatalogo);
     filtroGenero.addEventListener('change', renderizarCatalogo);
+    filtroTamanho.addEventListener('change', renderizarCatalogo);
   </script>
 </body>
 </html>

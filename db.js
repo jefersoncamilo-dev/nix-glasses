@@ -92,6 +92,15 @@ async function initTables(pool) {
       ADD COLUMN IF NOT EXISTS genero VARCHAR(10) NOT NULL DEFAULT ''
     `);
 
+    // Loja de roupas: tamanho da peça (P, M, 38...) e o código do modelo (grade) que
+    // junta os tamanhos num card só na vitrine. Cada tamanho é um produto com o seu
+    // estoque, então maleta, acerto e pedidos seguem iguais. Vazio = sem tamanho.
+    await client.query(`
+      ALTER TABLE produtos
+      ADD COLUMN IF NOT EXISTS tamanho VARCHAR(20) NOT NULL DEFAULT '',
+      ADD COLUMN IF NOT EXISTS grade VARCHAR(100) NOT NULL DEFAULT ''
+    `);
+
     // Histórico de compras/reposições de cada produto (custo unitário pago ao fornecedor).
     // origem: CADASTRO (custo informado ao cadastrar) ou REPOSICAO (registrada no painel).
     await client.query(`

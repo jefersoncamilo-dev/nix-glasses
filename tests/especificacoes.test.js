@@ -177,7 +177,7 @@ describe('especificações técnicas: painel', () => {
 });
 
 describe('especificações técnicas: vitrine', () => {
-  const vitrine = carregar('index.html', ['escapeHtml', 'especificacoesProduto'], () => '');
+  const vitrine = carregar('index.html', ['escapeHtml', 'especificacoesProduto'], () => "const rotulos = { formato: 'Formato da lente', formatos: 'Todos os formatos', material: 'Material', tipo: 'Tipo' };");
 
   it('lista só o que foi preenchido, com medidas em "5,0 cm"', () => {
     const produto = { diametro_cm: '5.0', ponte_cm: '2.0', largura_total_cm: '14.0', material: 'Metal', formato: 'Hexagonal', cor_armacao: 'Preto', tipo: 'Polarizado Premium' };
