@@ -1,0 +1,352 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="robots" content="noindex">
+  <title>Painel master - Lojas</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>* { font-family: 'Inter', sans-serif; } .modal-overlay { backdrop-filter: blur(4px); }</style>
+</head>
+<body class="bg-gray-50 min-h-screen">
+  <!-- Login -->
+  <section id="telaLogin" class="hidden min-h-screen flex items-center justify-center p-4">
+    <div class="bg-white rounded-2xl border border-gray-200 p-8 w-full max-w-md">
+      <h1 class="text-2xl font-bold text-gray-900 mb-1">Painel master</h1>
+      <p class="text-sm text-gray-500 mb-6">Configuração das lojas. Acesso só do dono do serviço.</p>
+      <p id="masterDesligado" class="hidden text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-lg p-3 mb-4">
+        O painel master está desligado. No Render, defina <b>MASTER_USER</b> e <b>MASTER_PASS_HASH</b> (e o JWT_SECRET).
+      </p>
+      <form id="formLogin" class="space-y-4">
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1" for="loginUser">Usuário</label>
+          <input type="text" id="loginUser" autocomplete="username" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gray-800" required>
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1" for="loginPass">Senha</label>
+          <input type="password" id="loginPass" autocomplete="current-password" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gray-800" required>
+        </div>
+        <p id="loginErro" class="hidden text-sm text-red-600"></p>
+        <button type="submit" class="w-full bg-gray-900 hover:bg-black text-white py-2 rounded-lg font-medium">Entrar</button>
+      </form>
+    </div>
+  </section>
+
+  <!-- Lojas -->
+  <section id="telaLojas" class="hidden">
+    <header class="bg-white border-b border-gray-200">
+      <div class="max-w-5xl mx-auto px-4 h-16 flex items-center justify-between gap-3">
+        <h1 class="text-lg font-bold text-gray-900">Painel master <span class="font-normal text-gray-500">· Lojas</span></h1>
+        <div class="flex items-center gap-2">
+          <button id="btnNova" class="bg-gray-900 hover:bg-black text-white text-sm px-4 py-2 rounded-lg font-medium">+ Nova loja</button>
+          <button id="btnSair" class="text-sm text-gray-600 hover:text-gray-900 px-3 py-2">Sair</button>
+        </div>
+      </div>
+    </header>
+    <main class="max-w-5xl mx-auto px-4 py-6">
+      <div id="aviso" class="hidden mb-4 text-sm rounded-lg p-3"></div>
+      <div id="listaLojas" class="grid gap-4 md:grid-cols-2"></div>
+      <details class="mt-8 bg-white border border-gray-200 rounded-xl p-4 text-sm text-gray-700">
+        <summary class="font-medium cursor-pointer">O que ainda é feito fora daqui</summary>
+        <ul class="list-disc pl-5 mt-3 space-y-1">
+          <li><b>Banco:</b> crie um banco vazio no Neon para cada loja nova e cole a connection string aqui.</li>
+          <li><b>Endereço:</b> com o curinga <code>*.temcatalogo.com.br</code> no DNS e no Render, toda loja nova já abre em <code>&lt;identificador&gt;.temcatalogo.com.br</code>. Sem o curinga, cada subdomínio precisa do CNAME no DNS e do Custom Domain no Render.</li>
+          <li><b>Domínio próprio do cliente</b> (ex.: www.lojadocliente.com.br): CNAME no DNS do cliente e Custom Domain no Render.</li>
+        </ul>
+      </details>
+    </main>
+  </section>
+
+  <!-- Formulário da loja -->
+  <div id="modal" class="hidden fixed inset-0 z-50 bg-black/40 modal-overlay flex items-start sm:items-center justify-center p-4 overflow-y-auto">
+    <form id="formLoja" class="bg-white rounded-2xl w-full max-w-lg p-6 space-y-4 my-8">
+      <div class="flex items-center justify-between">
+        <h2 id="tituloModal" class="text-lg font-bold text-gray-900">Nova loja</h2>
+        <button type="button" data-fechar class="text-gray-400 hover:text-gray-700 text-2xl leading-none" aria-label="Fechar">&times;</button>
+      </div>
+      <div id="campoSlug">
+        <label class="block text-sm font-medium text-gray-700 mb-1" for="fSlug">Identificador</label>
+        <input id="fSlug" class="w-full px-3 py-2 border border-gray-300 rounded-lg" placeholder="donatti" pattern="[a-z0-9][a-z0-9-]{0,39}" autocapitalize="none">
+        <p class="text-xs text-gray-500 mt-1">Letras minúsculas, números e hífen. Não muda depois: o banco da loja guarda esse nome.</p>
+      </div>
+      <div>
+        <label class="block text-sm font-medium text-gray-700 mb-1" for="fNome">Nome da loja</label>
+        <input id="fNome" class="w-full px-3 py-2 border border-gray-300 rounded-lg" maxlength="100" placeholder="Donatti - LOJA">
+      </div>
+      <div>
+        <label class="block text-sm font-medium text-gray-700 mb-1" for="fNicho">Tipo de loja</label>
+        <select id="fNicho" class="w-full px-3 py-2 border border-gray-300 rounded-lg">
+          <option value="geral">Geral</option>
+          <option value="oculos">Óculos (provador virtual e medidas)</option>
+          <option value="roupas">Roupas e moda (tamanhos)</option>
+        </select>
+      </div>
+      <div>
+        <label class="block text-sm font-medium text-gray-700 mb-1" for="fDominios">Endereços</label>
+        <textarea id="fDominios" rows="2" class="w-full px-3 py-2 border border-gray-300 rounded-lg" placeholder="donatti.temcatalogo.com.br"></textarea>
+        <p class="text-xs text-gray-500 mt-1">Um por linha, sem https://. Vazio: abre em <code>&lt;identificador&gt;.</code> seguido do domínio (ex.: donatti.temcatalogo.com.br).</p>
+      </div>
+      <div class="grid sm:grid-cols-2 gap-3">
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1" for="fUser">Usuário do admin da loja</label>
+          <input id="fUser" class="w-full px-3 py-2 border border-gray-300 rounded-lg" autocomplete="off" autocapitalize="none">
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1" for="fSenha">Senha do admin</label>
+          <input id="fSenha" type="password" class="w-full px-3 py-2 border border-gray-300 rounded-lg" autocomplete="new-password" minlength="8">
+          <p id="dicaSenha" class="text-xs text-gray-500 mt-1">Mínimo 8 caracteres.</p>
+        </div>
+      </div>
+      <div id="campoBanco">
+        <label class="block text-sm font-medium text-gray-700 mb-1" for="fBanco">Banco da loja (connection string do Neon)</label>
+        <textarea id="fBanco" rows="2" class="w-full px-3 py-2 border border-gray-300 rounded-lg font-mono text-xs" placeholder="postgresql://usuario:senha@ep-...neon.tech/neondb?sslmode=require" autocomplete="off" spellcheck="false"></textarea>
+        <p id="dicaBanco" class="text-xs text-gray-500 mt-1">Um banco vazio, só desta loja. As tabelas são criadas sozinhas.</p>
+      </div>
+      <label id="campoAtivo" class="flex items-center gap-2 text-sm text-gray-700">
+        <input id="fAtivo" type="checkbox" class="rounded" checked> Loja no ar (desmarque para suspender a vitrine e o painel dela)
+      </label>
+      <p id="erroForm" class="hidden text-sm text-red-600"></p>
+      <div class="flex flex-wrap items-center justify-between gap-3 pt-2">
+        <button type="button" id="btnRemover" class="hidden text-sm text-red-600 hover:text-red-800">Remover do painel</button>
+        <div class="flex gap-2 ml-auto">
+          <button type="button" data-fechar class="px-4 py-2 text-sm rounded-lg border border-gray-300">Cancelar</button>
+          <button type="submit" id="btnSalvar" class="px-4 py-2 text-sm rounded-lg bg-gray-900 hover:bg-black text-white font-medium">Salvar</button>
+        </div>
+      </div>
+      <div id="caixaRemover" class="hidden border border-red-200 bg-red-50 rounded-lg p-3 text-sm space-y-2">
+        <p>A loja sai do painel e o endereço dela para de abrir. O banco no Neon <b>não</b> é apagado: cadastrar de novo com o mesmo identificador e o mesmo banco traz tudo de volta.</p>
+        <label class="block" for="fConfirma">Digite <b id="slugConfirma"></b> para confirmar:</label>
+        <div class="flex gap-2">
+          <input id="fConfirma" class="flex-1 px-3 py-2 border border-red-300 rounded-lg" autocomplete="off" autocapitalize="none">
+          <button type="button" id="btnConfirmaRemover" class="px-3 py-2 rounded-lg bg-red-600 text-white">Remover</button>
+        </div>
+      </div>
+    </form>
+  </div>
+
+  <script>
+    const CHAVE_TOKEN = 'nix_master_token';
+    const $ = (id) => document.getElementById(id);
+    const NICHOS = { oculos: 'Óculos', roupas: 'Roupas', geral: 'Geral' };
+    let lojas = [];
+    let editando = null;
+
+    function esc(s) {
+      return String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+    }
+
+    async function api(caminho, opcoes = {}) {
+      const res = await fetch(caminho, {
+        ...opcoes,
+        headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + (localStorage.getItem(CHAVE_TOKEN) || '') },
+      });
+      const dados = await res.json().catch(() => ({}));
+      if (res.status === 401) { sair(); throw new Error(dados.error || 'Faça login novamente'); }
+      if (!res.ok) throw new Error(dados.error || 'Erro ' + res.status);
+      return dados;
+    }
+
+    function mostrar(tela) {
+      $('telaLogin').classList.toggle('hidden', tela !== 'login');
+      $('telaLojas').classList.toggle('hidden', tela !== 'lojas');
+    }
+
+    function sair() {
+      localStorage.removeItem(CHAVE_TOKEN);
+      mostrar('login');
+    }
+
+    function avisar(texto, tipo = 'ok') {
+      const el = $('aviso');
+      el.textContent = texto;
+      el.className = 'mb-4 text-sm rounded-lg p-3 ' + (tipo === 'ok' ? 'bg-green-50 text-green-800 border border-green-200' : 'bg-red-50 text-red-700 border border-red-200');
+      clearTimeout(avisar.t);
+      avisar.t = setTimeout(() => el.classList.add('hidden'), 6000);
+    }
+
+    function selo(loja) {
+      if (loja.erro) return '<span class="text-xs px-2 py-0.5 rounded-full bg-red-100 text-red-700">Com erro</span>';
+      if (!loja.ativo) return '<span class="text-xs px-2 py-0.5 rounded-full bg-amber-100 text-amber-800">Suspensa</span>';
+      return '<span class="text-xs px-2 py-0.5 rounded-full bg-green-100 text-green-700">No ar</span>';
+    }
+
+    const ORIGENS = { render: 'variáveis do Render', painel: 'este painel', 'render+painel': 'Render + este painel' };
+
+    function cartao(loja) {
+      const link = loja.endereco ? `https://${loja.endereco}` : '';
+      return `
+        <article class="bg-white border border-gray-200 rounded-xl p-4 flex flex-col gap-3">
+          <div class="flex items-start justify-between gap-2">
+            <div>
+              <h2 class="font-semibold text-gray-900">${esc(loja.nome)}${loja.padrao ? ' <span class="text-xs font-normal text-gray-500">(principal)</span>' : ''}</h2>
+              <p class="text-xs text-gray-500">${esc(loja.slug)} · ${esc(NICHOS[loja.nicho] || '—')}</p>
+            </div>
+            ${selo(loja)}
+          </div>
+          ${loja.erro ? `<p class="text-xs text-red-700 bg-red-50 rounded p-2">${esc(loja.erro)}</p>` : ''}
+          <dl class="text-xs text-gray-600 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1">
+            <dt class="text-gray-400">Endereço</dt><dd class="break-all">${link ? `<a class="text-blue-700 hover:underline" href="${esc(link)}" target="_blank" rel="noopener">${esc(loja.endereco)}</a>` : '—'}</dd>
+            <dt class="text-gray-400">Admin</dt><dd>${esc(loja.adminUser || 'sem login')}</dd>
+            <dt class="text-gray-400">Banco</dt><dd class="break-all">${esc(loja.banco || '—')}</dd>
+            <dt class="text-gray-400">Config.</dt><dd>${esc(ORIGENS[loja.origem] || loja.origem)}</dd>
+            <dt class="text-gray-400">Números</dt><dd>${loja.produtos ?? '—'} produtos · ${loja.pedidos ?? '—'} pedidos</dd>
+          </dl>
+          <div class="flex flex-wrap gap-2 mt-auto">
+            <button data-editar="${esc(loja.slug)}" class="text-sm px-3 py-1.5 rounded-lg border border-gray-300 hover:bg-gray-50">Editar</button>
+            ${loja.endereco && !loja.erro && loja.ativo && loja.adminUser ? `<button data-entrar="${esc(loja.slug)}" class="text-sm px-3 py-1.5 rounded-lg border border-gray-300 hover:bg-gray-50">Abrir painel da loja</button>` : ''}
+          </div>
+        </article>`;
+    }
+
+    async function carregar() {
+      try {
+        lojas = await api('/api/master/lojas');
+        $('listaLojas').innerHTML = lojas.map(cartao).join('');
+      } catch (err) {
+        avisar(err.message, 'erro');
+      }
+    }
+
+    function abrirModal(loja) {
+      editando = loja;
+      $('formLoja').reset();
+      $('erroForm').classList.add('hidden');
+      $('caixaRemover').classList.add('hidden');
+      $('tituloModal').textContent = loja ? `Editar ${loja.nome}` : 'Nova loja';
+      $('campoSlug').classList.toggle('hidden', !!loja);
+      $('fSlug').required = !loja;
+      $('fNome').value = loja ? loja.nome : '';
+      $('fNicho').value = (loja && loja.nicho) || 'geral';
+      $('fDominios').value = loja ? loja.dominios.join('\n') : '';
+      $('fUser').value = loja ? loja.adminUser : '';
+      $('fSenha').required = !loja;
+      $('dicaSenha').textContent = loja ? 'Em branco: mantém a senha atual. Trocar desconecta quem está no painel da loja.' : 'Mínimo 8 caracteres.';
+      $('campoBanco').classList.toggle('hidden', !!(loja && loja.padrao));
+      $('fBanco').required = !loja;
+      $('dicaBanco').textContent = loja
+        ? `Em branco: mantém o banco atual (${loja.banco || '—'}${loja.bancoDoPainel ? '' : ', das variáveis do Render'}).`
+        : 'Um banco vazio, só desta loja. As tabelas são criadas sozinhas.';
+      $('campoAtivo').classList.toggle('hidden', !!(loja && loja.padrao));
+      $('fAtivo').checked = !loja || loja.ativo;
+      $('btnRemover').classList.toggle('hidden', !(loja && loja.origem === 'painel'));
+      $('slugConfirma').textContent = loja ? loja.slug : '';
+      $('modal').classList.remove('hidden');
+      (loja ? $('fNome') : $('fSlug')).focus();
+    }
+
+    function fecharModal() {
+      $('modal').classList.add('hidden');
+      $('fSenha').value = '';
+      $('fBanco').value = '';
+    }
+
+    $('formLoja').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const corpo = {
+        nome: $('fNome').value,
+        nicho: $('fNicho').value,
+        dominios: $('fDominios').value,
+        admin_user: $('fUser').value.trim(),
+        senha: $('fSenha').value,
+        banco: $('fBanco').value.trim(),
+      };
+      if (!editando) corpo.slug = $('fSlug').value.trim().toLowerCase();
+      // Na edição, só vai o que mudou (o nome e o tipo ficam no banco da loja, junto com
+      // o que o admin dela edita, e os endereços que vêm do Render seguem de lá)
+      if (editando) {
+        if (corpo.nome.trim() === editando.nome) delete corpo.nome;
+        if (corpo.nicho === editando.nicho) delete corpo.nicho;
+        const dominios = corpo.dominios.split(/[\s,]+/).map((d) => d.trim().toLowerCase()).filter(Boolean);
+        if (dominios.join(',') === editando.dominios.join(',')) delete corpo.dominios;
+        if (corpo.admin_user === editando.adminUser) delete corpo.admin_user;
+      }
+      if (!editando || !editando.padrao) corpo.ativo = $('fAtivo').checked;
+      $('btnSalvar').disabled = true;
+      $('btnSalvar').textContent = 'Salvando...';
+      try {
+        const loja = editando
+          ? await api('/api/master/lojas/' + encodeURIComponent(editando.slug), { method: 'PUT', body: JSON.stringify(corpo) })
+          : await api('/api/master/lojas', { method: 'POST', body: JSON.stringify(corpo) });
+        fecharModal();
+        avisar(editando ? `Loja "${loja.nome}" salva.` : `Loja "${loja.nome}" criada${loja.endereco ? ' em ' + loja.endereco : ''}.`);
+        await carregar();
+      } catch (err) {
+        $('erroForm').textContent = err.message;
+        $('erroForm').classList.remove('hidden');
+      } finally {
+        $('btnSalvar').disabled = false;
+        $('btnSalvar').textContent = 'Salvar';
+      }
+    });
+
+    $('btnRemover').addEventListener('click', () => $('caixaRemover').classList.toggle('hidden'));
+    $('btnConfirmaRemover').addEventListener('click', async () => {
+      try {
+        await api('/api/master/lojas/' + encodeURIComponent(editando.slug), { method: 'DELETE', body: JSON.stringify({ confirmacao: $('fConfirma').value.trim() }) });
+        fecharModal();
+        avisar('Loja removida do painel.');
+        await carregar();
+      } catch (err) {
+        $('erroForm').textContent = err.message;
+        $('erroForm').classList.remove('hidden');
+      }
+    });
+
+    document.querySelectorAll('[data-fechar]').forEach((b) => b.addEventListener('click', fecharModal));
+    $('btnNova').addEventListener('click', () => abrirModal(null));
+    $('btnSair').addEventListener('click', sair);
+
+    $('listaLojas').addEventListener('click', async (e) => {
+      const editar = e.target.closest('[data-editar]');
+      if (editar) return abrirModal(lojas.find((l) => l.slug === editar.dataset.editar));
+      const entrar = e.target.closest('[data-entrar]');
+      if (!entrar) return;
+      // Abre a aba já, para o navegador não bloquear a janela depois do await
+      const aba = window.open('about:blank', '_blank');
+      try {
+        const { token, endereco } = await api(`/api/master/lojas/${encodeURIComponent(entrar.dataset.entrar)}/acesso`, { method: 'POST', body: '{}' });
+        const url = `https://${endereco}/admin/login.html#acesso=${encodeURIComponent(token)}`;
+        if (aba) { aba.opener = null; aba.location.href = url; } else window.location.href = url;
+      } catch (err) {
+        if (aba) aba.close();
+        avisar(err.message, 'erro');
+      }
+    });
+
+    $('formLogin').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      $('loginErro').classList.add('hidden');
+      try {
+        const res = await fetch('/api/master/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ user: $('loginUser').value.trim(), password: $('loginPass').value }),
+        });
+        const dados = await res.json();
+        if (!res.ok) throw new Error(dados.error || 'Falha no login');
+        localStorage.setItem(CHAVE_TOKEN, dados.token);
+        $('loginPass').value = '';
+        mostrar('lojas');
+        carregar();
+      } catch (err) {
+        $('loginErro').textContent = err.message;
+        $('loginErro').classList.remove('hidden');
+      }
+    });
+
+    (async () => {
+      try {
+        const { habilitado } = await (await fetch('/api/master/status')).json();
+        $('masterDesligado').classList.toggle('hidden', habilitado);
+      } catch {}
+      if (localStorage.getItem(CHAVE_TOKEN)) {
+        mostrar('lojas');
+        carregar();
+      } else {
+        mostrar('login');
+      }
+    })();
+  </script>
+</body>
+</html>

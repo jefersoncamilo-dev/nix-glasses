@@ -25,3 +25,10 @@ services:
       # Várias empresas no mesmo serviço: veja .env.example (EMPRESAS e EMPRESA_<SLUG>_*).
       - key: EMPRESAS
         sync: false
+      # Painel master (/master/): login do dono do serviço e endereço dele.
+      - key: MASTER_USER
+        sync: false
+      - key: MASTER_PASS_HASH
+        sync: false
+      - key: MASTER_DOMINIOS
+        sync: false

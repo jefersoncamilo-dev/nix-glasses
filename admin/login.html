@@ -45,6 +45,14 @@
       }
     }
 
+    // Entrada pelo painel master: o token vem em #acesso= (o fragmento não vai ao servidor)
+    const acesso = new URLSearchParams(window.location.hash.slice(1)).get('acesso');
+    if (acesso && /^[A-Za-z0-9_-]+\.[0-9a-f]{64}$/.test(acesso)) {
+      localStorage.setItem('nix_admin_token', acesso);
+      history.replaceState(null, '', window.location.pathname);
+      window.location.replace('./index.html');
+    }
+
     // Se já tem token válido, vai direto ao painel
     (async () => {
       const token = localStorage.getItem('nix_admin_token');

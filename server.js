@@ -6,31 +6,62 @@ const cors = require('cors');
 const crypto = require('crypto');
 const fs = require('fs');
 const { criarPool, initTables } = require('./db');
-const { lerEmpresas, empresaDoHost } = require('./empresas');
+const { lerEmpresas, empresaDoHost, normalizarHost, identidadeBanco, hostInterno } = require('./empresas');
 const { CAMPOS_TEXTO, lerNicho, limparTextoLoja, montarLoja, renderizarPagina } = require('./loja');
+const master = require('./master');
 const { importarProduto, ErroImportacao } = require('./importar-produto');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
 // Empresas atendidas por este serviço (ver empresas.js). Cada uma com o seu banco.
-const EMPRESAS = lerEmpresas(process.env);
-for (const empresa of EMPRESAS) empresa.pool = criarPool(empresa.databaseUrl);
+// As das variáveis de ambiente se juntam, no boot, às cadastradas no painel master
+// (master.js); a lista muda quando o master cria, edita ou remove uma loja.
+const EMPRESAS_ENV = lerEmpresas(process.env);
+const EMPRESAS = [];
+
+// Endereços do painel master (ex.: admin.temcatalogo.com.br). Ele também abre no
+// endereço do serviço no Render e em localhost, antes de o DNS estar pronto.
+const MASTER_DOMINIOS = (() => {
+  const r = master.lerDominios(process.env.MASTER_DOMINIOS || '');
+  if (r.erro) throw new Error(`MASTER_DOMINIOS: ${r.erro}`);
+  return r.dominios;
+})();
 
 app.use(cors());
 app.use(express.json());
 
 // Empresa da requisição pelo endereço (Host). Todas as rotas usam req.db, o banco dela.
 function escolherEmpresa(req, res, next) {
-  req.empresa = empresaDoHost(EMPRESAS, req.hostname);
+  // O endereço do painel master nunca abre uma loja (nem a padrão, com uma loja só).
+  req.empresa = MASTER_DOMINIOS.includes(normalizarHost(req.hostname)) ? null : empresaDoHost(EMPRESAS, req.hostname);
   if (!req.empresa) {
     return res.status(404).type('text').send('Loja não encontrada neste endereço.');
+  }
+  if (req.empresa.ativo === false) {
+    return res.status(503).type('text').send('Loja temporariamente indisponível.');
+  }
+  if (req.empresa.erro || !req.empresa.pool) {
+    return res.status(503).type('text').send('Loja indisponível no momento.');
   }
   req.db = req.empresa.pool;
   next();
 }
 // Health check do Render: responde antes de escolher a empresa, então não depende do endereço.
 app.get('/saude', (req, res) => res.type('text').send('ok'));
+
+// Painel master: /master/ e /api/master/* só nos endereços do master. No endereço
+// próprio do master (admin.temcatalogo.com.br), "/" leva ao painel.
+const masterRouter = express.Router({ strict: true });
+function hostDoMaster(host) {
+  const h = normalizarHost(host);
+  return MASTER_DOMINIOS.includes(h) || hostInterno(h) || (!!EMPRESAS_ENV[0].hostRender && h === EMPRESAS_ENV[0].hostRender);
+}
+app.use((req, res, next) => {
+  if (!hostDoMaster(req.hostname)) return next();
+  if (req.path === '/' && MASTER_DOMINIOS.includes(normalizarHost(req.hostname))) return res.redirect(302, '/master/');
+  masterRouter(req, res, next);
+});
 app.use(escolherEmpresa);
 
 // Dados da loja (nome, textos, logo, recursos) por empresa, guardados em memória
@@ -227,6 +258,13 @@ function getTokenSecret(empresa) {
   return crypto.createHmac('sha256', segredoBase()).update(`empresa:${empresa.slug}`).digest('hex');
 }
 
+// Trocar o login de uma loja no painel master (sessao + 1) derruba as sessões abertas
+// do admin dela. As contas de clientes da vitrine não mudam (usam getTokenSecret).
+function getAdminTokenSecret(empresa) {
+  if (!empresa.sessao) return getTokenSecret(empresa);
+  return crypto.createHmac('sha256', getTokenSecret(empresa)).update(`sessao:${empresa.sessao}`).digest('hex');
+}
+
 function isAdminAuthEnabled(empresa) {
   const { user, passHash } = getAuthConfig(empresa);
   return !!(user && passHash);
@@ -257,24 +295,32 @@ function verifyPassword(pass, stored) {
   }
 }
 
-function signToken(empresa, username, expiresInHours = 12) {
+function assinarToken(secret, username, expiresInHours) {
   const now = Math.floor(Date.now() / 1000);
   const payload = { u: username, iat: now, exp: now + expiresInHours * 3600 };
   const body = b64urlEncode(payload);
-  const sig = crypto.createHmac('sha256', getTokenSecret(empresa)).update(body).digest('hex');
+  const sig = crypto.createHmac('sha256', secret).update(body).digest('hex');
   return `${body}.${sig}`;
 }
 
-function verifyToken(empresa, token) {
+function conferirToken(secret, token) {
   const [body, sig] = String(token || '').split('.');
   if (!body || !sig) throw new Error('Token inválido');
-  const expected = crypto.createHmac('sha256', getTokenSecret(empresa)).update(body).digest('hex');
+  const expected = crypto.createHmac('sha256', secret).update(body).digest('hex');
   const a = Buffer.from(String(sig));
   const b = Buffer.from(expected);
   if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) throw new Error('Token inválido');
   const payload = JSON.parse(b64urlDecode(body));
   if (!payload.exp || payload.exp < Math.floor(Date.now() / 1000)) throw new Error('Sessão expirada');
   return payload;
+}
+
+function signToken(empresa, username, expiresInHours = 12) {
+  return assinarToken(getAdminTokenSecret(empresa), username, expiresInHours);
+}
+
+function verifyToken(empresa, token) {
+  return conferirToken(getAdminTokenSecret(empresa), token);
 }
 
 function requireAdmin(req, res, next) {
@@ -313,6 +359,50 @@ async function handleLogin(req, res) {
   }
   const token = signToken(req.empresa, cfg.user);
   res.json({ token, expiresIn: '12h', user: cfg.user });
+}
+
+// ---------- Login do painel master ----------
+// Env: MASTER_USER e MASTER_PASS_HASH (mesmo formato do ADMIN_PASS_HASH). Precisa do
+// JWT_SECRET de verdade: a chave que cifra os bancos das lojas sai dele, e um segredo
+// aleatório a cada restart perderia os bancos cadastrados.
+function masterHabilitado() {
+  return !!(process.env.MASTER_USER && process.env.MASTER_PASS_HASH && process.env.JWT_SECRET);
+}
+
+// Trocar a senha do master (MASTER_PASS_HASH) derruba as sessões abertas do master.
+function segredoMaster() {
+  return crypto.createHmac('sha256', process.env.JWT_SECRET).update(`master:${process.env.MASTER_PASS_HASH}`).digest('hex');
+}
+
+function decifrarBanco(cifrado) {
+  if (!process.env.JWT_SECRET) throw new Error('JWT_SECRET não definido');
+  return master.decifrar(cifrado, process.env.JWT_SECRET);
+}
+
+function requireMaster(req, res, next) {
+  if (!masterHabilitado()) return res.status(503).json({ error: 'Painel master não configurado (defina MASTER_USER e MASTER_PASS_HASH)' });
+  const h = req.headers.authorization || '';
+  try {
+    req.master = conferirToken(segredoMaster(), h.startsWith('Bearer ') ? h.slice(7) : '');
+    return next();
+  } catch {
+    return res.status(401).json({ error: 'Sessão expirada. Faça login novamente.' });
+  }
+}
+
+async function handleLoginMaster(req, res) {
+  if (!masterHabilitado()) return res.status(503).json({ error: 'Painel master não configurado (defina MASTER_USER e MASTER_PASS_HASH)' });
+  // Um freio só para o master: 10 senhas erradas a cada 15 minutos
+  if (loginBloqueado('master')) return res.status(429).json({ error: 'Muitas tentativas. Espere 15 minutos.' });
+  const { user, password } = req.body || {};
+  const esperado = String(process.env.MASTER_USER);
+  const userOk = String(user || '').length === esperado.length && crypto.timingSafeEqual(Buffer.from(String(user || '')), Buffer.from(esperado));
+  const passOk = verifyPassword(password, process.env.MASTER_PASS_HASH);
+  if (!userOk || !passOk) {
+    registrarFalhaLogin('master');
+    return res.status(401).json({ error: 'Usuário ou senha inválidos' });
+  }
+  res.json({ token: assinarToken(segredoMaster(), esperado, 12), expiresIn: '12h', user: esperado });
 }
 
 // ---------- Contas de clientes (vitrine) ----------
@@ -940,15 +1030,59 @@ async function conferirDonoDoBanco(empresa) {
   }
 }
 
+// Abre e prepara o banco de uma loja (tabelas e marca de dona). Usado no boot e quando
+// o master cadastra uma loja ou troca o banco dela.
+async function conectarBanco(slug, databaseUrl) {
+  const pool = criarPool(databaseUrl);
+  try {
+    await initTables(pool);
+    await conferirDonoDoBanco({ slug, pool });
+    return pool;
+  } catch (err) {
+    await pool.end().catch(() => {});
+    throw err;
+  }
+}
+
 async function startServer() {
+  // A empresa padrão vem primeiro: o cadastro do painel master fica no banco dela.
+  const padrao = EMPRESAS_ENV[0];
+  padrao.pool = await conectarBanco(padrao.slug, padrao.databaseUrl);
+  await master.criarTabelaMaster(padrao.pool);
+  const { rows: linhasMaster } = await padrao.pool.query('SELECT * FROM master_lojas ORDER BY created_at, slug');
+  EMPRESAS.push(...master.mesclarEmpresas(EMPRESAS_ENV, linhasMaster, decifrarBanco));
+
+  const bancos = new Map();
   for (const empresa of EMPRESAS) {
     if (!isAdminAuthEnabled(empresa)) {
       console.warn(`[auth] Empresa "${empresa.slug}": login do admin não definido, rotas admin ficarão bloqueadas (503).`);
     }
-    await initTables(empresa.pool);
-    await conferirDonoDoBanco(empresa);
+    if (empresa.erro) {
+      console.error(`[master] Loja "${empresa.slug}" fora do ar: ${empresa.erro}`);
+      continue;
+    }
+    const id = identidadeBanco(empresa.databaseUrl);
+    if (bancos.has(id)) {
+      const msg = `A empresa "${empresa.slug}" usa o mesmo banco da empresa "${bancos.get(id)}": cada uma precisa do seu`;
+      if (!empresa.bancoDoPainel) throw new Error(msg);
+      empresa.erro = msg;
+      console.error(`[master] ${msg}`);
+      continue;
+    }
+    bancos.set(id, empresa.slug);
+    if (empresa.padrao) continue;
+    try {
+      empresa.pool = await conectarBanco(empresa.slug, empresa.databaseUrl);
+    } catch (err) {
+      // Erro nas variáveis do Render para o boot, como antes (o Render mantém a versão
+      // anterior no ar). Loja do painel com problema fica fora do ar sozinha.
+      if (!empresa.bancoDoPainel) throw err;
+      empresa.erro = `Não consegui usar o banco: ${err.message}`;
+      console.error(`[master] Loja "${empresa.slug}" fora do ar: ${err.message}`);
+    }
   }
   console.log(`Empresas: ${EMPRESAS.map((e) => e.slug).join(', ')}`);
+  if (!masterHabilitado()) console.warn('[master] Painel master desligado (defina MASTER_USER, MASTER_PASS_HASH e JWT_SECRET).');
 
   // ---------- Handlers reutilizáveis ----------
 
@@ -2567,6 +2701,270 @@ async function startServer() {
       res.status(500).end();
     }
   }
+
+  // ---------- Painel master (dono do serviço: lojas, endereços, logins e bancos) ----------
+  // As alterações passam uma de cada vez, para a lista de lojas em memória e a tabela
+  // master_lojas não se desencontrarem.
+  let filaMaster = Promise.resolve();
+  function emFilaMaster(fn) {
+    const p = filaMaster.then(fn);
+    filaMaster = p.catch(() => {});
+    return p;
+  }
+
+  class ErroMaster extends Error {
+    constructor(status, message) {
+      super(message);
+      this.status = status;
+    }
+  }
+
+  function lojaPorSlug(slug) {
+    const empresa = EMPRESAS.find((e) => e.slug === slug);
+    if (!empresa) throw new ErroMaster(404, 'Loja não encontrada');
+    return empresa;
+  }
+
+  // Um endereço só abre uma loja (nem o do painel master, nem o de outra loja).
+  function conferirDominios(dominios, slug) {
+    for (const d of dominios) {
+      if (MASTER_DOMINIOS.includes(d)) throw new ErroMaster(400, `"${d}" é o endereço do painel master`);
+      if (d === EMPRESAS_ENV[0].hostRender && slug !== EMPRESAS_ENV[0].slug) throw new ErroMaster(400, `"${d}" é o endereço do serviço no Render, que abre a loja principal`);
+      const dona = empresaDoHost(EMPRESAS.filter((e) => e.slug !== slug), d);
+      if (dona && (dona.dominios.includes(d) || d.startsWith(dona.slug + '.'))) {
+        throw new ErroMaster(400, `"${d}" já abre a loja "${dona.slug}"`);
+      }
+    }
+  }
+
+  function conferirBancoLivre(databaseUrl, slug) {
+    const id = identidadeBanco(databaseUrl);
+    const outra = EMPRESAS.find((e) => e.slug !== slug && e.databaseUrl && identidadeBanco(e.databaseUrl) === id);
+    if (outra) throw new ErroMaster(400, `Esse banco já é da loja "${outra.slug}": cada loja precisa do seu`);
+  }
+
+  async function abrirBancoDaLoja(slug, databaseUrl) {
+    try {
+      return await conectarBanco(slug, databaseUrl);
+    } catch (err) {
+      throw new ErroMaster(400, `Não consegui usar esse banco: ${err.message}`);
+    }
+  }
+
+  function nichoDoCorpo(campos) {
+    if (campos.nicho === undefined) return null;
+    const nicho = lerNicho(campos.nicho);
+    if (!nicho) throw new ErroMaster(400, 'Tipo de loja inválido');
+    return nicho;
+  }
+
+  function paresDaLoja({ nome, nicho }) {
+    const pares = [];
+    if (nome !== undefined) pares.push(['loja_nome', limparTextoLoja('nome', nome)]);
+    if (nicho) pares.push(['loja_nicho', nicho], ['loja_oculos', nicho === 'oculos' ? '1' : '0']);
+    return pares;
+  }
+
+  async function salvarLinhaMaster(linha) {
+    const { rows } = await EMPRESAS_ENV[0].pool.query(
+      `INSERT INTO master_lojas (slug, nome, dominios, banco_cifrado, admin_user, admin_pass_hash, ativo, sessao)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+       ON CONFLICT (slug) DO UPDATE SET nome = $2, dominios = $3, banco_cifrado = $4, admin_user = $5,
+         admin_pass_hash = $6, ativo = $7, sessao = $8, updated_at = CURRENT_TIMESTAMP
+       RETURNING *`,
+      [linha.slug, linha.nome, linha.dominios, linha.banco_cifrado, linha.admin_user, linha.admin_pass_hash, linha.ativo, linha.sessao]
+    );
+    return rows[0];
+  }
+
+  // O que o painel mostra de cada loja. A connection string nunca sai: só servidor/banco.
+  async function resumoDaLoja(empresa, hostDoPainel) {
+    let loja = null;
+    let produtos = null;
+    let pedidos = null;
+    if (!empresa.erro && empresa.pool) {
+      try {
+        loja = await lojaDaEmpresa(empresa);
+        const { rows: [c] } = await empresa.pool.query(
+          'SELECT (SELECT COUNT(*) FROM produtos)::int AS produtos, (SELECT COUNT(*) FROM pedidos)::int AS pedidos'
+        );
+        ({ produtos, pedidos } = c);
+      } catch (err) {
+        console.error(`[master] resumo de "${empresa.slug}":`, err.message);
+      }
+    }
+    return {
+      slug: empresa.slug,
+      nome: (loja && loja.nome) || empresa.nome || empresa.slug,
+      nicho: loja ? loja.nicho : null,
+      padrao: empresa.padrao,
+      origem: empresa.origem,
+      dominios: empresa.dominios,
+      endereco: master.enderecoDaLoja(empresa, hostDoPainel),
+      banco: empresa.databaseUrl ? identidadeBanco(empresa.databaseUrl) : '',
+      bancoDoPainel: !!empresa.bancoDoPainel,
+      adminUser: empresa.adminUser,
+      temSenha: !!empresa.adminPassHash,
+      ativo: empresa.ativo !== false,
+      erro: empresa.erro || '',
+      produtos,
+      pedidos,
+    };
+  }
+
+  function responderMaster(res, status = 200) {
+    return (resultado) => res.status(status).json(resultado);
+  }
+
+  function falhaMaster(res, contexto) {
+    return (err) => {
+      if (err instanceof ErroMaster) return res.status(err.status).json({ error: err.message });
+      console.error(`[master] ${contexto}:`, err);
+      res.status(500).json({ error: `Erro ao ${contexto}` });
+    };
+  }
+
+  async function handleListLojasMaster(req, res) {
+    try {
+      res.json(await Promise.all(EMPRESAS.map((e) => resumoDaLoja(e, req.hostname))));
+    } catch (err) {
+      falhaMaster(res, 'listar as lojas')(err);
+    }
+  }
+
+  function handleCreateLojaMaster(req, res) {
+    emFilaMaster(async () => {
+      const { erro, campos } = master.lerLojaMaster(req.body, { nova: true });
+      if (erro) throw new ErroMaster(400, erro);
+      const nicho = nichoDoCorpo(campos) || 'geral';
+      if (EMPRESAS.some((e) => e.slug === campos.slug)) throw new ErroMaster(409, `Já existe uma loja "${campos.slug}"`);
+      const dominios = campos.dominios || [];
+      conferirDominios(dominios, campos.slug);
+      // Sem domínio, a loja abre em "<slug>.": esse começo não pode ser de outra loja.
+      const ocupado = !dominios.length && EMPRESAS.find((e) => e.dominios.some((d) => d.startsWith(campos.slug + '.')));
+      if (ocupado) throw new ErroMaster(400, `Endereços "${campos.slug}." já são da loja "${ocupado.slug}": informe um domínio`);
+      conferirBancoLivre(campos.banco, campos.slug);
+      const pool = await abrirBancoDaLoja(campos.slug, campos.banco);
+      try {
+        const linha = await salvarLinhaMaster({
+          slug: campos.slug,
+          nome: campos.nome,
+          dominios: dominios.join(','),
+          banco_cifrado: master.cifrar(campos.banco, process.env.JWT_SECRET),
+          admin_user: campos.adminUser,
+          admin_pass_hash: await hashSenhaCliente(campos.senha),
+          ativo: campos.ativo !== false,
+          sessao: 0,
+        });
+        await salvarConfiguracoes(pool, paresDaLoja({ nicho }));
+        const empresa = master.mesclarEmpresas([], [linha], decifrarBanco)[0];
+        empresa.pool = pool;
+        EMPRESAS.push(empresa);
+        cacheLoja.delete(empresa.slug);
+        console.log(`[master] loja "${empresa.slug}" criada por ${req.master.u}`);
+        return resumoDaLoja(empresa, req.hostname);
+      } catch (err) {
+        await pool.end().catch(() => {});
+        throw err;
+      }
+    }).then(responderMaster(res, 201), falhaMaster(res, 'criar a loja'));
+  }
+
+  function handleUpdateLojaMaster(req, res) {
+    emFilaMaster(async () => {
+      const empresa = lojaPorSlug(req.params.slug);
+      const { erro, campos } = master.lerLojaMaster(req.body);
+      if (erro) throw new ErroMaster(400, erro);
+      const nicho = nichoDoCorpo(campos);
+      if (empresa.padrao && campos.banco) throw new ErroMaster(400, 'O banco da loja principal fica no Render (DATABASE_URL)');
+      if (empresa.padrao && campos.ativo === false) throw new ErroMaster(400, 'A loja principal não pode ser suspensa');
+      if (campos.dominios) conferirDominios(campos.dominios, empresa.slug);
+      if (campos.banco) conferirBancoLivre(campos.banco, empresa.slug);
+
+      // Banco novo, ou nova tentativa no mesmo banco de uma loja que ficou fora do ar
+      let novoPool = null;
+      if (campos.banco) novoPool = await abrirBancoDaLoja(empresa.slug, campos.banco);
+      else if (empresa.erro && empresa.databaseUrl) novoPool = await abrirBancoDaLoja(empresa.slug, empresa.databaseUrl);
+
+      try {
+        const { rows: [atual] } = await EMPRESAS_ENV[0].pool.query('SELECT * FROM master_lojas WHERE slug = $1', [empresa.slug]);
+        const linha = atual || {
+          slug: empresa.slug, nome: empresa.nome || '', dominios: null, banco_cifrado: null,
+          admin_user: null, admin_pass_hash: null, ativo: true, sessao: 0,
+        };
+        if (campos.nome !== undefined) linha.nome = campos.nome;
+        if (campos.dominios) linha.dominios = campos.dominios.join(',');
+        if (campos.banco) linha.banco_cifrado = master.cifrar(campos.banco, process.env.JWT_SECRET);
+        if (campos.ativo !== undefined) linha.ativo = campos.ativo;
+        const trocouLogin = (campos.adminUser && campos.adminUser !== empresa.adminUser) || campos.senha;
+        if (campos.adminUser) linha.admin_user = campos.adminUser;
+        if (campos.senha) linha.admin_pass_hash = await hashSenhaCliente(campos.senha);
+        if (trocouLogin) linha.sessao = (linha.sessao || 0) + 1;
+        const salva = await salvarLinhaMaster(linha);
+
+        if (novoPool) {
+          const antigo = empresa.pool;
+          empresa.pool = novoPool;
+          empresa.databaseUrl = campos.banco || empresa.databaseUrl;
+          delete empresa.erro;
+          if (antigo && antigo !== novoPool) antigo.end().catch(() => {});
+          novoPool = null;
+        }
+        master.aplicarRegistro(empresa, salva, decifrarBanco);
+        if (empresa.origem === 'render') empresa.origem = 'render+painel';
+        const pares = paresDaLoja({ nome: campos.nome, nicho });
+        if (pares.length && empresa.pool && !empresa.erro) await salvarConfiguracoes(empresa.pool, pares);
+        cacheLoja.delete(empresa.slug);
+        console.log(`[master] loja "${empresa.slug}" alterada por ${req.master.u}`);
+        return resumoDaLoja(empresa, req.hostname);
+      } finally {
+        if (novoPool) await novoPool.end().catch(() => {});
+      }
+    }).then(responderMaster(res), falhaMaster(res, 'salvar a loja'));
+  }
+
+  // Tira a loja do painel. O banco dela no Neon fica intacto: cadastrar de novo com o
+  // mesmo identificador e a mesma connection string traz tudo de volta.
+  function handleDeleteLojaMaster(req, res) {
+    emFilaMaster(async () => {
+      const empresa = lojaPorSlug(req.params.slug);
+      if (empresa.origem !== 'painel') throw new ErroMaster(400, 'Essa loja vem das variáveis do Render: tire de lá (EMPRESAS e EMPRESA_*)');
+      if ((req.body || {}).confirmacao !== empresa.slug) throw new ErroMaster(400, `Digite ${empresa.slug} para confirmar`);
+      await EMPRESAS_ENV[0].pool.query('DELETE FROM master_lojas WHERE slug = $1', [empresa.slug]);
+      EMPRESAS.splice(EMPRESAS.indexOf(empresa), 1);
+      cacheLoja.delete(empresa.slug);
+      if (empresa.pool) empresa.pool.end().catch(() => {});
+      console.log(`[master] loja "${empresa.slug}" removida do painel por ${req.master.u}`);
+      return { removida: empresa.slug };
+    }).then(responderMaster(res), falhaMaster(res, 'remover a loja'));
+  }
+
+  // Entrar no painel de uma loja sem a senha dela (suporte ao cliente): token de 1 hora
+  // do admin daquela loja, levado no #acesso= da página de login (não vai para o servidor).
+  function handleAcessoLojaMaster(req, res) {
+    try {
+      const empresa = lojaPorSlug(req.params.slug);
+      if (empresa.erro || empresa.ativo === false) throw new ErroMaster(400, 'A loja está fora do ar');
+      if (!isAdminAuthEnabled(empresa)) throw new ErroMaster(400, 'A loja ainda não tem login do admin');
+      console.log(`[master] ${req.master.u} entrou no painel da loja "${empresa.slug}"`);
+      res.json({ token: signToken(empresa, `master:${req.master.u}`, 1), endereco: master.enderecoDaLoja(empresa, req.hostname) });
+    } catch (err) {
+      falhaMaster(res, 'abrir o painel da loja')(err);
+    }
+  }
+
+  masterRouter.get('/master', (req, res) => res.redirect(301, '/master/'));
+  masterRouter.get('/master/', (req, res) => {
+    res.set({ 'Cache-Control': 'no-cache', 'X-Robots-Tag': 'noindex' });
+    res.sendFile(path.join(__dirname, 'master', 'index.html'));
+  });
+  masterRouter.get('/api/master/status', (req, res) => res.json({ habilitado: masterHabilitado() }));
+  masterRouter.post('/api/master/login', handleLoginMaster);
+  masterRouter.get('/api/master/lojas', requireMaster, handleListLojasMaster);
+  masterRouter.post('/api/master/lojas', requireMaster, handleCreateLojaMaster);
+  masterRouter.put('/api/master/lojas/:slug', requireMaster, handleUpdateLojaMaster);
+  masterRouter.delete('/api/master/lojas/:slug', requireMaster, handleDeleteLojaMaster);
+  masterRouter.post('/api/master/lojas/:slug/acesso', requireMaster, handleAcessoLojaMaster);
 
   // ---------- Login admin (público; demais /api/admin exigem Bearer) ----------
   app.post('/api/admin/login', handleLogin);
