@@ -48,7 +48,7 @@ const TEXTOS_ROUPAS = {
 };
 
 function lojaPadrao(empresa) {
-  if (empresa.padrao && (!empresa.nome || empresa.nome === PADRAO_NIX.nome)) return { ...PADRAO_NIX };
+  if ((empresa.padrao || empresa.legado) && (!empresa.nome || empresa.nome === PADRAO_NIX.nome)) return { ...PADRAO_NIX };
   const nome = empresa.nome || empresa.slug;
   const [primeira, ...resto] = nome.split(/\s+/);
   return {

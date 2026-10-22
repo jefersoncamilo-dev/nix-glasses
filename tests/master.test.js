@@ -342,3 +342,121 @@ describe('painel master sem login configurado', () => {
     assert.equal((await fetch(srv.url('/api/master/lojas'))).status, 503);
   });
 });
+
+describe('banco da plataforma (a Nix vira uma loja como as outras)', () => {
+  const NIX = 'nix-glasses.onrender.com';
+  const PASUC = 'pasuc.temcatalogo.com.br';
+  const MASTER_PASS = 'senha-do-master-123';
+  const base = (sufixo) => {
+    const u = new URL(h.DATABASE_URL);
+    u.pathname = `/${u.pathname.slice(1)}_${sufixo}`;
+    return u.href;
+  };
+  const bancoPasuc = base('plat_pasuc');
+  const bancoPlataforma = base('plataforma');
+  const envRender = {
+    RENDER_EXTERNAL_HOSTNAME: NIX,
+    MASTER_USER: 'jefe',
+    MASTER_PASS_HASH: h.hashSenha(MASTER_PASS),
+    EMPRESAS: 'nix,pasuc',
+    EMPRESA_PASUC_DATABASE_URL: bancoPasuc,
+    EMPRESA_PASUC_ADMIN_USER: 'pasuc',
+    EMPRESA_PASUC_ADMIN_PASS_HASH: h.hashSenha('senha-da-pasuc-1'),
+    EMPRESA_PASUC_NOME: 'Pasuc Portas',
+  };
+  let srv;
+  let tokenNixAntes;
+
+  const recriar = async (url) => {
+    const nome = new URL(url).pathname.slice(1);
+    await h.pool.query(`DROP DATABASE IF EXISTS "${nome}" WITH (FORCE)`);
+    await h.pool.query(`CREATE DATABASE "${nome}"`);
+  };
+  const tokenMaster = async () => (await pedir(srv, NIX, 'POST', '/api/master/login', { json: { user: 'jefe', password: MASTER_PASS } })).body.token;
+
+  before(async () => {
+    await h.pool.query('DROP TABLE IF EXISTS master_lojas');
+    await h.pool.query(`DELETE FROM configuracoes WHERE chave LIKE 'loja%'`);
+    await recriar(bancoPasuc);
+    await recriar(bancoPlataforma);
+    // Antes: tudo nas variáveis, e o painel já tinha dado um endereço à Nix
+    srv = await h.iniciarServidor({ env: envRender });
+    const t = await tokenMaster();
+    await pedir(srv, NIX, 'PUT', '/api/master/lojas/nix', { token: t, json: { dominios: 'nixglasses.temcatalogo.com.br' } });
+    tokenNixAntes = await h.login(srv);
+    await srv.parar();
+    srv = await h.iniciarServidor({ env: { ...envRender, PLATAFORMA_DATABASE_URL: bancoPlataforma } });
+  });
+  after(async () => {
+    if (srv) await srv.parar();
+    await h.pool.query('DROP TABLE IF EXISTS master_lojas');
+  });
+
+  it('importa as lojas das variáveis e o que o painel já tinha, e nenhuma é a principal', async () => {
+    const { body } = await pedir(srv, NIX, 'GET', '/api/master/lojas', { token: await tokenMaster() });
+    assert.deepEqual(body.map((l) => [l.slug, l.padrao, l.origem]), [['nix', false, 'painel'], ['pasuc', false, 'painel']]);
+    assert.deepEqual(body[0].dominios, ['nixglasses.temcatalogo.com.br', NIX]);
+    const plat = new Pool({ connectionString: bancoPlataforma });
+    try {
+      const { rows } = await plat.query('SELECT slug, legado, banco_cifrado FROM master_lojas ORDER BY slug');
+      assert.deepEqual(rows.map((r) => [r.slug, r.legado]), [['nix', true], ['pasuc', false]]);
+      for (const r of rows) assert.doesNotMatch(r.banco_cifrado, /postgres|localhost/);
+    } finally {
+      await plat.end();
+    }
+  });
+
+  it('a Nix continua igual: endereços, textos, logo, ícones e sessões abertas', async () => {
+    assert.match((await pedir(srv, NIX, 'GET', '/')).body, /<title data-loja="titulo">Nix Glasses - Óculos de Sol Premium<\/title>/);
+    assert.equal((await pedir(srv, 'nixglasses.temcatalogo.com.br', 'GET', '/api/produtos')).status, 200);
+    assert.equal((await pedir(srv, NIX, 'GET', '/logo.png')).status, 200);
+    assert.equal((await pedir(srv, NIX, 'GET', '/favicon.ico')).status, 200);
+    assert.equal((await pedir(srv, NIX, 'GET', '/api/admin/produtos', { token: tokenNixAntes })).status, 200);
+    assert.equal((await pedir(srv, PASUC, 'POST', '/api/admin/login', { json: { user: 'pasuc', password: 'senha-da-pasuc-1' } })).status, 200);
+    assert.equal((await pedir(srv, PASUC, 'GET', '/favicon.ico')).status, 404);
+  });
+
+  it('o painel continua no endereço do Render; endereço sem loja não abre a Nix', async () => {
+    assert.equal((await pedir(srv, NIX, 'GET', '/master/')).status, 200);
+    assert.equal((await pedir(srv, 'errado.temcatalogo.com.br', 'GET', '/')).status, 404);
+  });
+
+  it('a Nix pode ser suspensa como qualquer loja', async () => {
+    const t = await tokenMaster();
+    assert.equal((await pedir(srv, NIX, 'PUT', '/api/master/lojas/nix', { token: t, json: { ativo: false } })).status, 200);
+    assert.equal((await pedir(srv, NIX, 'GET', '/')).status, 503);
+    assert.equal((await pedir(srv, NIX, 'GET', '/master/')).status, 200, 'o painel não some junto');
+    await pedir(srv, NIX, 'PUT', '/api/master/lojas/nix', { token: t, json: { ativo: true } });
+    assert.equal((await pedir(srv, NIX, 'GET', '/')).status, 200);
+  });
+
+  it('recusa usar o banco da plataforma como banco de loja', async () => {
+    const res = await pedir(srv, NIX, 'PUT', '/api/master/lojas/pasuc', { token: await tokenMaster(), json: { banco: bancoPlataforma } });
+    assert.match(res.body.error, /banco da plataforma/);
+  });
+
+  it('sobe sem nenhuma variável de loja: tudo vem do cadastro', async () => {
+    await srv.parar();
+    srv = await h.iniciarServidor({
+      env: { RENDER_EXTERNAL_HOSTNAME: NIX, MASTER_USER: 'jefe', MASTER_PASS_HASH: envRender.MASTER_PASS_HASH, PLATAFORMA_DATABASE_URL: bancoPlataforma, DATABASE_URL: '', ADMIN_USER: '', ADMIN_PASS_HASH: '' },
+    });
+    assert.match((await pedir(srv, NIX, 'GET', '/')).body, /Nix Glasses/);
+    assert.equal((await pedir(srv, NIX, 'POST', '/api/admin/login', { json: { user: h.ADMIN_USER, password: h.ADMIN_PASS } })).status, 200);
+    assert.equal((await pedir(srv, PASUC, 'POST', '/api/admin/login', { json: { user: 'pasuc', password: 'senha-da-pasuc-1' } })).status, 200);
+  });
+
+  it('depois da importação, variáveis apagadas pela metade não derrubam o serviço', async () => {
+    await srv.parar();
+    srv = await h.iniciarServidor({
+      env: { RENDER_EXTERNAL_HOSTNAME: NIX, MASTER_USER: 'jefe', MASTER_PASS_HASH: envRender.MASTER_PASS_HASH, PLATAFORMA_DATABASE_URL: bancoPlataforma, EMPRESAS: 'nix,pasuc', DATABASE_URL: '' },
+    });
+    assert.equal((await pedir(srv, PASUC, 'GET', '/')).status, 200);
+  });
+
+  it('não sobe com o banco da plataforma igual ao de uma loja', async () => {
+    await assert.rejects(
+      h.iniciarServidor({ env: { ...envRender, PLATAFORMA_DATABASE_URL: h.DATABASE_URL } }),
+      /banco da loja "nix"/
+    );
+  });
+});

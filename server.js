@@ -17,8 +17,25 @@ const PORT = process.env.PORT || 3000;
 // Empresas atendidas por este serviço (ver empresas.js). Cada uma com o seu banco.
 // As das variáveis de ambiente se juntam, no boot, às cadastradas no painel master
 // (master.js); a lista muda quando o master cria, edita ou remove uma loja.
-const EMPRESAS_ENV = lerEmpresas(process.env);
+// Banco só da plataforma (cadastro das lojas do painel master). Sem ele, o cadastro fica
+// no banco da empresa padrão, como antes. Ver master.js.
+const PLATAFORMA_DATABASE_URL = process.env.PLATAFORMA_DATABASE_URL || '';
+// Com o banco da plataforma, as variáveis de loja só servem para a importação da primeira
+// subida: depois dela, sobra de variável apagada pela metade não derruba o serviço.
+let erroVariaveis = null;
+const EMPRESAS_ENV = (() => {
+  try {
+    return lerEmpresas(process.env);
+  } catch (err) {
+    if (!PLATAFORMA_DATABASE_URL) throw err;
+    erroVariaveis = err;
+    return [];
+  }
+})();
 const EMPRESAS = [];
+if (!PLATAFORMA_DATABASE_URL && !EMPRESAS_ENV.length) throw new Error('Defina DATABASE_URL (ou PLATAFORMA_DATABASE_URL)');
+const HOST_RENDER = normalizarHost(process.env.RENDER_EXTERNAL_HOSTNAME);
+let poolCadastro = null;
 
 // Endereços do painel master (ex.: admin.temcatalogo.com.br). Ele também abre no
 // endereço do serviço no Render e em localhost, antes de o DNS estar pronto.
@@ -55,7 +72,7 @@ app.get('/saude', (req, res) => res.type('text').send('ok'));
 const masterRouter = express.Router({ strict: true });
 function hostDoMaster(host) {
   const h = normalizarHost(host);
-  return MASTER_DOMINIOS.includes(h) || hostInterno(h) || (!!EMPRESAS_ENV[0].hostRender && h === EMPRESAS_ENV[0].hostRender);
+  return MASTER_DOMINIOS.includes(h) || hostInterno(h) || (!!HOST_RENDER && h === HOST_RENDER);
 }
 app.use((req, res, next) => {
   if (!hostDoMaster(req.hostname)) return next();
@@ -110,7 +127,7 @@ async function servirLogo(req, res, next) {
   } catch (err) {
     return next(err);
   }
-  if (!req.empresa.padrao) return res.status(404).end();
+  if (!req.empresa.legado) return res.status(404).end();
   next();
 }
 app.get('/logo.png', servirLogo);
@@ -118,7 +135,7 @@ const PUBLIC_ROOT_FILES = new Set(['logo.png', 'favicon.ico', 'apple-touch-icon.
 const SO_DA_PADRAO = new Set(['favicon.ico', 'apple-touch-icon.png']);
 app.get('/:file', (req, res, next) => {
   if (!PUBLIC_ROOT_FILES.has(req.params.file)) return next();
-  if (SO_DA_PADRAO.has(req.params.file) && !req.empresa.padrao) return res.status(404).end();
+  if (SO_DA_PADRAO.has(req.params.file) && !req.empresa.legado) return res.status(404).end();
   res.sendFile(path.join(__dirname, req.params.file), (err) => err && next());
 });
 app.use('/admin', express.static(path.join(__dirname, 'admin'), { index: false }));
@@ -254,7 +271,7 @@ function segredoBase() {
 }
 
 function getTokenSecret(empresa) {
-  if (empresa.padrao) return segredoBase();
+  if (empresa.legado) return segredoBase();
   return crypto.createHmac('sha256', segredoBase()).update(`empresa:${empresa.slug}`).digest('hex');
 }
 
@@ -1044,13 +1061,72 @@ async function conectarBanco(slug, databaseUrl) {
   }
 }
 
+// Primeira subida com o banco da plataforma: traz as lojas das variáveis e o que o painel
+// tinha no banco da Nix. Roda uma vez só (marca importado_do_render); depois disso as
+// lojas vêm só do cadastro e as variáveis EMPRESA_* podem sair do Render.
+async function importarDoRender(pool) {
+  const { rows: [feito] } = await pool.query(`SELECT 1 FROM plataforma_config WHERE chave = 'importado_do_render'`);
+  if (feito) {
+    if (erroVariaveis) console.warn(`[master] Variáveis de loja ignoradas (as lojas vêm do cadastro): ${erroVariaveis.message}`);
+    return;
+  }
+  if (erroVariaveis) throw erroVariaveis;
+  let antigas = [];
+  if (EMPRESAS_ENV.length) {
+    const antigo = criarPool(EMPRESAS_ENV[0].databaseUrl);
+    try {
+      const { rows: [t] } = await antigo.query(`SELECT to_regclass('master_lojas') AS tabela`);
+      if (t.tabela) antigas = (await antigo.query('SELECT * FROM master_lojas ORDER BY created_at, slug')).rows;
+    } finally {
+      await antigo.end().catch(() => {});
+    }
+  }
+  const linhas = master.importarLojas(EMPRESAS_ENV, antigas, (url) => master.cifrar(url, process.env.JWT_SECRET));
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    for (const l of linhas) {
+      await client.query(
+        `INSERT INTO master_lojas (slug, nome, dominios, banco_cifrado, admin_user, admin_pass_hash, ativo, sessao, legado)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) ON CONFLICT (slug) DO NOTHING`,
+        [l.slug, l.nome, l.dominios, l.banco_cifrado, l.admin_user, l.admin_pass_hash, l.ativo, l.sessao, l.legado]
+      );
+    }
+    await client.query(`INSERT INTO plataforma_config (chave, valor) VALUES ('importado_do_render', $1)`, [new Date().toISOString()]);
+    await client.query('COMMIT');
+    console.log(`[master] Lojas importadas das variáveis do Render: ${linhas.map((l) => l.slug).join(', ') || 'nenhuma'}`);
+  } catch (err) {
+    await client.query('ROLLBACK').catch(() => {});
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
 async function startServer() {
-  // A empresa padrão vem primeiro: o cadastro do painel master fica no banco dela.
-  const padrao = EMPRESAS_ENV[0];
-  padrao.pool = await conectarBanco(padrao.slug, padrao.databaseUrl);
-  await master.criarTabelaMaster(padrao.pool);
-  const { rows: linhasMaster } = await padrao.pool.query('SELECT * FROM master_lojas ORDER BY created_at, slug');
-  EMPRESAS.push(...master.mesclarEmpresas(EMPRESAS_ENV, linhasMaster, decifrarBanco));
+  if (PLATAFORMA_DATABASE_URL) {
+    // Todas as lojas vêm do cadastro da plataforma; nenhuma é a padrão.
+    if (!process.env.JWT_SECRET) throw new Error('Com PLATAFORMA_DATABASE_URL, defina JWT_SECRET (ele cifra os bancos das lojas)');
+    const idPlataforma = identidadeBanco(PLATAFORMA_DATABASE_URL);
+    const igual = EMPRESAS_ENV.find((e) => identidadeBanco(e.databaseUrl) === idPlataforma);
+    if (igual) throw new Error(`PLATAFORMA_DATABASE_URL é o banco da loja "${igual.slug}": a plataforma precisa de um banco só dela`);
+    poolCadastro = criarPool(PLATAFORMA_DATABASE_URL);
+    await master.criarTabelaMaster(poolCadastro);
+    await importarDoRender(poolCadastro);
+    const { rows: linhasMaster } = await poolCadastro.query('SELECT * FROM master_lojas ORDER BY created_at, slug');
+    EMPRESAS.push(...master.mesclarEmpresas([], linhasMaster, decifrarBanco));
+    for (const e of EMPRESAS) {
+      if (identidadeBanco(e.databaseUrl || '') === idPlataforma) e.erro = 'Essa loja aponta para o banco da plataforma: cole o banco dela';
+    }
+  } else {
+    // A empresa padrão vem primeiro: o cadastro do painel master fica no banco dela.
+    const padrao = EMPRESAS_ENV[0];
+    padrao.pool = await conectarBanco(padrao.slug, padrao.databaseUrl);
+    await master.criarTabelaMaster(padrao.pool);
+    poolCadastro = padrao.pool;
+    const { rows: linhasMaster } = await padrao.pool.query('SELECT * FROM master_lojas ORDER BY created_at, slug');
+    EMPRESAS.push(...master.mesclarEmpresas(EMPRESAS_ENV, linhasMaster, decifrarBanco));
+  }
 
   const bancos = new Map();
   for (const empresa of EMPRESAS) {
@@ -1070,7 +1146,7 @@ async function startServer() {
       continue;
     }
     bancos.set(id, empresa.slug);
-    if (empresa.padrao) continue;
+    if (empresa.pool) continue;
     try {
       empresa.pool = await conectarBanco(empresa.slug, empresa.databaseUrl);
     } catch (err) {
@@ -2729,7 +2805,8 @@ async function startServer() {
   function conferirDominios(dominios, slug) {
     for (const d of dominios) {
       if (MASTER_DOMINIOS.includes(d)) throw new ErroMaster(400, `"${d}" é o endereço do painel master`);
-      if (d === EMPRESAS_ENV[0].hostRender && slug !== EMPRESAS_ENV[0].slug) throw new ErroMaster(400, `"${d}" é o endereço do serviço no Render, que abre a loja principal`);
+      const padrao = EMPRESAS.find((e) => e.padrao);
+      if (padrao && d === padrao.hostRender && slug !== padrao.slug) throw new ErroMaster(400, `"${d}" é o endereço do serviço no Render, que abre a loja principal`);
       const dona = empresaDoHost(EMPRESAS.filter((e) => e.slug !== slug), d);
       if (dona && (dona.dominios.includes(d) || d.startsWith(dona.slug + '.'))) {
         throw new ErroMaster(400, `"${d}" já abre a loja "${dona.slug}"`);
@@ -2741,6 +2818,7 @@ async function startServer() {
     const id = identidadeBanco(databaseUrl);
     const outra = EMPRESAS.find((e) => e.slug !== slug && e.databaseUrl && identidadeBanco(e.databaseUrl) === id);
     if (outra) throw new ErroMaster(400, `Esse banco já é da loja "${outra.slug}": cada loja precisa do seu`);
+    if (PLATAFORMA_DATABASE_URL && identidadeBanco(PLATAFORMA_DATABASE_URL) === id) throw new ErroMaster(400, 'Esse é o banco da plataforma: cada loja precisa do seu');
   }
 
   async function abrirBancoDaLoja(slug, databaseUrl) {
@@ -2766,13 +2844,13 @@ async function startServer() {
   }
 
   async function salvarLinhaMaster(linha) {
-    const { rows } = await EMPRESAS_ENV[0].pool.query(
-      `INSERT INTO master_lojas (slug, nome, dominios, banco_cifrado, admin_user, admin_pass_hash, ativo, sessao)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+    const { rows } = await poolCadastro.query(
+      `INSERT INTO master_lojas (slug, nome, dominios, banco_cifrado, admin_user, admin_pass_hash, ativo, sessao, legado)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
        ON CONFLICT (slug) DO UPDATE SET nome = $2, dominios = $3, banco_cifrado = $4, admin_user = $5,
-         admin_pass_hash = $6, ativo = $7, sessao = $8, updated_at = CURRENT_TIMESTAMP
+         admin_pass_hash = $6, ativo = $7, sessao = $8, legado = $9, updated_at = CURRENT_TIMESTAMP
        RETURNING *`,
-      [linha.slug, linha.nome, linha.dominios, linha.banco_cifrado, linha.admin_user, linha.admin_pass_hash, linha.ativo, linha.sessao]
+      [linha.slug, linha.nome, linha.dominios, linha.banco_cifrado, linha.admin_user, linha.admin_pass_hash, linha.ativo, linha.sessao, !!linha.legado]
     );
     return rows[0];
   }
@@ -2887,7 +2965,7 @@ async function startServer() {
       else if (empresa.erro && empresa.databaseUrl) novoPool = await abrirBancoDaLoja(empresa.slug, empresa.databaseUrl);
 
       try {
-        const { rows: [atual] } = await EMPRESAS_ENV[0].pool.query('SELECT * FROM master_lojas WHERE slug = $1', [empresa.slug]);
+        const { rows: [atual] } = await poolCadastro.query('SELECT * FROM master_lojas WHERE slug = $1', [empresa.slug]);
         const linha = atual || {
           slug: empresa.slug, nome: empresa.nome || '', dominios: null, banco_cifrado: null,
           admin_user: null, admin_pass_hash: null, ativo: true, sessao: 0,
@@ -2930,7 +3008,7 @@ async function startServer() {
       const empresa = lojaPorSlug(req.params.slug);
       if (empresa.origem !== 'painel') throw new ErroMaster(400, 'Essa loja vem das variáveis do Render: tire de lá (EMPRESAS e EMPRESA_*)');
       if ((req.body || {}).confirmacao !== empresa.slug) throw new ErroMaster(400, `Digite ${empresa.slug} para confirmar`);
-      await EMPRESAS_ENV[0].pool.query('DELETE FROM master_lojas WHERE slug = $1', [empresa.slug]);
+      await poolCadastro.query('DELETE FROM master_lojas WHERE slug = $1', [empresa.slug]);
       EMPRESAS.splice(EMPRESAS.indexOf(empresa), 1);
       cacheLoja.delete(empresa.slug);
       if (empresa.pool) empresa.pool.end().catch(() => {});

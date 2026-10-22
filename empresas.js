@@ -42,8 +42,11 @@ function identidadeBanco(databaseUrl) {
 
 // Lê as empresas das variáveis de ambiente. Erros de configuração param o boot,
 // porque servir a empresa errada (ou com o banco de outra) seria pior.
+// Com o banco da plataforma (PLATAFORMA_DATABASE_URL), as lojas vêm do painel master e
+// as variáveis são opcionais: sem EMPRESAS nem DATABASE_URL, a lista sai vazia.
 function lerEmpresas(env) {
   const lista = String(env.EMPRESAS || '').split(',').map((s) => s.trim().toLowerCase()).filter(Boolean);
+  if (!lista.length && !env.DATABASE_URL && env.PLATAFORMA_DATABASE_URL) return [];
   const slugs = lista.length ? lista : ['nix'];
   const empresas = [];
   for (const [i, slug] of slugs.entries()) {
@@ -58,6 +61,9 @@ function lerEmpresas(env) {
     empresas.push({
       slug,
       padrao,
+      // Loja que nasceu como a padrão (a Nix): textos, ícones e segredo dos tokens de
+      // antes. Continua assim depois de ir para o painel da plataforma.
+      legado: padrao,
       nome: String(env[p + 'NOME'] || '').trim(),
       dominios,
       // O Render informa o endereço .onrender.com do serviço; só ele (não qualquer
@@ -86,12 +92,14 @@ function hostInterno(h) {
 // e sem domínios definidos, qualquer endereço é dela (como antes). Com várias, um endereço que não é de nenhuma
 // (subdomínio digitado errado, DNS apontado sem configurar) devolve null em vez de mostrar
 // a loja padrão por engano.
+// Com o banco da plataforma não há empresa padrão: só domínio ou "<slug>." abre loja.
 function empresaDoHost(empresas, host) {
   const h = normalizarHost(host);
   const dona = empresas.find((e) => e.dominios.includes(h))
     || empresas.find((e) => !e.dominios.length && h.startsWith(e.slug + '.'));
   if (dona) return dona;
-  const padrao = empresas[0];
+  const padrao = empresas.find((e) => e.padrao);
+  if (!padrao) return null;
   return (empresas.length === 1 && !padrao.dominios.length) || hostInterno(h) || (padrao.hostRender && h === padrao.hostRender) ? padrao : null;
 }
 
