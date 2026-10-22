@@ -32,3 +32,6 @@ services:
         sync: false
       - key: MASTER_DOMINIOS
         sync: false
+      # Banco só da plataforma (cadastro das lojas). Ver .env.example.
+      - key: PLATAFORMA_DATABASE_URL
+        sync: false

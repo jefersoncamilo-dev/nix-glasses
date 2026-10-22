@@ -1,11 +1,13 @@
 // Painel master: o dono do serviço (não o admin de cada loja) cadastra e configura as
 // lojas por um painel, sem mexer nas variáveis do Render a cada cliente novo.
 //
-// O cadastro fica na tabela master_lojas, no banco da empresa padrão (DATABASE_URL).
-// Cada linha completa ou substitui o que veio das variáveis EMPRESA_<SLUG>_*:
-//   - loja só do painel: a linha tem tudo (banco, login, domínios);
-//   - loja das variáveis: campos preenchidos na linha valem mais que as variáveis,
-//     campos nulos seguem as variáveis.
+// O cadastro fica na tabela master_lojas:
+//   - com PLATAFORMA_DATABASE_URL, num banco só da plataforma. Todas as lojas (a Nix
+//     inclusive) vêm do cadastro; as variáveis EMPRESAS/EMPRESA_* e DATABASE_URL são
+//     importadas uma vez, na primeira subida (importarLojas), e depois ignoradas;
+//   - sem ele (como antes), no banco da empresa padrão (DATABASE_URL). Cada linha
+//     completa ou substitui o que veio das variáveis EMPRESA_<SLUG>_*: campos
+//     preenchidos na linha valem mais, campos nulos seguem as variáveis.
 // A connection string do banco de cada loja fica cifrada (AES-256-GCM, chave derivada
 // do JWT_SECRET) e nunca volta para o navegador.
 
@@ -33,6 +35,39 @@ async function criarTabelaMaster(pool) {
       updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )
   `);
+  // Loja que era a padrão do serviço (ver `legado` em empresas.js)
+  await pool.query('ALTER TABLE master_lojas ADD COLUMN IF NOT EXISTS legado BOOLEAN NOT NULL DEFAULT FALSE');
+  await pool.query('CREATE TABLE IF NOT EXISTS plataforma_config (chave VARCHAR(100) PRIMARY KEY, valor TEXT NOT NULL)');
+}
+
+// Primeira subida com o banco da plataforma: as lojas das variáveis (e o que o painel já
+// tinha guardado para elas no banco da Nix) viram linhas completas do cadastro.
+// `cifrarBanco` cifra a connection string. A loja padrão leva o endereço do Render, para
+// nix-glasses.onrender.com continuar abrindo a mesma loja.
+function importarLojas(doEnv, antigas, cifrarBanco) {
+  const linhas = [];
+  for (const e of doEnv) {
+    const a = antigas.find((l) => l.slug === e.slug) || {};
+    let dominios = a.dominios ?? e.dominios.join(',');
+    if (e.padrao && e.hostRender && !dominios.split(',').includes(e.hostRender)) {
+      dominios = [dominios, e.hostRender].filter(Boolean).join(',');
+    }
+    linhas.push({
+      slug: e.slug,
+      nome: a.nome || e.nome || '',
+      dominios,
+      banco_cifrado: a.banco_cifrado || cifrarBanco(e.databaseUrl),
+      admin_user: a.admin_user || e.adminUser || null,
+      admin_pass_hash: a.admin_pass_hash || e.adminPassHash || null,
+      ativo: e.padrao ? true : a.ativo !== false,
+      sessao: a.sessao || 0,
+      legado: !!e.legado,
+    });
+  }
+  for (const a of antigas) {
+    if (!linhas.some((l) => l.slug === a.slug)) linhas.push({ ...a, legado: !!a.legado });
+  }
+  return linhas;
 }
 
 // ---------- Cifra da connection string ----------
@@ -139,6 +174,7 @@ function aplicarRegistro(empresa, linha, decifrarBanco) {
   if (linha.admin_user) empresa.adminUser = linha.admin_user;
   if (linha.admin_pass_hash) empresa.adminPassHash = linha.admin_pass_hash;
   empresa.sessao = linha.sessao || 0;
+  if (linha.legado) empresa.legado = true;
   if (!empresa.padrao) empresa.ativo = linha.ativo !== false;
   if (linha.banco_cifrado && !empresa.padrao) {
     try {
@@ -200,4 +236,5 @@ module.exports = {
   aplicarRegistro,
   mesclarEmpresas,
   enderecoDaLoja,
+  importarLojas,
 };
