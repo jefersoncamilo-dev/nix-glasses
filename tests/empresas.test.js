@@ -103,6 +103,13 @@ describe('empresaDoHost', () => {
     const [nix] = lerEmpresas({ DATABASE_URL: 'pg://1' });
     assert.equal(empresaDoHost([nix], 'www.qualquer.com.br'), nix);
   });
+
+  it('com uma empresa só mas com domínios definidos, só os dela e os internos', () => {
+    const [nix] = lerEmpresas({ DATABASE_URL: 'pg://1', EMPRESA_NIX_DOMINIOS: 'nixglasses.temcatalogo.com.br' });
+    assert.equal(empresaDoHost([nix], 'nixglasses.temcatalogo.com.br'), nix);
+    assert.equal(empresaDoHost([nix], 'localhost'), nix);
+    assert.equal(empresaDoHost([nix], 'removida.temcatalogo.com.br'), null);
+  });
 });
 
 describe('dados da loja', () => {

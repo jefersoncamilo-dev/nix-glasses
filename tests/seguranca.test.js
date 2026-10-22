@@ -27,6 +27,8 @@ describe('arquivos estáticos', () => {
       '/db.js',
       '/empresas.js',
       '/loja.js',
+      '/master.js',
+      '/master/index.html',
       '/package.json',
       '/package-lock.json',
       '/.env',

@@ -82,8 +82,8 @@ function hostInterno(h) {
   return h === '' || h === 'localhost' || /^[\d.]+$/.test(h) || h.includes(':');
 }
 
-// Empresa dona do endereço: domínio listado, senão "<slug>." no começo. Com uma empresa só,
-// qualquer endereço é dela (como antes). Com várias, um endereço que não é de nenhuma
+// Empresa dona do endereço: domínio listado, senão "<slug>." no começo. Com uma empresa só
+// e sem domínios definidos, qualquer endereço é dela (como antes). Com várias, um endereço que não é de nenhuma
 // (subdomínio digitado errado, DNS apontado sem configurar) devolve null em vez de mostrar
 // a loja padrão por engano.
 function empresaDoHost(empresas, host) {
@@ -92,7 +92,7 @@ function empresaDoHost(empresas, host) {
     || empresas.find((e) => !e.dominios.length && h.startsWith(e.slug + '.'));
   if (dona) return dona;
   const padrao = empresas[0];
-  return empresas.length === 1 || hostInterno(h) || (padrao.hostRender && h === padrao.hostRender) ? padrao : null;
+  return (empresas.length === 1 && !padrao.dominios.length) || hostInterno(h) || (padrao.hostRender && h === padrao.hostRender) ? padrao : null;
 }
 
-module.exports = { lerEmpresas, empresaDoHost, normalizarHost, identidadeBanco };
+module.exports = { lerEmpresas, empresaDoHost, normalizarHost, identidadeBanco, hostInterno };
