@@ -1462,6 +1462,10 @@
         }
         const ignorados = data.ignorados || [];
         const repostos = data.repostos || [];
+        // Produtos novos que vieram de um link: baixa a foto principal de cada um como <SKU>.jpg
+        const criados = new Set((data.produtos || []).map(p => String(p.codigo_sku || '').toLowerCase()));
+        const fotos = produtos.filter(p => p.imagem_fornecedor && criados.has(String(p.codigo_sku || '').trim().toLowerCase()));
+        (async () => { for (const p of fotos) await baixarFotoComSku(p.imagem_fornecedor, p.codigo_sku.trim()); })();
         mostrarToast(`${data.produtos.length} produto(s) cadastrado(s)${repostos.length ? `, ${repostos.length} reposição(ões) somada(s) no estoque` : ''}${ignorados.length ? `, ${ignorados.length} ignorado(s) por duplicidade` : ''}`,
           data.produtos.length || repostos.length ? 'success' : 'error');
         linhasLote = [linhaLoteVazia(), linhaLoteVazia(), linhaLoteVazia()];
@@ -1836,6 +1840,7 @@
       produtoEditando = produto;
       formProduto.reset();
       ultimaImportacao = {};
+      imagemImportada = '';
       document.getElementById('produtoId').value = '';
       iniciarSlotsFotos(produto);
 
@@ -1918,6 +1923,38 @@
       return preco.toFixed(2);
     }
 
+    // Nome do arquivo da foto: o SKU, só com letras, números, - e _ ("NIX 023/A" -> "NIX_023_A")
+    function nomeArquivoSku(sku, extensao) {
+      const base = String(sku || '').trim().replace(/[^\w-]+/g, '_').replace(/^_+|_+$/g, '') || 'produto';
+      return `${base}.${extensao}`;
+    }
+
+    // Baixa a foto principal do fornecedor (pelo servidor) e salva no computador como <SKU>.jpg
+    async function baixarFotoComSku(urlImagem, sku) {
+      if (!linkSeguro(urlImagem) || !String(sku || '').trim()) return false;
+      try {
+        const res = await fetchAdmin('/api/admin/importar-imagem', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ url: urlImagem }),
+        });
+        if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || 'Não foi possível baixar a foto');
+        const blob = await res.blob();
+        const extensao = { 'image/png': 'png', 'image/webp': 'webp', 'image/gif': 'gif', 'image/avif': 'avif' }[blob.type] || 'jpg';
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = nomeArquivoSku(sku, extensao);
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        setTimeout(() => URL.revokeObjectURL(a.href), 10000);
+        return true;
+      } catch (err) {
+        mostrarToast(`Foto de ${sku}: ${err.message}`, 'error');
+        return false;
+      }
+    }
+
     // Próximo SKU da sequência mais usada (NIX022 -> NIX023, com os mesmos dígitos).
     // `usados`: SKUs ainda não salvos (linhas do lote). Sem sequência: ''.
     function proximoSku(produtos, usados = []) {
@@ -1958,6 +1995,7 @@
         codigo_fornecedor: String(dados.codigo_fornecedor || ''),
         fornecedor: String(dados.fornecedor || ''),
         link_fornecedor: linkSeguro(dados.link_fornecedor),
+        imagem_fornecedor: linkSeguro(Array.isArray(dados.imagens) ? dados.imagens[0] : ''),
         formato: String(dados.formato || ''),
         estilo: String(dados.estilo || ''),
         cor_armacao: String(dados.cor_armacao || ''),
@@ -1973,6 +2011,8 @@
     // ainda está igual a eles é trocado (ou apagado, se a nova página não tiver), para não
     // sobrar dado do produto anterior. O que você digitou não é mexido.
     let ultimaImportacao = {};
+    // Foto principal da última importação: baixada como <SKU>.jpg quando o produto novo é salvo
+    let imagemImportada = '';
 
     // Nome e fornecedor só entram vazios (ou ainda com o valor importado antes): o nome da
     // vitrine e o do fornecedor podem ser diferentes dos da loja (o da loja fica em Nome Fornec.)
@@ -2013,6 +2053,7 @@
         const r = aplicarImportacao(atuais, c, ultimaImportacao);
         campos.forEach(campo => { document.getElementById(campo).value = r.valores[campo]; });
         ultimaImportacao = r.importados;
+        imagemImportada = c.imagem_fornecedor;
         const preenchidos = r.preenchidos;
         atualizarAbrirLink();
         const nomes = { nome: 'nome', nome_fornecedor: 'nome fornec.', fornecedor: 'fornecedor', preco_custo: 'custo', preco_venda: 'venda', codigo_sku: 'SKU', codigo_fornecedor: 'código', link_fornecedor: 'link', formato: 'formato', estilo: 'estilo', cor_armacao: 'cor', diametro_cm: 'diâmetro', ponte_cm: 'ponte', largura_total_cm: 'largura', material: 'material', tipo: 'tipo', genero: 'gênero' };
@@ -2092,7 +2133,11 @@
         }
         const salvo = await res.json().catch(() => ({}));
         mostrarToast(id ? 'Produto atualizado!' : Array.isArray(salvo.produtos) ? `${salvo.produtos.length} tamanhos cadastrados!` : 'Produto criado!');
+        // Produto novo importado do fornecedor: a foto principal vai para o computador como <SKU>.jpg
+        const foto = !id && imagemImportada;
+        const skuFoto = document.getElementById('codigo_sku').value.trim();
         fecharModal();
+        if (foto) baixarFotoComSku(foto, skuFoto);
         carregarProdutos();
       } catch (err) {
         console.error(err);

@@ -108,7 +108,7 @@ function requisitar(url, opcoes) {
       timeout: opcoes.timeoutMs,
       headers: {
         'User-Agent': USER_AGENT,
-        Accept: 'text/html,application/xhtml+xml;q=0.9,*/*;q=0.8',
+        Accept: opcoes.binario ? 'image/avif,image/webp,image/*;q=0.9,*/*;q=0.5' : 'text/html,application/xhtml+xml;q=0.9,*/*;q=0.8',
         'Accept-Language': 'pt-BR,pt;q=0.9',
         'Accept-Encoding': 'gzip, deflate, br',
       },
@@ -129,11 +129,13 @@ function requisitar(url, opcoes) {
         if (total > opcoes.maxBytes) {
           req.destroy();
           corpo.destroy();
-          return reject(new ErroImportacao('Página grande demais'));
+          return reject(new ErroImportacao(opcoes.binario ? 'Imagem grande demais' : 'Página grande demais'));
         }
         partes.push(chunk);
       });
-      corpo.on('end', () => resolve({ html: decodificar(Buffer.concat(partes), res.headers['content-type']) }));
+      corpo.on('end', () => resolve(opcoes.binario
+        ? { buffer: Buffer.concat(partes), tipo: String(res.headers['content-type'] || '').split(';')[0].trim().toLowerCase() }
+        : { html: decodificar(Buffer.concat(partes), res.headers['content-type']) }));
       corpo.on('error', () => reject(new ErroImportacao('Não foi possível ler a página da loja')));
     });
     // timeout do http só mede tempo parado; este limita o download inteiro
@@ -151,6 +153,24 @@ async function baixarPagina(urlTexto, { permitirRedeLocal = false, timeoutMs = T
   for (let i = 0; i <= MAX_REDIRECTS; i++) {
     const r = await requisitar(url, { permitirRedeLocal, timeoutMs, maxBytes });
     if (r.html !== undefined) return { html: r.html, url: url.href };
+    url = lerUrlProduto(new URL(r.redirect, url).href);
+    if (!url) throw new ErroImportacao('A loja redirecionou para um endereço inválido');
+  }
+  throw new ErroImportacao('Redirecionamentos demais');
+}
+
+// Foto do produto na loja do fornecedor (mesmas proteções da página). -> { buffer, tipo, extensao }
+const TIPOS_IMAGEM = { 'image/jpeg': 'jpg', 'image/jpg': 'jpg', 'image/png': 'png', 'image/webp': 'webp', 'image/gif': 'gif', 'image/avif': 'avif' };
+async function baixarImagem(urlTexto, { permitirRedeLocal = false, timeoutMs = TIMEOUT_MS, maxBytes = 8 * 1024 * 1024 } = {}) {
+  let url = lerUrlProduto(String(urlTexto || ''));
+  if (!url) throw new ErroImportacao('Link da imagem inválido (use http:// ou https://)', 400);
+  for (let i = 0; i <= MAX_REDIRECTS; i++) {
+    const r = await requisitar(url, { permitirRedeLocal, timeoutMs, maxBytes, binario: true });
+    if (r.buffer) {
+      const extensao = TIPOS_IMAGEM[r.tipo];
+      if (!extensao) throw new ErroImportacao('O link não é de uma imagem', 422);
+      return { buffer: r.buffer, tipo: r.tipo, extensao };
+    }
     url = lerUrlProduto(new URL(r.redirect, url).href);
     if (!url) throw new ErroImportacao('A loja redirecionou para um endereço inválido');
   }
@@ -517,4 +537,4 @@ async function importarProduto(url, opcoes) {
   return { ...dados, link_fornecedor: lerUrlProduto(url).href };
 }
 
-module.exports = { importarProduto, baixarPagina, extrairDadosProduto, extrairEspecificacoes, lerPrecoTexto, enderecoBloqueado, ErroImportacao };
+module.exports = { importarProduto, baixarPagina, baixarImagem, extrairDadosProduto, extrairEspecificacoes, lerPrecoTexto, enderecoBloqueado, ErroImportacao };
