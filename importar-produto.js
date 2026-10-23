@@ -435,6 +435,27 @@ function extrairEspecificacoes(nome, descricao) {
   };
 }
 
+// Preço de venda sugerido pelo fornecedor ("Preço sugerido de revenda: R$ 59,90 a R$ 199,90",
+// "R$ 59,90 a R$ 199,90 (sugerido)"): os valores em R$ logo depois de "sugerido" ou, se
+// não houver, logo antes. -> { min, max } ou null.
+function precoSugerido(pagina) {
+  const t = textoDoHtml(pagina);
+  const precos = (trecho) => [...trecho.matchAll(/R\$\s*(\d{1,3}(?:\.\d{3})*,\d{2}|\d+(?:[.,]\d{2})?)/g)]
+    .map((m) => lerPrecoTexto(m[1])).filter((n) => n !== null && n > 0);
+  for (const m of t.matchAll(/sugerid[oa]s?/gi)) {
+    const inicioLinha = t.lastIndexOf('\n', m.index) + 1;
+    const antes = precos(t.slice(Math.max(inicioLinha, m.index - 80), m.index)).slice(-2);
+    const [resto = '', proxima = ''] = t.slice(m.index).split('\n');
+    // "R$ 59,90 a R$ 199,90 (sugerido)": os valores vêm antes
+    const entreParenteses = /\(\s*$/.test(t.slice(Math.max(0, m.index - 3), m.index));
+    const lista = entreParenteses && antes.length ? antes
+      : precos(resto.slice(0, 90)).length ? precos(resto.slice(0, 90))
+        : precos(proxima.slice(0, 60)).length ? precos(proxima.slice(0, 60)) : antes;
+    if (lista.length) return { min: Math.min(...lista), max: Math.max(...lista) };
+  }
+  return null;
+}
+
 // Código no fim do link da Nuvemshop (".../oculos-nitro-djy8z/" -> "DJY8Z"): letras e números juntos
 function codigoDoLink(urlPagina) {
   try {
@@ -481,6 +502,7 @@ function extrairDadosProduto(html, urlPagina) {
     referencias: { sku, mpn, gtin, marca },
     fornecedor: (loja || host).slice(0, 120),
     ...extrairEspecificacoes(nome, descricaoDoProduto(pagina, ld, metas)),
+    preco_venda_sugerido: precoSugerido(pagina),
     imagens: [...urlsImagens(ld.image, urlPagina), ...urlsImagens(metas['og:image'], urlPagina)]
       .filter((u, i, todas) => todas.indexOf(u) === i).slice(0, 4),
   };

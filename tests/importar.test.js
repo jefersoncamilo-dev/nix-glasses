@@ -131,6 +131,14 @@ ${li('Formatos de rosto compatíveis', 'Oval, quadrado, triangular')}${li('Gêne
     assert.equal(nenhum.codigo_fornecedor, 'DJY8Z');
   });
 
+  it('lê o preço de venda sugerido (faixa ou valor, antes ou depois de "sugerido")', () => {
+    const sug = (html) => extrairDadosProduto(`<title>X</title><span>R$ 39,90</span>${html}<p>Frete R$ 10,00</p>`, 'https://x.com/p').preco_venda_sugerido;
+    assert.deepEqual({ ...sug('<p>Preço sugerido de revenda: R$ 59,90 a R$ 199,90</p>') }, { min: 59.9, max: 199.9 });
+    assert.deepEqual({ ...sug('<p>Venda: R$ 59,90 a R$ 199,90 (sugerido)</p>') }, { min: 59.9, max: 199.9 });
+    assert.deepEqual({ ...sug('<p>Preço de venda sugerido:</p><p>R$ 129,90</p>') }, { min: 129.9, max: 129.9 });
+    assert.equal(sug('<p>sem sugestão</p>'), null);
+  });
+
   it('especificações em lista numa linha, em mm, polarizado e gênero', () => {
     const e = extrairEspecificacoes('Óculos Aviador Polarizado Masculino', 'Medidas: * Lente: 58mm * Ponte: 18 mm * Largura frontal: 145mm * Material: Metal * Cor: Dourado * Proteção: UV400');
     assert.equal(e.diametro_cm, 5.8);

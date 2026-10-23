@@ -19,7 +19,7 @@ function extrairFuncao(nome) {
 }
 
 const funcoes = ['escapeHtml', 'linkSeguro', 'botaoLinkFornecedor', 'variacaoCusto', 'htmlVariacao', 'htmlUltimaCompra',
-  'formatarMedida', 'camposDaImportacao', 'aplicarImportacao', 'associarFotosPorSku', 'montarResumoMaleta', 'calcularAcerto'];
+  'formatarMedida', 'precoVendaSugerido', 'proximoSku', 'produtoJaCadastrado', 'camposDaImportacao', 'aplicarImportacao', 'associarFotosPorSku', 'montarResumoMaleta', 'calcularAcerto'];
 const ctx = vm.createContext({ Number, String, Math, Map, Set, Object, URL, Intl });
 vm.runInContext(`
   const MAX_FOTOS = 4;
@@ -71,7 +71,7 @@ describe('painel: importação pelo link', () => {
   it('converte os dados importados para os campos do formulário', () => {
     const c = ctx.camposDaImportacao({ nome: 'Aviador', preco_custo: 79.9, codigo_fornecedor: 'CL-1', fornecedor: 'Clush', link_fornecedor: 'https://clush.com.br/p' });
     assert.deepEqual({ ...c }, {
-      nome: 'Aviador', nome_fornecedor: 'Aviador', preco_custo: '79.90', codigo_fornecedor: 'CL-1', fornecedor: 'Clush', link_fornecedor: 'https://clush.com.br/p',
+      nome: 'Aviador', nome_fornecedor: 'Aviador', preco_custo: '79.90', preco_venda: '', codigo_fornecedor: 'CL-1', fornecedor: 'Clush', link_fornecedor: 'https://clush.com.br/p',
       formato: '', estilo: '', cor_armacao: '', material: '', tipo: '', genero: '', diametro_cm: '', ponte_cm: '', largura_total_cm: '',
     });
     // Especificações da descrição: medidas com vírgula, gênero só se for um código válido
@@ -109,6 +109,34 @@ describe('painel: importar um segundo link no mesmo formulário', () => {
     // Nome ainda igual ao importado antes: troca pelo novo
     const p3 = ctx.aplicarImportacao({ ...p1.valores }, { nome: 'Máscara Nitro' }, p1.importados);
     assert.equal(p3.valores.nome, 'Máscara Nitro');
+  });
+});
+
+describe('painel: SKU, reposição e venda sugerida na importação', () => {
+  it('preço de venda: valor sugerido ou o meio da faixa terminando em ,90', () => {
+    assert.equal(ctx.precoVendaSugerido({ min: 59.9, max: 199.9 }), '129.90');
+    assert.equal(ctx.precoVendaSugerido({ min: 129.9, max: 129.9 }), '129.90');
+    assert.equal(ctx.precoVendaSugerido(null), '');
+    assert.equal(ctx.camposDaImportacao({ nome: 'X', preco_venda_sugerido: { min: 59.9, max: 199.9 } }).preco_venda, '129.90');
+  });
+
+  it('próximo SKU segue a sequência mais usada, contando as linhas do lote', () => {
+    const produtos = [{ codigo_sku: 'NIX001' }, { codigo_sku: 'NIX022' }, { codigo_sku: 'nix009' }, { codigo_sku: 'AV-1' }, { codigo_sku: 'TESTE' }];
+    assert.equal(ctx.proximoSku(produtos), 'NIX023');
+    assert.equal(ctx.proximoSku(produtos, ['NIX023', '']), 'NIX024');
+    assert.equal(ctx.proximoSku([{ codigo_sku: 'NIX099' }, { codigo_sku: 'NIX100' }]), 'NIX101');
+    assert.equal(ctx.proximoSku([]), '');
+  });
+
+  it('reconhece produto já cadastrado pelo link ou pelo código no mesmo fornecedor', () => {
+    const produtos = [
+      { id: 5, codigo_sku: 'NIX005', fornecedor: 'Clush', codigo_fornecedor: 'DJY8Z', link_fornecedor: '' },
+      { id: 7, codigo_sku: 'NIX007', fornecedor: 'Outro', codigo_fornecedor: 'ABC', link_fornecedor: 'https://www.clush.com.br/produtos/turbo-ab12c/' },
+    ];
+    assert.equal(ctx.produtoJaCadastrado(produtos, { fornecedor: 'clush', codigo_fornecedor: 'djy8z' }).id, 5);
+    assert.equal(ctx.produtoJaCadastrado(produtos, { fornecedor: 'Clush', codigo_fornecedor: 'X', link_fornecedor: 'https://www.clush.com.br/produtos/turbo-ab12c' }).id, 7);
+    assert.equal(ctx.produtoJaCadastrado(produtos, { fornecedor: 'Outra loja', codigo_fornecedor: 'DJY8Z' }), null);
+    assert.equal(ctx.produtoJaCadastrado(produtos, { fornecedor: 'Clush', codigo_fornecedor: '' }), null);
   });
 });
 

@@ -1403,9 +1403,16 @@
       try {
         const c = camposDaImportacao(await buscarImportacao(url));
         const fornecedorTodos = document.getElementById('loteFornecedorTodos').value.trim();
-        adicionarLinhasLote([{ ...linhaLoteVazia(), ...c, fornecedor: fornecedorTodos || c.fornecedor, preco_custo: c.preco_custo.replace('.', ',') }]);
+        const linha = { ...linhaLoteVazia(), ...c, fornecedor: fornecedorTodos || c.fornecedor, preco_custo: c.preco_custo.replace('.', ','), preco_venda: c.preco_venda.replace('.', ',') };
+        // Já cadastrado: a linha vira reposição de 1 peça no SKU que já existe
+        const existente = produtoJaCadastrado(todosProdutos, linha);
+        if (existente) Object.assign(linha, { codigo_sku: existente.codigo_sku, quantidade: '1' });
+        else linha.codigo_sku = proximoSku(todosProdutos, linhasLote.map(l => l.codigo_sku));
+        adicionarLinhasLote([linha]);
         campo.value = '';
-        mostrarToast('Produto adicionado. Complete SKU e preço de venda.');
+        mostrarToast(existente
+          ? `Já cadastrado como ${existente.codigo_sku}: entra como reposição de 1 peça (ajuste a quantidade).`
+          : `Produto adicionado como ${linha.codigo_sku || 'novo'}. Confira o nome e o preço de venda.`);
       } catch (err) {
         mostrarToast(err.message, 'error');
       } finally {
@@ -1901,6 +1908,42 @@
       return data;
     }
 
+    // Preço sugerido pelo fornecedor -> preço de venda do formulário (199.90). Faixa
+    // (R$ 59,90 a R$ 199,90): o meio, terminando em ,90 (129.90). Sem sugestão: ''.
+    function precoVendaSugerido(s) {
+      const min = Number(s && s.min);
+      const max = Number(s && s.max);
+      if (!Number.isFinite(min) || !Number.isFinite(max) || min <= 0 || max < min) return '';
+      const preco = min === max ? min : Math.floor((min + max) / 2) + 0.9;
+      return preco.toFixed(2);
+    }
+
+    // Próximo SKU da sequência mais usada (NIX022 -> NIX023, com os mesmos dígitos).
+    // `usados`: SKUs ainda não salvos (linhas do lote). Sem sequência: ''.
+    function proximoSku(produtos, usados = []) {
+      const series = new Map();
+      [...produtos.map(p => p.codigo_sku), ...usados].forEach(sku => {
+        const m = /^([A-Za-z]+[-_ ]?)(\d+)$/.exec(String(sku || '').trim());
+        if (!m) return;
+        const prefixo = m[1].toUpperCase();
+        const s = series.get(prefixo) || { total: 0, maior: 0, digitos: 0 };
+        series.set(prefixo, { total: s.total + 1, maior: Math.max(s.maior, Number(m[2])), digitos: Math.max(s.digitos, m[2].length) });
+      });
+      let melhor = null;
+      for (const [prefixo, s] of series) if (!melhor || s.total > melhor.s.total) melhor = { prefixo, s };
+      return melhor ? melhor.prefixo + String(melhor.s.maior + 1).padStart(melhor.s.digitos, '0') : '';
+    }
+
+    // Produto já cadastrado com o mesmo link do fornecedor ou o mesmo código no mesmo
+    // fornecedor (mesma regra da reposição no lote). -> produto ou null
+    function produtoJaCadastrado(produtos, c) {
+      const minusc = v => String(v || '').trim().toLowerCase();
+      const caminho = v => { try { return new URL(v).pathname.replace(/\/+$/, '').toLowerCase(); } catch { return ''; } };
+      const link = caminho(c.link_fornecedor);
+      return produtos.find(p => (link && caminho(p.link_fornecedor) === link)
+        || (minusc(c.codigo_fornecedor) && minusc(p.codigo_fornecedor) === minusc(c.codigo_fornecedor) && minusc(p.fornecedor) === minusc(c.fornecedor))) || null;
+    }
+
     // Especificações que a importação lê da descrição do produto
     const CAMPOS_IMPORTADOS = ['nome_fornecedor', 'preco_custo', 'codigo_fornecedor', 'link_fornecedor', 'formato', 'estilo', 'cor_armacao', ...CAMPOS_MEDIDA, 'material', 'tipo', 'genero'];
 
@@ -1911,6 +1954,7 @@
         nome: String(dados.nome || ''),
         nome_fornecedor: String(dados.nome_fornecedor || dados.nome || ''),
         preco_custo: dados.preco_custo !== null && dados.preco_custo !== undefined && Number.isFinite(preco) ? preco.toFixed(2) : '',
+        preco_venda: precoVendaSugerido(dados.preco_venda_sugerido),
         codigo_fornecedor: String(dados.codigo_fornecedor || ''),
         fornecedor: String(dados.fornecedor || ''),
         link_fornecedor: linkSeguro(dados.link_fornecedor),
@@ -1939,7 +1983,7 @@
       Object.keys(atuais).forEach(campo => {
         const atual = String(atuais[campo] || '').trim();
         const eraImportado = anterior[campo] !== undefined && atual === anterior[campo];
-        const soSeVazio = campo === 'nome' || campo === 'fornecedor';
+        const soSeVazio = ['nome', 'fornecedor', 'preco_venda', 'codigo_sku'].includes(campo);
         if (c[campo] && (!soSeVazio || !atual || eraImportado)) {
           valores[campo] = c[campo];
           importados[campo] = c[campo];
@@ -1959,16 +2003,40 @@
       btn.disabled = true;
       status.textContent = 'Buscando o produto na loja...';
       try {
-        const c = camposDaImportacao(await buscarImportacao(url));
-        const campos = [...CAMPOS_IMPORTADOS, 'nome', 'fornecedor'];
+        const dados = await buscarImportacao(url);
+        const c = camposDaImportacao(dados);
+        // Produto novo: SKU seguinte da sequência. Já cadastrado: oferece a reposição.
+        const existente = produtoEditando ? null : produtoJaCadastrado(todosProdutos, c);
+        if (!produtoEditando && !existente) c.codigo_sku = proximoSku(todosProdutos);
+        const campos = [...CAMPOS_IMPORTADOS, 'nome', 'fornecedor', 'preco_venda', 'codigo_sku'];
         const atuais = Object.fromEntries(campos.map(campo => [campo, document.getElementById(campo).value]));
         const r = aplicarImportacao(atuais, c, ultimaImportacao);
         campos.forEach(campo => { document.getElementById(campo).value = r.valores[campo]; });
         ultimaImportacao = r.importados;
         const preenchidos = r.preenchidos;
         atualizarAbrirLink();
-        const nomes = { nome: 'nome', nome_fornecedor: 'nome fornec.', fornecedor: 'fornecedor', preco_custo: 'custo', codigo_fornecedor: 'código', link_fornecedor: 'link', formato: 'formato', estilo: 'estilo', cor_armacao: 'cor', diametro_cm: 'diâmetro', ponte_cm: 'ponte', largura_total_cm: 'largura', material: 'material', tipo: 'tipo', genero: 'gênero' };
-        status.textContent = `Preenchido: ${preenchidos.map(x => nomes[x]).join(', ')}.${c.preco_custo ? '' : ' Preço não encontrado na página.'} Confira antes de salvar.`;
+        const nomes = { nome: 'nome', nome_fornecedor: 'nome fornec.', fornecedor: 'fornecedor', preco_custo: 'custo', preco_venda: 'venda', codigo_sku: 'SKU', codigo_fornecedor: 'código', link_fornecedor: 'link', formato: 'formato', estilo: 'estilo', cor_armacao: 'cor', diametro_cm: 'diâmetro', ponte_cm: 'ponte', largura_total_cm: 'largura', material: 'material', tipo: 'tipo', genero: 'gênero' };
+        const sugerido = dados.preco_venda_sugerido;
+        status.textContent = `Preenchido: ${preenchidos.map(x => nomes[x]).join(', ')}.${c.preco_custo ? '' : ' Preço não encontrado na página.'}`
+          + (sugerido ? ` Venda sugerida pelo fornecedor: ${sugerido.min === sugerido.max ? formatarMoeda(sugerido.min) : `${formatarMoeda(sugerido.min)} a ${formatarMoeda(sugerido.max)}`}.` : '')
+          + ' Confira antes de salvar.';
+        if (existente) {
+          // Já cadastrado: em vez de um produto novo, registra a compra no que já existe
+          const aviso = document.createElement('span');
+          aviso.className = 'block mt-1 font-medium text-amber-700';
+          aviso.textContent = `Este produto já está cadastrado como ${existente.codigo_sku} (${existente.nome}). `;
+          const botao = document.createElement('button');
+          botao.type = 'button';
+          botao.className = 'underline text-orange-600 hover:text-orange-700';
+          botao.textContent = 'Registrar reposição';
+          botao.addEventListener('click', () => {
+            fecharModal();
+            window.abrirReposicao(existente.id);
+            if (c.preco_custo) document.getElementById('reposicaoCusto').value = c.preco_custo.replace('.', ',');
+          });
+          aviso.appendChild(botao);
+          status.appendChild(aviso);
+        }
       } catch (err) {
         status.textContent = err.message;
         mostrarToast(err.message, 'error');
