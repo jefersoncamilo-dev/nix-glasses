@@ -69,6 +69,13 @@ async function initTables(pool) {
       ADD COLUMN IF NOT EXISTS link_fornecedor VARCHAR(1000) NOT NULL DEFAULT ''
     `);
 
+    // Nome do produto na loja do fornecedor (ex.: "Óculos de Sol Esportivo Máscara Nitro"),
+    // separado do nome que a loja usa na vitrine.
+    await client.query(`
+      ALTER TABLE produtos
+      ADD COLUMN IF NOT EXISTS nome_fornecedor VARCHAR(255) NOT NULL DEFAULT ''
+    `);
+
     // Especificações técnicas mostradas ao cliente. Medidas em cm, com uma casa
     // decimal (ex.: diâmetro 5,0); vazio = não informado.
     await client.query(`

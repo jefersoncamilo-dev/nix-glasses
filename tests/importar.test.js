@@ -6,7 +6,7 @@ const assert = require('node:assert/strict');
 const http = require('node:http');
 const zlib = require('node:zlib');
 const h = require('./helpers');
-const { extrairDadosProduto, baixarPagina, importarProduto, lerPrecoTexto, enderecoBloqueado } = require('../importar-produto');
+const { extrairDadosProduto, extrairEspecificacoes, baixarPagina, importarProduto, lerPrecoTexto, enderecoBloqueado } = require('../importar-produto');
 
 // Página no formato das lojas Nuvemshop/Shopify: JSON-LD Product + Open Graph
 const PAGINA_JSONLD = `<!doctype html><html><head>
@@ -56,6 +56,49 @@ describe('extrairDadosProduto', () => {
     const s = extrairDadosProduto('<title>Só título</title>', 'https://www.lojay.com.br/p');
     assert.equal(s.fornecedor, 'lojay.com.br');
     assert.equal(s.codigo_fornecedor, '');
+  });
+
+  it('página da Clush (Nuvemshop): nome fornec., código do link e especificações técnicas da descrição', () => {
+    const nome = 'Óculos de Sol Esportivo Máscara Nitro - Multicolors Espelhado - Injetado';
+    const pagina = `<title>${nome} - Comprar em Clush</title>
+<meta property="og:site_name" content="Clush">
+<script type="application/ld+json">{"@context":"https://schema.org/","@type":"Product","name":"${nome}","offers":{"@type":"Offer","price":"39.90","priceCurrency":"BRL"}}</script>
+<div class="product-description user-content" data-store="product-description-123">
+<p><strong>Especificações Técnicas:</strong></p><ul>
+<li>Diâmetro da lente: 6,2 cm</li><li>Ponte: 1 cm</li><li>Largura total: 16 cm</li><li>Material: Injetado</li><li>Formato: Máscara</li>
+<li>Proteção: UV400 (100% proteção contra raios UVA e UVB)</li><li>Lente: Resistente a riscos, multicolors espelhada</li>
+<li>Haste: Preta fosca</li><li>Tecnologia: Anti-reflexo, lente envolvente espelhada multicolorida</li>
+<li>Formatos de rosto recomendados: Oval, redondo, coração e quadrado</li></ul></div>`;
+    const d = extrairDadosProduto(pagina, 'https://www.clush.com.br/produtos/oculos-de-sol-esportivo-mascara-nitro-multicolors-espelhado-injetado-djy8z/');
+    assert.equal(d.nome_fornecedor, nome);
+    assert.equal(d.preco_custo, 39.9);
+    assert.equal(d.fornecedor, 'Clush');
+    assert.equal(d.codigo_fornecedor, 'DJY8Z');
+    assert.equal(d.diametro_cm, 6.2);
+    assert.equal(d.ponte_cm, 1);
+    assert.equal(d.largura_total_cm, 16);
+    assert.equal(d.material, 'Injetado');
+    assert.equal(d.formato, 'Máscara');
+    assert.equal(d.estilo, 'Esportivo');
+    assert.equal(d.tipo, 'UV400');
+    assert.equal(d.cor_armacao, 'Multicolors Espelhado, haste preta fosca');
+    assert.equal(d.genero, '');
+  });
+
+  it('especificações em lista numa linha, em mm, polarizado e gênero', () => {
+    const e = extrairEspecificacoes('Óculos Aviador Polarizado Masculino', 'Medidas: * Lente: 58mm * Ponte: 18 mm * Largura frontal: 145mm * Material: Metal * Cor: Dourado * Proteção: UV400');
+    assert.equal(e.diametro_cm, 5.8);
+    assert.equal(e.ponte_cm, 1.8);
+    assert.equal(e.largura_total_cm, 14.5);
+    assert.equal(e.material, 'Metal');
+    assert.equal(e.cor_armacao, 'Dourado');
+    assert.equal(e.formato, 'Aviador');
+    assert.equal(e.tipo, 'Polarizado UV400');
+    assert.equal(e.genero, 'MASCULINO');
+    // UV400 não vira medida; sem dados, tudo vazio
+    const v = extrairEspecificacoes('Óculos', 'Lente UV400 com proteção total');
+    assert.equal(v.diametro_cm, null);
+    assert.deepEqual([v.material, v.cor_armacao, v.formato, v.estilo, v.genero], ['', '', '', '', '']);
   });
 
   it('lê preços em formatos brasileiro e internacional', () => {

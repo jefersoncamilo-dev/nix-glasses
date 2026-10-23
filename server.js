@@ -681,6 +681,7 @@ function validarProdutoLote(linha) {
     codigo_sku: textoCurto(l.codigo_sku, 100),
     fornecedor: textoCurto(l.fornecedor, 120),
     codigo_fornecedor: textoCurto(l.codigo_fornecedor, 100),
+    nome_fornecedor: textoCurto(l.nome_fornecedor, 255),
     link_fornecedor: lerLinkFornecedor(l.link_fornecedor),
     preco_custo: lerPrecoLote(l.preco_custo),
     preco_venda: lerPrecoLote(l.preco_venda),
@@ -1187,7 +1188,7 @@ async function startServer() {
       const result = await req.db.query(
         `SELECT p.id, p.nome, p.nome_curto, p.codigo_sku, p.preco_custo, p.preco_venda, p.imagem_url, p.fotos, p.status, p.disponibilidade,
                 p.formato, p.estilo, p.cor_armacao, p.diametro_cm, p.ponte_cm, p.largura_total_cm, p.material, p.tipo, p.genero, p.tamanho, p.grade,
-                p.fornecedor, p.codigo_fornecedor, p.link_fornecedor, p.vezes_em_maleta, p.pedido_condicional_id,
+                p.fornecedor, p.codigo_fornecedor, p.nome_fornecedor, p.link_fornecedor, p.vezes_em_maleta, p.pedido_condicional_id,
                 p.estoque, COALESCE(mp.pedidos, '{}') AS maletas, COALESCE(cardinality(mp.pedidos), 0)::int AS em_maleta,
                 to_char(uc.data_compra, 'YYYY-MM-DD') AS ultima_compra, uc.preco_custo AS custo_ultima_compra,
                 ca.preco_custo AS custo_compra_anterior, COALESCE(nc.total, 0)::int AS total_compras
@@ -1214,7 +1215,7 @@ async function startServer() {
   async function handleListConditional(req, res) {
     try {
       const result = await req.db.query(
-        `SELECT id, nome, nome_curto, codigo_sku, preco_custo, preco_venda, imagem_url, fotos, status, disponibilidade, formato, estilo, cor_armacao, diametro_cm, ponte_cm, largura_total_cm, material, tipo, genero, tamanho, grade, fornecedor, codigo_fornecedor, link_fornecedor, vezes_em_maleta, estoque
+        `SELECT id, nome, nome_curto, codigo_sku, preco_custo, preco_venda, imagem_url, fotos, status, disponibilidade, formato, estilo, cor_armacao, diametro_cm, ponte_cm, largura_total_cm, material, tipo, genero, tamanho, grade, fornecedor, codigo_fornecedor, nome_fornecedor, link_fornecedor, vezes_em_maleta, estoque
          FROM produtos p
          WHERE EXISTS (SELECT 1 FROM maleta_pecas m WHERE m.produto_id = p.id)
          ORDER BY created_at DESC`
@@ -1241,6 +1242,7 @@ async function startServer() {
     const codigoFinal = codigo_sku || sku;
     const fornecedor = textoCurto(req.body.fornecedor, 120);
     const codigoFornecedor = textoCurto(req.body.codigo_fornecedor, 100);
+    const nomeFornecedor = textoCurto(req.body.nome_fornecedor, 255);
     const linkFornecedor = lerLinkFornecedor(req.body.link_fornecedor);
     if (linkFornecedor === null) {
       return res.status(400).json({ error: 'Link do fornecedor inválido (use http:// ou https://)' });
@@ -1278,12 +1280,12 @@ async function startServer() {
         const e = peca.espec;
         const result = await client.query(
           `INSERT INTO produtos (nome, codigo_sku, preco_custo, preco_venda, imagem_url, fotos, disponibilidade, formato, estilo, cor_armacao, fornecedor, codigo_fornecedor, link_fornecedor,
-                                 diametro_cm, ponte_cm, largura_total_cm, material, tipo, nome_curto, genero, estoque, tamanho, grade)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23)
+                                 diametro_cm, ponte_cm, largura_total_cm, material, tipo, nome_curto, genero, estoque, tamanho, grade, nome_fornecedor)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24)
            RETURNING *`,
           [peca.nome, peca.sku, preco_custo, preco_venda, fotos[0] || null, fotos, disponibilidade, formato, estilo, cor_armacao, fornecedor, codigoFornecedor, linkFornecedor,
             e.diametro_cm ?? null, e.ponte_cm ?? null, e.largura_total_cm ?? null, e.material || '', e.tipo || '', e.nome_curto || '', e.genero || '',
-            peca.estoque, e.tamanho || '', e.grade || '']
+            peca.estoque, e.tamanho || '', e.grade || '', nomeFornecedor]
         );
         // A compra do cadastro conta ao menos 1 peça (o custo fica registrado mesmo sem estoque)
         await registrarCompraCadastro(client, result.rows[0], { quantidade: peca.estoque || 1 });
@@ -1357,6 +1359,7 @@ async function startServer() {
       addField('cor_armacao', cor_armacao);
       if (req.body.fornecedor !== undefined) addField('fornecedor', textoCurto(req.body.fornecedor, 120));
       if (req.body.codigo_fornecedor !== undefined) addField('codigo_fornecedor', textoCurto(req.body.codigo_fornecedor, 100));
+      if (req.body.nome_fornecedor !== undefined) addField('nome_fornecedor', textoCurto(req.body.nome_fornecedor, 255));
       if (req.body.link_fornecedor !== undefined) addField('link_fornecedor', linkFornecedor);
       // addField pula undefined, mas null (medida apagada) precisa entrar
       for (const [campo, valor] of Object.entries(espec)) {
@@ -1511,12 +1514,12 @@ async function startServer() {
         // ON CONFLICT cobre outro cadastro do mesmo SKU entre a checagem e o INSERT
         const r = await client.query(
           `INSERT INTO produtos (nome, codigo_sku, preco_custo, preco_venda, status, disponibilidade, formato, estilo, cor_armacao, fornecedor, codigo_fornecedor, link_fornecedor,
-                                 diametro_cm, ponte_cm, largura_total_cm, material, tipo, nome_curto, genero, estoque, tamanho, grade)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22)
+                                 diametro_cm, ponte_cm, largura_total_cm, material, tipo, nome_curto, genero, estoque, tamanho, grade, nome_fornecedor)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23)
            ON CONFLICT (codigo_sku) DO NOTHING
            RETURNING *`,
           [p.nome, p.codigo_sku, p.preco_custo, p.preco_venda, p.status, p.disponibilidade, p.formato, p.estilo, p.cor_armacao, p.fornecedor, p.codigo_fornecedor, p.link_fornecedor,
-            p.diametro_cm, p.ponte_cm, p.largura_total_cm, p.material, p.tipo, p.nome_curto, p.genero, compra.quantidade, p.tamanho, p.grade]
+            p.diametro_cm, p.ponte_cm, p.largura_total_cm, p.material, p.tipo, p.nome_curto, p.genero, compra.quantidade, p.tamanho, p.grade, p.nome_fornecedor]
         );
         if (!r.rows.length) {
           ignorados.push({ linha: i, codigo_sku: p.codigo_sku, codigo_fornecedor: p.codigo_fornecedor, campo: 'codigo_sku', motivo: 'SKU já cadastrado' });

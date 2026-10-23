@@ -67,6 +67,25 @@ describe('fornecedor e código do fornecedor', () => {
     assert.equal(soStatus.body.fornecedor, 'Outro');
   });
 
+  it('nome fornec.: grava no cadastro e no lote, edita, apaga e não sai na vitrine', async () => {
+    const nomeForn = 'Óculos de Sol Esportivo Máscara Nitro - Multicolors Espelhado - Injetado';
+    const { status, body } = await criarProduto({ ...linha('NF-1'), nome: 'NIX Compso', nome_fornecedor: `  ${nomeForn} ` });
+    assert.equal(status, 201);
+    assert.equal(body.nome, 'NIX Compso');
+    assert.equal(body.nome_fornecedor, nomeForn);
+    assert.equal((await api('GET', '/api/admin/produtos')).body[0].nome_fornecedor, nomeForn);
+    assert.equal((await api('GET', '/api/produtos', { auth: false })).body[0].nome_fornecedor, undefined);
+
+    const soStatus = await api('PUT', `/api/produtos/${body.id}`, { body: { status: 'CONDICIONAL' } });
+    assert.equal(soStatus.body.nome_fornecedor, nomeForn);
+    const apagado = await api('PUT', `/api/produtos/${body.id}`, { body: { nome_fornecedor: '' } });
+    assert.equal(apagado.body.nome_fornecedor, '');
+
+    assert.equal((await lote([linha('NF-2', { nome_fornecedor: nomeForn }), linha('NF-3')])).status, 201);
+    const { rows } = await h.pool.query("SELECT codigo_sku, nome_fornecedor FROM produtos WHERE codigo_sku IN ('NF-2', 'NF-3') ORDER BY codigo_sku");
+    assert.deepEqual(rows.map(r => r.nome_fornecedor), [nomeForn, '']);
+  });
+
   it('link do fornecedor: grava, edita, apaga, recusa javascript: e não sai na vitrine', async () => {
     const { status, body } = await criarProduto({ ...linha('LNK'), link_fornecedor: 'https://loja.exemplo.com/p/1?cor=preto' });
     assert.equal(status, 201);
@@ -277,6 +296,18 @@ describe('painel: cadastro em lote', () => {
     assert.equal(b.preco_custo, '40');
     assert.equal(b.codigo_sku, 'CM-9');
     assert.equal(b.preco_venda, '150');
+  });
+
+  it('lê a coluna Nome fornec. pelo cabeçalho e no fim da ordem sem cabeçalho', () => {
+    const [a] = ctx.linhasDaPlanilha('Nome\tSKU\tNome fornec.\tCusto\tVenda\nNIX Compso\tNIX023\tMáscara Nitro\t39,90\t129,90');
+    assert.equal(a.nome, 'NIX Compso');
+    assert.equal(a.nome_fornecedor, 'Máscara Nitro');
+    const [b] = ctx.linhasDaPlanilha('Nome no fornecedor;Nome;SKU\nMáscara Nitro;NIX Compso;NIX023');
+    assert.equal(b.nome_fornecedor, 'Máscara Nitro');
+    assert.equal(b.nome, 'NIX Compso');
+    const colunas = ctx.linhaLoteVazia();
+    assert.equal(Object.keys(colunas).pop(), 'nome_fornecedor');
+    assert.equal(ctx.linhaLoteEstaVazia({ ...colunas, nome_fornecedor: 'X' }), false);
   });
 
   it('aceita CSV com ponto e vírgula', () => {

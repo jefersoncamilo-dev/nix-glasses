@@ -190,7 +190,7 @@
           </details>
           <div class="bg-white rounded-xl border border-gray-200 p-4">
             <p class="font-medium text-gray-900 mb-1">Adicionar pelo link do fornecedor</p>
-            <p class="text-xs text-gray-500 mb-2">Cole o link do produto na loja do fornecedor: nome, custo, código e link entram numa nova linha.</p>
+            <p class="text-xs text-gray-500 mb-2">Cole o link do produto na loja do fornecedor: nome fornec., custo, código, link e as especificações da descrição entram numa nova linha.</p>
             <div class="flex flex-col sm:flex-row gap-2">
               <input type="url" id="loteImportarUrl" class="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-orange-500" placeholder="https://loja-do-fornecedor.com.br/produto/...">
               <button id="btnLoteImportarUrl" class="bg-gray-100 hover:bg-gray-200 text-gray-700 px-4 py-2 rounded-lg text-sm font-medium transition-colors">Importar</button>
@@ -618,7 +618,7 @@
             <input type="url" id="importarUrl" class="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-orange-500 bg-white" placeholder="Cole o link do produto na loja do fornecedor">
             <button type="button" id="btnImportarUrl" class="bg-orange-500 hover:bg-orange-600 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors">Importar</button>
           </div>
-          <p id="importarStatus" class="text-xs text-gray-600 mt-1">Preenche nome, preço de custo, código e link. Confira os dados antes de salvar.</p>
+          <p id="importarStatus" class="text-xs text-gray-600 mt-1">Preenche nome fornec., custo, código, link e as especificações da descrição (medidas, material, formato...). Confira antes de salvar.</p>
         </div>
         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
@@ -649,6 +649,11 @@
           <div>
             <label class="block text-sm font-medium text-gray-700 mb-1">Código do Fornecedor</label>
             <input type="text" id="codigo_fornecedor" name="codigo_fornecedor" maxlength="100" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500" placeholder="Código do produto no fornecedor">
+          </div>
+          <div class="md:col-span-2">
+            <label for="nome_fornecedor" class="block text-sm font-medium text-gray-700 mb-1">Nome Fornec.</label>
+            <input type="text" id="nome_fornecedor" name="nome_fornecedor" maxlength="255" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500" placeholder="Nome do produto na loja do fornecedor">
+            <p class="text-xs text-gray-500 mt-1">Só no painel. Ajuda a achar o produto de novo no fornecedor.</p>
           </div>
           <div class="md:col-span-2">
             <label class="block text-sm font-medium text-gray-700 mb-1">Link do Fornecedor</label>
@@ -1087,6 +1092,8 @@
       // Roupas: tamanho da peça e o código do modelo que junta os tamanhos na vitrine
       { campo: 'tamanho', titulo: 'Tamanho', largura: 'w-20' },
       { campo: 'grade', titulo: 'Código do modelo', largura: 'w-32' },
+      // Nome do produto na loja do fornecedor (preenchido pelo link)
+      { campo: 'nome_fornecedor', titulo: 'Nome fornec.', largura: 'w-64' },
     ];
     const CAMPOS_MEDIDA = ['diametro_cm', 'ponte_cm', 'largura_total_cm'];
     const MAX_LOTE = 100;
@@ -1100,11 +1107,11 @@
     }
 
     function linhaLoteVazia() {
-      return { nome: '', codigo_sku: '', fornecedor: '', codigo_fornecedor: '', link_fornecedor: '', preco_custo: '', preco_venda: '', disponibilidade: 'PRONTA_ENTREGA', status: 'DISPONIVEL', formato: '', estilo: '', cor_armacao: '', diametro_cm: '', ponte_cm: '', largura_total_cm: '', material: '', tipo: '', nome_curto: '', genero: '', quantidade: '', pedido_fornecedor: '', data_compra: '', tamanho: '', grade: '' };
+      return { nome: '', codigo_sku: '', fornecedor: '', codigo_fornecedor: '', link_fornecedor: '', preco_custo: '', preco_venda: '', disponibilidade: 'PRONTA_ENTREGA', status: 'DISPONIVEL', formato: '', estilo: '', cor_armacao: '', diametro_cm: '', ponte_cm: '', largura_total_cm: '', material: '', tipo: '', nome_curto: '', genero: '', quantidade: '', pedido_fornecedor: '', data_compra: '', tamanho: '', grade: '', nome_fornecedor: '' };
     }
 
     function linhaLoteEstaVazia(l) {
-      return ['nome', 'codigo_sku', 'fornecedor', 'codigo_fornecedor', 'link_fornecedor', 'preco_custo', 'preco_venda', 'formato', 'estilo', 'cor_armacao', 'diametro_cm', 'ponte_cm', 'largura_total_cm', 'material', 'tipo', 'nome_curto', 'tamanho', 'grade'].every(c => !String(l[c] || '').trim());
+      return ['nome', 'codigo_sku', 'fornecedor', 'codigo_fornecedor', 'link_fornecedor', 'preco_custo', 'preco_venda', 'formato', 'estilo', 'cor_armacao', 'diametro_cm', 'ponte_cm', 'largura_total_cm', 'material', 'tipo', 'nome_curto', 'tamanho', 'grade', 'nome_fornecedor'].every(c => !String(l[c] || '').trim());
     }
 
     // "R$ 1.234,56", "199,90" ou "199.90" -> 1234.56 / 199.9. Vazio ou inválido -> NaN.
@@ -1168,6 +1175,7 @@
       if (/^forn/.test(t)) return 'fornecedor';
       if (/^(sku|codigo sku|codigo)$/.test(t)) return 'codigo_sku';
       if (/^(nome curto|apelido)/.test(t)) return 'nome_curto';
+      if (/^nome (n?o |d?o )?forn/.test(t)) return 'nome_fornecedor';
       if (/^(grade|codigo do modelo|cod do modelo|cod modelo)/.test(t)) return 'grade';
       if (/^(tamanho|tam\b)/.test(t)) return 'tamanho';
       if (/^categoria/.test(t)) return 'formato';
@@ -1597,7 +1605,7 @@
         if (statusFiltro && p.status !== statusFiltro) return false;
         if (disponibilidadeFiltro && (p.disponibilidade || 'PRONTA_ENTREGA') !== disponibilidadeFiltro) return false;
         if (formatoFiltro && p.formato !== formatoFiltro) return false;
-        if (busca && ![p.nome, p.codigo_sku, p.fornecedor, p.codigo_fornecedor].some(v => String(v || '').toLowerCase().includes(busca))) return false;
+        if (busca && ![p.nome, p.codigo_sku, p.fornecedor, p.codigo_fornecedor, p.nome_fornecedor].some(v => String(v || '').toLowerCase().includes(busca))) return false;
         return true;
       });
 
@@ -1842,6 +1850,7 @@
         document.getElementById('grade').value = produto.grade || '';
         document.getElementById('fornecedor').value = produto.fornecedor || '';
         document.getElementById('codigo_fornecedor').value = produto.codigo_fornecedor || '';
+        document.getElementById('nome_fornecedor').value = produto.nome_fornecedor || '';
         document.getElementById('link_fornecedor').value = produto.link_fornecedor || '';
         document.getElementById('estoque').value = Number(produto.estoque) || 0;
         const fora = Number(produto.em_maleta) || 0;
@@ -1857,7 +1866,7 @@
       atualizarResumoGrade();
       atualizarAvisoSinal();
       atualizarAbrirLink();
-      document.getElementById('importarStatus').textContent = 'Preenche nome, preço de custo, código e link. Confira os dados antes de salvar.';
+      document.getElementById('importarStatus').textContent = 'Preenche nome fornec., custo, código, link e as especificações da descrição (medidas, material, formato...). Confira antes de salvar.';
       modalProduto.classList.remove('hidden');
       document.body.style.overflow = 'hidden';
     }
@@ -1891,16 +1900,28 @@
       return data;
     }
 
-    // Dados importados -> campos do produto (preço no formato do formulário, 199.90)
+    // Especificações que a importação lê da descrição do produto
+    const CAMPOS_IMPORTADOS = ['nome_fornecedor', 'preco_custo', 'codigo_fornecedor', 'link_fornecedor', 'formato', 'estilo', 'cor_armacao', ...CAMPOS_MEDIDA, 'material', 'tipo', 'genero'];
+
+    // Dados importados -> campos do produto (preço no formato do formulário, 199.90; medidas 6,2)
     function camposDaImportacao(dados) {
       const preco = Number(dados.preco_custo);
-      return {
+      const c = {
         nome: String(dados.nome || ''),
+        nome_fornecedor: String(dados.nome_fornecedor || dados.nome || ''),
         preco_custo: dados.preco_custo !== null && dados.preco_custo !== undefined && Number.isFinite(preco) ? preco.toFixed(2) : '',
         codigo_fornecedor: String(dados.codigo_fornecedor || ''),
         fornecedor: String(dados.fornecedor || ''),
         link_fornecedor: linkSeguro(dados.link_fornecedor),
+        formato: String(dados.formato || ''),
+        estilo: String(dados.estilo || ''),
+        cor_armacao: String(dados.cor_armacao || ''),
+        material: String(dados.material || ''),
+        tipo: String(dados.tipo || ''),
+        genero: ['MASCULINO', 'FEMININO', 'UNISSEX'].includes(dados.genero) ? dados.genero : '',
       };
+      CAMPOS_MEDIDA.forEach(m => { c[m] = formatarMedida(dados[m]); });
+      return c;
     }
 
     document.getElementById('btnImportarUrl').addEventListener('click', async () => {
@@ -1913,13 +1934,16 @@
       try {
         const c = camposDaImportacao(await buscarImportacao(url));
         const preenchidos = [];
-        ['nome', 'preco_custo', 'codigo_fornecedor', 'link_fornecedor'].forEach(campo => {
+        CAMPOS_IMPORTADOS.forEach(campo => {
           if (c[campo]) { document.getElementById(campo).value = c[campo]; preenchidos.push(campo); }
         });
-        // Fornecedor só se estiver vazio: o nome da loja pode ser diferente do que você usa
-        if (c.fornecedor && !document.getElementById('fornecedor').value.trim()) document.getElementById('fornecedor').value = c.fornecedor;
+        // Nome e fornecedor só se estiverem vazios: o nome da vitrine e o do fornecedor
+        // podem ser diferentes dos da loja (o da loja fica em Nome Fornec.)
+        ['nome', 'fornecedor'].forEach(campo => {
+          if (c[campo] && !document.getElementById(campo).value.trim()) { document.getElementById(campo).value = c[campo]; preenchidos.push(campo); }
+        });
         atualizarAbrirLink();
-        const nomes = { nome: 'nome', preco_custo: 'custo', codigo_fornecedor: 'código', link_fornecedor: 'link' };
+        const nomes = { nome: 'nome', nome_fornecedor: 'nome fornec.', fornecedor: 'fornecedor', preco_custo: 'custo', codigo_fornecedor: 'código', link_fornecedor: 'link', formato: 'formato', estilo: 'estilo', cor_armacao: 'cor', diametro_cm: 'diâmetro', ponte_cm: 'ponte', largura_total_cm: 'largura', material: 'material', tipo: 'tipo', genero: 'gênero' };
         status.textContent = `Preenchido: ${preenchidos.map(x => nomes[x]).join(', ')}.${c.preco_custo ? '' : ' Preço não encontrado na página.'} Confira antes de salvar.`;
       } catch (err) {
         status.textContent = err.message;
@@ -1953,7 +1977,7 @@
         if (val) formData.append(field, val);
       });
       // Sempre enviados, para que apagar o fornecedor ou uma especificação na edição também valha
-      ['nome_curto', 'fornecedor', 'codigo_fornecedor', 'link_fornecedor', ...CAMPOS_MEDIDA, 'material', 'tipo', 'genero', 'tamanho', 'grade'].forEach(field => formData.append(field, document.getElementById(field).value.trim()));
+      ['nome_curto', 'fornecedor', 'codigo_fornecedor', 'nome_fornecedor', 'link_fornecedor', ...CAMPOS_MEDIDA, 'material', 'tipo', 'genero', 'tamanho', 'grade'].forEach(field => formData.append(field, document.getElementById(field).value.trim()));
       if (!id && nichoPainel() === 'roupas') {
         const grade = lerGradeFormulario();
         if (grade === null) return mostrarToast('Confira os tamanhos: cada um uma vez, com a quantidade em número', 'error');
