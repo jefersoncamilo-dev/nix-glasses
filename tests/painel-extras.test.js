@@ -19,7 +19,7 @@ function extrairFuncao(nome) {
 }
 
 const funcoes = ['escapeHtml', 'linkSeguro', 'botaoLinkFornecedor', 'variacaoCusto', 'htmlVariacao', 'htmlUltimaCompra',
-  'formatarMedida', 'precoVendaSugerido', 'proximoSku', 'produtoJaCadastrado', 'camposDaImportacao', 'aplicarImportacao', 'associarFotosPorSku', 'montarResumoMaleta', 'calcularAcerto'];
+  'formatarMedida', 'nomeArquivoSku', 'precoVendaSugerido', 'proximoSku', 'produtoJaCadastrado', 'camposDaImportacao', 'aplicarImportacao', 'associarFotosPorSku', 'montarResumoMaleta', 'calcularAcerto'];
 const ctx = vm.createContext({ Number, String, Math, Map, Set, Object, URL, Intl });
 vm.runInContext(`
   const MAX_FOTOS = 4;
@@ -71,7 +71,7 @@ describe('painel: importação pelo link', () => {
   it('converte os dados importados para os campos do formulário', () => {
     const c = ctx.camposDaImportacao({ nome: 'Aviador', preco_custo: 79.9, codigo_fornecedor: 'CL-1', fornecedor: 'Clush', link_fornecedor: 'https://clush.com.br/p' });
     assert.deepEqual({ ...c }, {
-      nome: 'Aviador', nome_fornecedor: 'Aviador', preco_custo: '79.90', preco_venda: '', codigo_fornecedor: 'CL-1', fornecedor: 'Clush', link_fornecedor: 'https://clush.com.br/p',
+      nome: 'Aviador', nome_fornecedor: 'Aviador', preco_custo: '79.90', preco_venda: '', imagem_fornecedor: '', codigo_fornecedor: 'CL-1', fornecedor: 'Clush', link_fornecedor: 'https://clush.com.br/p',
       formato: '', estilo: '', cor_armacao: '', material: '', tipo: '', genero: '', diametro_cm: '', ponte_cm: '', largura_total_cm: '',
     });
     // Especificações da descrição: medidas com vírgula, gênero só se for um código válido
@@ -113,6 +113,14 @@ describe('painel: importar um segundo link no mesmo formulário', () => {
 });
 
 describe('painel: SKU, reposição e venda sugerida na importação', () => {
+  it('foto baixada com o nome do SKU', () => {
+    assert.equal(ctx.nomeArquivoSku('NIX023', 'jpg'), 'NIX023.jpg');
+    assert.equal(ctx.nomeArquivoSku(' NIX 023/A ', 'png'), 'NIX_023_A.png');
+    assert.equal(ctx.nomeArquivoSku('../..', 'jpg'), 'produto.jpg');
+    assert.equal(ctx.camposDaImportacao({ nome: 'X', imagens: ['https://cdn.clush.com.br/a.jpg'] }).imagem_fornecedor, 'https://cdn.clush.com.br/a.jpg');
+    assert.equal(ctx.camposDaImportacao({ nome: 'X', imagens: ['javascript:alert(1)'] }).imagem_fornecedor, '');
+  });
+
   it('preço de venda: valor sugerido ou o meio da faixa terminando em ,90', () => {
     assert.equal(ctx.precoVendaSugerido({ min: 59.9, max: 199.9 }), '129.90');
     assert.equal(ctx.precoVendaSugerido({ min: 129.9, max: 129.9 }), '129.90');

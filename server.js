@@ -9,7 +9,7 @@ const { criarPool, initTables } = require('./db');
 const { lerEmpresas, empresaDoHost, normalizarHost, identidadeBanco, hostInterno } = require('./empresas');
 const { CAMPOS_TEXTO, lerNicho, limparTextoLoja, montarLoja, renderizarPagina } = require('./loja');
 const master = require('./master');
-const { importarProduto, ErroImportacao } = require('./importar-produto');
+const { importarProduto, baixarImagem, ErroImportacao } = require('./importar-produto');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -1645,6 +1645,19 @@ async function startServer() {
     }
   }
 
+  // Foto principal do fornecedor, pelo servidor (a loja não deixa o navegador baixar
+  // direto de outro site): o painel salva no computador com o nome do SKU.
+  async function handleImportarImagem(req, res) {
+    try {
+      const img = await baixarImagem(req.body && req.body.url);
+      res.set('Cache-Control', 'no-store').type(img.tipo).send(img.buffer);
+    } catch (err) {
+      if (err instanceof ErroImportacao) return res.status(err.status).json({ error: err.message });
+      console.error(err);
+      res.status(500).json({ error: 'Erro ao baixar a imagem' });
+    }
+  }
+
   async function handleMaletaCheckout(req, res) {
     const { produtoIds, productIds, ids, itens, contato } = req.body || {};
     // itens: [{ id, intencao }] com a escolha de cada item no carrinho (Compra direta ou Maleta)
@@ -3069,6 +3082,7 @@ async function startServer() {
   app.get('/api/admin/produtos', requireAdmin, handleListAdmin);
   app.post('/api/admin/produtos/lote', requireAdmin, handleCreateLote);
   app.post('/api/admin/importar-url', requireAdmin, handleImportarUrl);
+  app.post('/api/admin/importar-imagem', requireAdmin, handleImportarImagem);
   app.get('/api/admin/produtos/:id/compras', requireAdmin, handleListCompras);
   app.post('/api/admin/produtos/:id/compras', requireAdmin, handleCreateCompra);
   app.get('/api/admin/fornecedores/reposicao', requireAdmin, handleResumoFornecedores);

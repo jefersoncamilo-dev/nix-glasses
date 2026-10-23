@@ -6,7 +6,7 @@ const assert = require('node:assert/strict');
 const http = require('node:http');
 const zlib = require('node:zlib');
 const h = require('./helpers');
-const { extrairDadosProduto, extrairEspecificacoes, baixarPagina, importarProduto, lerPrecoTexto, enderecoBloqueado } = require('../importar-produto');
+const { extrairDadosProduto, extrairEspecificacoes, baixarPagina, baixarImagem, importarProduto, lerPrecoTexto, enderecoBloqueado } = require('../importar-produto');
 
 // Página no formato das lojas Nuvemshop/Shopify: JSON-LD Product + Open Graph
 const PAGINA_JSONLD = `<!doctype html><html><head>
@@ -182,6 +182,11 @@ describe('baixarPagina', () => {
         res.writeHead(200, { 'Content-Type': 'text/html; charset=iso-8859-1' });
         return res.end(Buffer.from('<title>Óculos Ômega</title>', 'latin1'));
       }
+      if (req.url === '/foto.jpg') {
+        res.writeHead(200, { 'Content-Type': 'image/jpeg' });
+        return res.end(Buffer.from([0xff, 0xd8, 0xff, 0xe0, 1, 2, 3]));
+      }
+      if (req.url === '/foto-redir') { res.writeHead(301, { Location: '/foto.jpg' }); return res.end(); }
       if (req.url === '/grande') {
         res.writeHead(200, { 'Content-Type': 'text/html' });
         return res.end('x'.repeat(5000));
@@ -202,6 +207,16 @@ describe('baixarPagina', () => {
     const d = await importarProduto(`${base}/redir#topo`, local);
     assert.equal(d.nome, 'Óculos Aviador Gold');
     assert.equal(d.link_fornecedor, `${base}/redir`);
+  });
+
+  it('baixa a foto do produto (seguindo redirecionamento) e recusa o que não é imagem', async () => {
+    const img = await baixarImagem(`${base}/foto-redir`, local);
+    assert.equal(img.tipo, 'image/jpeg');
+    assert.equal(img.extensao, 'jpg');
+    assert.deepEqual([...img.buffer], [0xff, 0xd8, 0xff, 0xe0, 1, 2, 3]);
+    await assert.rejects(baixarImagem(`${base}/latin1`, local), (e) => e.status === 422);
+    await assert.rejects(baixarImagem(`${base}/foto.jpg`), (e) => e.status === 400); // rede interna
+    await assert.rejects(baixarImagem('javascript:alert(1)'), (e) => e.status === 400);
   });
 
   it('respeita o charset da página', async () => {
@@ -248,6 +263,20 @@ describe('rota POST /api/admin/importar-url', () => {
 
   it('exige login de admin', async () => {
     assert.equal((await importar({ url: 'https://example.com' }, false)).status, 401);
+  });
+
+  it('rota da foto exige admin e recusa endereço interno', async () => {
+    const foto = (body, auth = true) => fetch(srv.url('/api/admin/importar-imagem'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...(auth ? { Authorization: `Bearer ${token}` } : {}) },
+      body: JSON.stringify(body),
+    });
+    assert.equal((await foto({ url: 'https://example.com/a.jpg' }, false)).status, 401);
+    for (const url of ['', 'file:///etc/passwd', `${srv.base}/logo.png`, 'http://169.254.169.254/']) {
+      const res = await foto({ url });
+      assert.equal(res.status, 400, url);
+      assert.ok((await res.json()).error);
+    }
   });
 
   it('recusa link inválido e endereço interno com mensagem', async () => {

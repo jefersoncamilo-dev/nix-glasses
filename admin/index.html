@@ -195,6 +195,7 @@
               <input type="url" id="loteImportarUrl" class="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-orange-500" placeholder="https://loja-do-fornecedor.com.br/produto/...">
               <button id="btnLoteImportarUrl" class="bg-gray-100 hover:bg-gray-200 text-gray-700 px-4 py-2 rounded-lg text-sm font-medium transition-colors">Importar</button>
             </div>
+          <p class="pasta-fotos hidden text-xs text-gray-600 mt-2">Fotos dos produtos novos: <span class="rotulo-pasta-fotos font-medium">pasta de Downloads</span> <button type="button" class="btn-pasta-fotos underline text-orange-600 hover:text-orange-700">Escolher pasta</button></p>
           </div>
           <div class="bg-white rounded-xl border border-gray-200 p-4">
             <p class="font-medium text-gray-900 mb-2">Mesmo fornecedor para todas as linhas</p>
@@ -619,6 +620,7 @@
             <button type="button" id="btnImportarUrl" class="bg-orange-500 hover:bg-orange-600 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors">Importar</button>
           </div>
           <p id="importarStatus" class="text-xs text-gray-600 mt-1">Preenche nome fornec., custo, código, link e as especificações da descrição (medidas, material, formato...). Confira antes de salvar.</p>
+          <p class="pasta-fotos hidden text-xs text-gray-600 mt-2">Fotos dos produtos novos: <span class="rotulo-pasta-fotos font-medium">pasta de Downloads</span> <button type="button" class="btn-pasta-fotos underline text-orange-600 hover:text-orange-700">Escolher pasta</button></p>
         </div>
         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
@@ -1427,6 +1429,7 @@
 
     document.getElementById('btnLoteSalvar').addEventListener('click', async () => {
       const btn = document.getElementById('btnLoteSalvar');
+      const permissaoPasta = linhasLote.some(l => l.imagem_fornecedor) ? pedirPermissaoPasta() : Promise.resolve(false);
       const indices = linhasLote.map((l, i) => i).filter(i => !linhaLoteEstaVazia(linhasLote[i]));
       if (!indices.length) return mostrarToast('Preencha ao menos um produto', 'error');
       if (indices.length > MAX_LOTE) return mostrarToast(`Máximo de ${MAX_LOTE} produtos por vez`, 'error');
@@ -1462,6 +1465,13 @@
         }
         const ignorados = data.ignorados || [];
         const repostos = data.repostos || [];
+        // Produtos novos que vieram de um link: baixa a foto principal de cada um como <SKU>.jpg
+        const criados = new Set((data.produtos || []).map(p => String(p.codigo_sku || '').toLowerCase()));
+        const fotos = produtos.filter(p => p.imagem_fornecedor && criados.has(String(p.codigo_sku || '').trim().toLowerCase()));
+        (async () => {
+          const naPasta = await permissaoPasta;
+          for (const p of fotos) await baixarFotoComSku(p.imagem_fornecedor, p.codigo_sku.trim(), naPasta);
+        })();
         mostrarToast(`${data.produtos.length} produto(s) cadastrado(s)${repostos.length ? `, ${repostos.length} reposição(ões) somada(s) no estoque` : ''}${ignorados.length ? `, ${ignorados.length} ignorado(s) por duplicidade` : ''}`,
           data.produtos.length || repostos.length ? 'success' : 'error');
         linhasLote = [linhaLoteVazia(), linhaLoteVazia(), linhaLoteVazia()];
@@ -1836,6 +1846,7 @@
       produtoEditando = produto;
       formProduto.reset();
       ultimaImportacao = {};
+      imagemImportada = '';
       document.getElementById('produtoId').value = '';
       iniciarSlotsFotos(produto);
 
@@ -1918,6 +1929,105 @@
       return preco.toFixed(2);
     }
 
+    // Nome do arquivo da foto: o SKU, só com letras, números, - e _ ("NIX 023/A" -> "NIX_023_A")
+    function nomeArquivoSku(sku, extensao) {
+      const base = String(sku || '').trim().replace(/[^\w-]+/g, '_').replace(/^_+|_+$/g, '') || 'produto';
+      return `${base}.${extensao}`;
+    }
+
+    // Pasta das fotos (ex.: Downloads/NIX). O navegador não deixa um site escolher a pasta
+    // de um download; no Chrome/Edge do computador dá para você escolher a pasta uma vez
+    // (File System Access) e o painel grava as fotos direto nela. A escolha fica guardada
+    // neste navegador (IndexedDB). Sem isso, a foto vai para a pasta de Downloads.
+    let pastaFotos = null;
+    function bancoPastaFotos() {
+      return new Promise((resolve, reject) => {
+        const req = indexedDB.open('painel-fotos', 1);
+        req.onupgradeneeded = () => req.result.createObjectStore('config');
+        req.onsuccess = () => resolve(req.result);
+        req.onerror = () => reject(req.error);
+      });
+    }
+    async function guardarPastaFotos(handle) {
+      const db = await bancoPastaFotos();
+      await new Promise((resolve, reject) => {
+        const tx = db.transaction('config', 'readwrite');
+        tx.objectStore('config').put(handle, 'pasta');
+        tx.oncomplete = resolve;
+        tx.onerror = () => reject(tx.error);
+      });
+    }
+    async function lerPastaFotos() {
+      const db = await bancoPastaFotos();
+      return new Promise((resolve) => {
+        const req = db.transaction('config').objectStore('config').get('pasta');
+        req.onsuccess = () => resolve(req.result || null);
+        req.onerror = () => resolve(null);
+      });
+    }
+    function mostrarPastaFotos() {
+      document.querySelectorAll('.rotulo-pasta-fotos').forEach(el => { el.textContent = pastaFotos ? `pasta ${pastaFotos.name}` : 'pasta de Downloads'; });
+      document.querySelectorAll('.btn-pasta-fotos').forEach(el => { el.textContent = pastaFotos ? 'Trocar pasta' : 'Escolher pasta'; });
+    }
+    if (window.showDirectoryPicker && window.indexedDB) {
+      document.querySelectorAll('.pasta-fotos').forEach(el => el.classList.remove('hidden'));
+      lerPastaFotos().then(h => { pastaFotos = h; mostrarPastaFotos(); }).catch(() => {});
+      document.querySelectorAll('.btn-pasta-fotos').forEach(btn => btn.addEventListener('click', async () => {
+        try {
+          pastaFotos = await window.showDirectoryPicker({ id: 'fotos-sku', mode: 'readwrite', startIn: 'downloads' });
+          await guardarPastaFotos(pastaFotos);
+          mostrarPastaFotos();
+          mostrarToast(`Fotos serão salvas na pasta ${pastaFotos.name}`);
+        } catch (err) {
+          if (err.name !== 'AbortError') mostrarToast('Não foi possível usar essa pasta', 'error');
+        }
+      }));
+    }
+    // Pede (no clique de salvar, que é quando o navegador deixa) para gravar na pasta escolhida.
+    // -> promessa de true/false; sem pasta escolhida, false (vai para Downloads).
+    function pedirPermissaoPasta() {
+      if (!pastaFotos || !pastaFotos.requestPermission) return Promise.resolve(false);
+      return pastaFotos.requestPermission({ mode: 'readwrite' }).then(r => r === 'granted').catch(() => false);
+    }
+
+    // Baixa a foto principal do fornecedor (pelo servidor) e salva no computador como <SKU>.jpg:
+    // na pasta escolhida (se `naPasta`) ou, sem ela, na pasta de Downloads
+    async function baixarFotoComSku(urlImagem, sku, naPasta = false) {
+      if (!linkSeguro(urlImagem) || !String(sku || '').trim()) return false;
+      try {
+        const res = await fetchAdmin('/api/admin/importar-imagem', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ url: urlImagem }),
+        });
+        if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || 'Não foi possível baixar a foto');
+        const blob = await res.blob();
+        const extensao = { 'image/png': 'png', 'image/webp': 'webp', 'image/gif': 'gif', 'image/avif': 'avif' }[blob.type] || 'jpg';
+        if (naPasta && pastaFotos) {
+          try {
+            const arquivo = await pastaFotos.getFileHandle(nomeArquivoSku(sku, extensao), { create: true });
+            const escrita = await arquivo.createWritable();
+            await escrita.write(blob);
+            await escrita.close();
+            return true;
+          } catch {
+            // Pasta apagada ou sem permissão: cai no download normal
+          }
+        }
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = nomeArquivoSku(sku, extensao);
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        setTimeout(() => URL.revokeObjectURL(a.href), 10000);
+        return true;
+      } catch (err) {
+        mostrarToast(`Foto de ${sku}: ${err.message}`, 'error');
+        return false;
+      }
+    }
+
     // Próximo SKU da sequência mais usada (NIX022 -> NIX023, com os mesmos dígitos).
     // `usados`: SKUs ainda não salvos (linhas do lote). Sem sequência: ''.
     function proximoSku(produtos, usados = []) {
@@ -1958,6 +2068,7 @@
         codigo_fornecedor: String(dados.codigo_fornecedor || ''),
         fornecedor: String(dados.fornecedor || ''),
         link_fornecedor: linkSeguro(dados.link_fornecedor),
+        imagem_fornecedor: linkSeguro(Array.isArray(dados.imagens) ? dados.imagens[0] : ''),
         formato: String(dados.formato || ''),
         estilo: String(dados.estilo || ''),
         cor_armacao: String(dados.cor_armacao || ''),
@@ -1973,6 +2084,8 @@
     // ainda está igual a eles é trocado (ou apagado, se a nova página não tiver), para não
     // sobrar dado do produto anterior. O que você digitou não é mexido.
     let ultimaImportacao = {};
+    // Foto principal da última importação: baixada como <SKU>.jpg quando o produto novo é salvo
+    let imagemImportada = '';
 
     // Nome e fornecedor só entram vazios (ou ainda com o valor importado antes): o nome da
     // vitrine e o do fornecedor podem ser diferentes dos da loja (o da loja fica em Nome Fornec.)
@@ -2013,6 +2126,7 @@
         const r = aplicarImportacao(atuais, c, ultimaImportacao);
         campos.forEach(campo => { document.getElementById(campo).value = r.valores[campo]; });
         ultimaImportacao = r.importados;
+        imagemImportada = c.imagem_fornecedor;
         const preenchidos = r.preenchidos;
         atualizarAbrirLink();
         const nomes = { nome: 'nome', nome_fornecedor: 'nome fornec.', fornecedor: 'fornecedor', preco_custo: 'custo', preco_venda: 'venda', codigo_sku: 'SKU', codigo_fornecedor: 'código', link_fornecedor: 'link', formato: 'formato', estilo: 'estilo', cor_armacao: 'cor', diametro_cm: 'diâmetro', ponte_cm: 'ponte', largura_total_cm: 'largura', material: 'material', tipo: 'tipo', genero: 'gênero' };
@@ -2063,6 +2177,7 @@
     formProduto.addEventListener('submit', async (e) => {
       e.preventDefault();
       const id = document.getElementById('produtoId').value;
+      const permissaoPasta = !id && imagemImportada ? pedirPermissaoPasta() : Promise.resolve(false);
       const formData = new FormData();
       ['nome', 'codigo_sku', 'preco_custo', 'preco_venda', 'formato', 'estilo', 'cor_armacao', 'estoque', 'disponibilidade'].forEach(field => {
         const val = document.getElementById(field).value;
@@ -2092,7 +2207,11 @@
         }
         const salvo = await res.json().catch(() => ({}));
         mostrarToast(id ? 'Produto atualizado!' : Array.isArray(salvo.produtos) ? `${salvo.produtos.length} tamanhos cadastrados!` : 'Produto criado!');
+        // Produto novo importado do fornecedor: a foto principal vai para o computador como <SKU>.jpg
+        const foto = !id && imagemImportada;
+        const skuFoto = document.getElementById('codigo_sku').value.trim();
         fecharModal();
+        if (foto) baixarFotoComSku(foto, skuFoto, await permissaoPasta);
         carregarProdutos();
       } catch (err) {
         console.error(err);
