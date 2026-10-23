@@ -19,10 +19,11 @@ function extrairFuncao(nome) {
 }
 
 const funcoes = ['escapeHtml', 'linkSeguro', 'botaoLinkFornecedor', 'variacaoCusto', 'htmlVariacao', 'htmlUltimaCompra',
-  'formatarMedida', 'nomeArquivoSku', 'precoVendaSugerido', 'proximoSku', 'produtoJaCadastrado', 'camposDaImportacao', 'aplicarImportacao', 'associarFotosPorSku', 'montarResumoMaleta', 'calcularAcerto'];
+  'formatarMedida', 'nomeArquivoSku', 'precoVendaPadrao', 'proximoSku', 'produtoJaCadastrado', 'camposDaImportacao', 'aplicarImportacao', 'associarFotosPorSku', 'montarResumoMaleta', 'calcularAcerto'];
 const ctx = vm.createContext({ Number, String, Math, Map, Set, Object, URL, Intl });
 vm.runInContext(`
   const MAX_FOTOS = 4;
+  const ACRESCIMO_VENDA = 100;
   const CAMPOS_MEDIDA = ['diametro_cm', 'ponte_cm', 'largura_total_cm'];
   const formatarMoeda = (valor) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(valor || 0);
   const formatarDia = (iso) => { const m = /^(\\d{4})-(\\d{2})-(\\d{2})/.exec(String(iso || '')); return m ? m[3] + '/' + m[2] + '/' + m[1] : '-'; };
@@ -71,7 +72,7 @@ describe('painel: importação pelo link', () => {
   it('converte os dados importados para os campos do formulário', () => {
     const c = ctx.camposDaImportacao({ nome: 'Aviador', preco_custo: 79.9, codigo_fornecedor: 'CL-1', fornecedor: 'Clush', link_fornecedor: 'https://clush.com.br/p' });
     assert.deepEqual({ ...c }, {
-      nome: 'Aviador', nome_fornecedor: 'Aviador', preco_custo: '79.90', preco_venda: '', imagem_fornecedor: '', codigo_fornecedor: 'CL-1', fornecedor: 'Clush', link_fornecedor: 'https://clush.com.br/p',
+      nome: 'Aviador', nome_fornecedor: 'Aviador', preco_custo: '79.90', preco_venda: '179.90', imagem_fornecedor: '', codigo_fornecedor: 'CL-1', fornecedor: 'Clush', link_fornecedor: 'https://clush.com.br/p',
       formato: '', estilo: '', cor_armacao: '', material: '', tipo: '', genero: '', diametro_cm: '', ponte_cm: '', largura_total_cm: '',
     });
     // Especificações da descrição: medidas com vírgula, gênero só se for um código válido
@@ -121,11 +122,13 @@ describe('painel: SKU, reposição e venda sugerida na importação', () => {
     assert.equal(ctx.camposDaImportacao({ nome: 'X', imagens: ['javascript:alert(1)'] }).imagem_fornecedor, '');
   });
 
-  it('preço de venda: valor sugerido ou o meio da faixa terminando em ,90', () => {
-    assert.equal(ctx.precoVendaSugerido({ min: 59.9, max: 199.9 }), '129.90');
-    assert.equal(ctx.precoVendaSugerido({ min: 129.9, max: 129.9 }), '129.90');
-    assert.equal(ctx.precoVendaSugerido(null), '');
-    assert.equal(ctx.camposDaImportacao({ nome: 'X', preco_venda_sugerido: { min: 59.9, max: 199.9 } }).preco_venda, '129.90');
+  it('preço de venda: custo + R$ 100,00', () => {
+    assert.equal(ctx.precoVendaPadrao(39.9), '139.90');
+    assert.equal(ctx.precoVendaPadrao('16.90'), '116.90');
+    assert.equal(ctx.precoVendaPadrao(''), '');
+    assert.equal(ctx.precoVendaPadrao('abc'), '');
+    assert.equal(ctx.camposDaImportacao({ nome: 'X', preco_custo: 39.9, preco_venda_sugerido: { min: 59.9, max: 199.9 } }).preco_venda, '139.90');
+    assert.equal(ctx.camposDaImportacao({ nome: 'X', preco_custo: null }).preco_venda, '');
   });
 
   it('próximo SKU segue a sequência mais usada, contando as linhas do lote', () => {
@@ -134,6 +137,9 @@ describe('painel: SKU, reposição e venda sugerida na importação', () => {
     assert.equal(ctx.proximoSku(produtos, ['NIX023', '']), 'NIX024');
     assert.equal(ctx.proximoSku([{ codigo_sku: 'NIX099' }, { codigo_sku: 'NIX100' }]), 'NIX101');
     assert.equal(ctx.proximoSku([]), '');
+    // Formato com hífen (vale o do maior número) e sempre 3 dígitos no mínimo
+    assert.equal(ctx.proximoSku([{ codigo_sku: 'NIX-001' }, { codigo_sku: 'NIX-009' }, { codigo_sku: 'NIX002' }]), 'NIX-010');
+    assert.equal(ctx.proximoSku([{ codigo_sku: 'NIX7' }]), 'NIX008');
   });
 
   it('reconhece produto já cadastrado pelo link ou pelo código no mesmo fornecedor', () => {

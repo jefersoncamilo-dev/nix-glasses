@@ -1879,6 +1879,13 @@
         document.getElementById('disponibilidade').value = produto.disponibilidade || 'PRONTA_ENTREGA';
       } else {
         modalTitulo.textContent = 'Novo Produto';
+        // SKU seguinte da sequência já preenchido (você pode trocar)
+        const preencherSku = () => {
+          const campo = document.getElementById('codigo_sku');
+          const sku = proximoSku(todosProdutos);
+          if (sku && !campo.value.trim() && !produtoEditando) { campo.value = sku; ultimaImportacao.codigo_sku = sku; }
+        };
+        if (todosProdutos.length) preencherSku(); else carregarProdutos().then(preencherSku);
       }
       // A grade de tamanhos só no cadastro de uma roupa nova (na edição, cada tamanho é um produto)
       document.getElementById('gradeTamanhos').classList.toggle('hidden', !!produto || nichoPainel() !== 'roupas');
@@ -1919,14 +1926,11 @@
       return data;
     }
 
-    // Preço sugerido pelo fornecedor -> preço de venda do formulário (199.90). Faixa
-    // (R$ 59,90 a R$ 199,90): o meio, terminando em ,90 (129.90). Sem sugestão: ''.
-    function precoVendaSugerido(s) {
-      const min = Number(s && s.min);
-      const max = Number(s && s.max);
-      if (!Number.isFinite(min) || !Number.isFinite(max) || min <= 0 || max < min) return '';
-      const preco = min === max ? min : Math.floor((min + max) / 2) + 0.9;
-      return preco.toFixed(2);
+    // Preço de venda padrão: custo + R$ 100,00 (39.90 -> "139.90"). Sem custo: ''.
+    const ACRESCIMO_VENDA = 100;
+    function precoVendaPadrao(custo) {
+      const n = Number(custo);
+      return custo !== '' && custo !== null && custo !== undefined && Number.isFinite(n) && n >= 0 ? (n + ACRESCIMO_VENDA).toFixed(2) : '';
     }
 
     // Nome do arquivo da foto: o SKU, só com letras, números, - e _ ("NIX 023/A" -> "NIX_023_A")
@@ -2028,20 +2032,26 @@
       }
     }
 
-    // Próximo SKU da sequência mais usada (NIX022 -> NIX023, com os mesmos dígitos).
-    // `usados`: SKUs ainda não salvos (linhas do lote). Sem sequência: ''.
+    // Próximo SKU: o maior número da sequência mais usada + 1, no mesmo formato
+    // (NIX001…NIX022 -> NIX023; NIX-009 -> NIX-010). `usados`: SKUs ainda não salvos
+    // (linhas do lote). Sem sequência: ''.
     function proximoSku(produtos, usados = []) {
       const series = new Map();
       [...produtos.map(p => p.codigo_sku), ...usados].forEach(sku => {
-        const m = /^([A-Za-z]+[-_ ]?)(\d+)$/.exec(String(sku || '').trim());
+        const m = /^([A-Za-z]+)([-_ ]?)(\d+)$/.exec(String(sku || '').trim());
         if (!m) return;
-        const prefixo = m[1].toUpperCase();
-        const s = series.get(prefixo) || { total: 0, maior: 0, digitos: 0 };
-        series.set(prefixo, { total: s.total + 1, maior: Math.max(s.maior, Number(m[2])), digitos: Math.max(s.digitos, m[2].length) });
+        const letras = m[1].toUpperCase();
+        const n = Number(m[3]);
+        const s = series.get(letras) || { total: 0, maior: -1, separador: '', digitos: 0 };
+        s.total++;
+        s.digitos = Math.max(s.digitos, m[3].length);
+        if (n > s.maior) { s.maior = n; s.separador = m[2]; }
+        series.set(letras, s);
       });
       let melhor = null;
-      for (const [prefixo, s] of series) if (!melhor || s.total > melhor.s.total) melhor = { prefixo, s };
-      return melhor ? melhor.prefixo + String(melhor.s.maior + 1).padStart(melhor.s.digitos, '0') : '';
+      for (const [letras, s] of series) if (!melhor || s.total > melhor.s.total) melhor = { letras, s };
+      if (!melhor) return '';
+      return melhor.letras + melhor.s.separador + String(melhor.s.maior + 1).padStart(Math.max(3, melhor.s.digitos), '0');
     }
 
     // Produto já cadastrado com o mesmo link do fornecedor ou o mesmo código no mesmo
@@ -2064,7 +2074,7 @@
         nome: String(dados.nome || ''),
         nome_fornecedor: String(dados.nome_fornecedor || dados.nome || ''),
         preco_custo: dados.preco_custo !== null && dados.preco_custo !== undefined && Number.isFinite(preco) ? preco.toFixed(2) : '',
-        preco_venda: precoVendaSugerido(dados.preco_venda_sugerido),
+        preco_venda: dados.preco_custo !== null && dados.preco_custo !== undefined && Number.isFinite(preco) ? precoVendaPadrao(preco) : '',
         codigo_fornecedor: String(dados.codigo_fornecedor || ''),
         fornecedor: String(dados.fornecedor || ''),
         link_fornecedor: linkSeguro(dados.link_fornecedor),
@@ -2161,6 +2171,15 @@
 
     document.getElementById('disponibilidade').addEventListener('change', atualizarAvisoSinal);
     document.getElementById('preco_venda').addEventListener('input', atualizarAvisoSinal);
+    // Venda = custo + R$ 100,00 enquanto a venda estiver vazia ou ainda com o valor automático
+    document.getElementById('preco_custo').addEventListener('input', () => {
+      const venda = document.getElementById('preco_venda');
+      if (venda.value.trim() && venda.value.trim() !== ultimaImportacao.preco_venda) return;
+      const auto = precoVendaPadrao(document.getElementById('preco_custo').value);
+      venda.value = auto;
+      ultimaImportacao.preco_venda = auto;
+      atualizarAvisoSinal();
+    });
 
     function fecharModal() {
       modalProduto.classList.add('hidden');
