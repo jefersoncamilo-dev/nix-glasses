@@ -19,7 +19,7 @@ function extrairFuncao(nome) {
 }
 
 const funcoes = ['escapeHtml', 'linkSeguro', 'botaoLinkFornecedor', 'variacaoCusto', 'htmlVariacao', 'htmlUltimaCompra',
-  'formatarMedida', 'camposDaImportacao', 'associarFotosPorSku', 'montarResumoMaleta', 'calcularAcerto'];
+  'formatarMedida', 'camposDaImportacao', 'aplicarImportacao', 'associarFotosPorSku', 'montarResumoMaleta', 'calcularAcerto'];
 const ctx = vm.createContext({ Number, String, Math, Map, Set, Object, URL, Intl });
 vm.runInContext(`
   const MAX_FOTOS = 4;
@@ -86,6 +86,29 @@ describe('painel: importação pelo link', () => {
     const vazio = ctx.camposDaImportacao({ nome: 'X', preco_custo: null, link_fornecedor: 'javascript:alert(1)' });
     assert.equal(vazio.preco_custo, '');
     assert.equal(vazio.link_fornecedor, '');
+  });
+});
+
+describe('painel: importar um segundo link no mesmo formulário', () => {
+  it('troca o que veio do link anterior, apaga o que a nova página não tem e não mexe no que foi digitado', () => {
+    const vazio = { nome: '', nome_fornecedor: '', codigo_fornecedor: '', estilo: '', material: '', fornecedor: '', preco_custo: '' };
+    const p1 = ctx.aplicarImportacao(vazio, { nome: 'Gatinho Venice', nome_fornecedor: 'Gatinho Venice', codigo_fornecedor: 'WF1', material: 'Acetato', fornecedor: 'Clush', preco_custo: '29.90' }, {});
+    assert.equal(p1.valores.nome, 'Gatinho Venice');
+    assert.equal(p1.valores.material, 'Acetato');
+
+    // Usuário digitou o nome e o estilo; o 2º link não tem material
+    const atuais = { ...p1.valores, nome: 'NIX Compso', estilo: 'Meu estilo' };
+    const p2 = ctx.aplicarImportacao(atuais, { nome: 'Máscara Nitro', nome_fornecedor: 'Máscara Nitro', codigo_fornecedor: 'DJY8Z', fornecedor: 'Clush', preco_custo: '39.90', estilo: '' }, p1.importados);
+    assert.equal(p2.valores.nome, 'NIX Compso');
+    assert.equal(p2.valores.nome_fornecedor, 'Máscara Nitro');
+    assert.equal(p2.valores.codigo_fornecedor, 'DJY8Z');
+    assert.equal(p2.valores.preco_custo, '39.90');
+    assert.equal(p2.valores.material, '');
+    assert.equal(p2.valores.estilo, 'Meu estilo');
+
+    // Nome ainda igual ao importado antes: troca pelo novo
+    const p3 = ctx.aplicarImportacao({ ...p1.valores }, { nome: 'Máscara Nitro' }, p1.importados);
+    assert.equal(p3.valores.nome, 'Máscara Nitro');
   });
 });
 

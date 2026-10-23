@@ -1828,6 +1828,7 @@
       aplicarNichoPainel();
       produtoEditando = produto;
       formProduto.reset();
+      ultimaImportacao = {};
       document.getElementById('produtoId').value = '';
       iniciarSlotsFotos(produto);
 
@@ -1924,6 +1925,32 @@
       return c;
     }
 
+    // Valores que a última importação pôs no formulário aberto: num segundo link, o que
+    // ainda está igual a eles é trocado (ou apagado, se a nova página não tiver), para não
+    // sobrar dado do produto anterior. O que você digitou não é mexido.
+    let ultimaImportacao = {};
+
+    // Nome e fornecedor só entram vazios (ou ainda com o valor importado antes): o nome da
+    // vitrine e o do fornecedor podem ser diferentes dos da loja (o da loja fica em Nome Fornec.)
+    function aplicarImportacao(atuais, c, anterior) {
+      const valores = { ...atuais };
+      const importados = {};
+      const preenchidos = [];
+      Object.keys(atuais).forEach(campo => {
+        const atual = String(atuais[campo] || '').trim();
+        const eraImportado = anterior[campo] !== undefined && atual === anterior[campo];
+        const soSeVazio = campo === 'nome' || campo === 'fornecedor';
+        if (c[campo] && (!soSeVazio || !atual || eraImportado)) {
+          valores[campo] = c[campo];
+          importados[campo] = c[campo];
+          preenchidos.push(campo);
+        } else if (!c[campo] && eraImportado) {
+          valores[campo] = '';
+        }
+      });
+      return { valores, importados, preenchidos };
+    }
+
     document.getElementById('btnImportarUrl').addEventListener('click', async () => {
       const btn = document.getElementById('btnImportarUrl');
       const status = document.getElementById('importarStatus');
@@ -1933,15 +1960,12 @@
       status.textContent = 'Buscando o produto na loja...';
       try {
         const c = camposDaImportacao(await buscarImportacao(url));
-        const preenchidos = [];
-        CAMPOS_IMPORTADOS.forEach(campo => {
-          if (c[campo]) { document.getElementById(campo).value = c[campo]; preenchidos.push(campo); }
-        });
-        // Nome e fornecedor só se estiverem vazios: o nome da vitrine e o do fornecedor
-        // podem ser diferentes dos da loja (o da loja fica em Nome Fornec.)
-        ['nome', 'fornecedor'].forEach(campo => {
-          if (c[campo] && !document.getElementById(campo).value.trim()) { document.getElementById(campo).value = c[campo]; preenchidos.push(campo); }
-        });
+        const campos = [...CAMPOS_IMPORTADOS, 'nome', 'fornecedor'];
+        const atuais = Object.fromEntries(campos.map(campo => [campo, document.getElementById(campo).value]));
+        const r = aplicarImportacao(atuais, c, ultimaImportacao);
+        campos.forEach(campo => { document.getElementById(campo).value = r.valores[campo]; });
+        ultimaImportacao = r.importados;
+        const preenchidos = r.preenchidos;
         atualizarAbrirLink();
         const nomes = { nome: 'nome', nome_fornecedor: 'nome fornec.', fornecedor: 'fornecedor', preco_custo: 'custo', codigo_fornecedor: 'código', link_fornecedor: 'link', formato: 'formato', estilo: 'estilo', cor_armacao: 'cor', diametro_cm: 'diâmetro', ponte_cm: 'ponte', largura_total_cm: 'largura', material: 'material', tipo: 'tipo', genero: 'gênero' };
         status.textContent = `Preenchido: ${preenchidos.map(x => nomes[x]).join(', ')}.${c.preco_custo ? '' : ' Preço não encontrado na página.'} Confira antes de salvar.`;

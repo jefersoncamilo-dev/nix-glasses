@@ -111,6 +111,26 @@ ${li('Formatos de rosto compatíveis', 'Oval, quadrado, triangular')}${li('Gêne
     assert.deepEqual([e.diametro_cm, e.ponte_cm, e.material, e.cor_armacao, e.genero], [5.6, 1, 'Acetato', 'Preto fosco, lente fumê', 'FEMININO']);
   });
 
+  it('com JSON-LD de produtos relacionados antes do principal, usa o da própria página', () => {
+    const ld = (o) => `<script type="application/ld+json">${JSON.stringify({ '@context': 'https://schema.org', '@type': 'Product', ...o })}</script>`;
+    const relacionado = { name: 'Óculos de Sol Premium Oval Gatinho Venice - Preto - Acetato', sku: 'wf2912 - c1', url: 'https://www.clush.com.br/produtos/oculos-oval-gatinho-venice-ab1c2/', offers: { price: '29.90' } };
+    const principal = { name: 'Óculos de Sol Esportivo Máscara Nitro', sku: 'MN-1', offers: { price: '39.90', url: 'https://www.clush.com.br/produtos/oculos-mascara-nitro-djy8z' } };
+    const url = 'https://www.clush.com.br/produtos/oculos-mascara-nitro-djy8z/';
+    const base = '<meta property="og:site_name" content="Clush | Óculos Atacado e Acessórios"><meta property="og:title" content="Óculos de Sol Esportivo Máscara Nitro">';
+    const d = extrairDadosProduto(base + ld(relacionado) + ld(principal), url);
+    assert.equal(d.nome_fornecedor, 'Óculos de Sol Esportivo Máscara Nitro');
+    assert.equal(d.codigo_fornecedor, 'MN-1');
+    assert.equal(d.preco_custo, 39.9);
+    assert.equal(d.fornecedor, 'Clush');
+    // Sem link no JSON-LD: vale o que tem o nome do og:title
+    const semLink = extrairDadosProduto(base + ld({ ...relacionado, url: undefined }) + ld({ ...principal, offers: { price: '39.90' } }), url);
+    assert.equal(semLink.codigo_fornecedor, 'MN-1');
+    // Nenhum bate: ignora o JSON-LD (nome do og:title, código do link)
+    const nenhum = extrairDadosProduto(base + ld(relacionado) + ld({ ...relacionado, name: 'Outro', url: undefined }), url);
+    assert.equal(nenhum.nome_fornecedor, 'Óculos de Sol Esportivo Máscara Nitro');
+    assert.equal(nenhum.codigo_fornecedor, 'DJY8Z');
+  });
+
   it('especificações em lista numa linha, em mm, polarizado e gênero', () => {
     const e = extrairEspecificacoes('Óculos Aviador Polarizado Masculino', 'Medidas: * Lente: 58mm * Ponte: 18 mm * Largura frontal: 145mm * Material: Metal * Cor: Dourado * Proteção: UV400');
     assert.equal(e.diametro_cm, 5.8);

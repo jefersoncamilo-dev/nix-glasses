@@ -215,18 +215,43 @@ function temTipo(obj, tipo) {
   return Array.isArray(t) ? t.includes(tipo) : t === tipo;
 }
 
-// Primeiro objeto schema.org Product (ou ProductGroup) dentro dos blocos JSON-LD
-function produtoJsonLd(blocos) {
+// Objetos schema.org Product (ou ProductGroup) dentro dos blocos JSON-LD, na ordem da página
+function produtosJsonLd(blocos) {
   const fila = [...blocos];
+  const produtos = [];
   let visitados = 0;
   while (fila.length && visitados++ < 500) {
     const item = fila.shift();
     if (!item || typeof item !== 'object') continue;
     if (Array.isArray(item)) { fila.push(...item); continue; }
-    if (temTipo(item, 'Product') || temTipo(item, 'ProductGroup')) return item;
+    if (temTipo(item, 'Product') || temTipo(item, 'ProductGroup')) { produtos.push(item); continue; }
     for (const v of Object.values(item)) if (v && typeof v === 'object') fila.push(v);
   }
-  return null;
+  return produtos;
+}
+
+// Caminho do link sem barra no fim, para comparar ("/produtos/x/" = "/produtos/x")
+function caminhoDe(v, base) {
+  try {
+    return decodeURIComponent(new URL(String(v), base).pathname).replace(/\/+$/, '').toLowerCase();
+  } catch {
+    return '';
+  }
+}
+
+// O produto da página. Lojas como a Nuvemshop publicam também um JSON-LD para cada produto
+// das vitrines "relacionados"/"vistos recentemente", às vezes antes do principal: vale o que
+// tem o link (url, @id ou offers.url) da própria página ou, sem link, o nome do og:title.
+// Com vários e nenhum batendo, nenhum é confiável.
+function produtoJsonLd(blocos, urlPagina, tituloOg) {
+  const produtos = produtosJsonLd(blocos);
+  if (produtos.length <= 1) return produtos[0] || null;
+  const caminho = caminhoDe(urlPagina);
+  const links = (p) => [p.url, p['@id'], ...(Array.isArray(p.offers) ? p.offers : [p.offers]).map((o) => o && o.url)].filter((x) => typeof x === 'string');
+  const peloLink = caminho && produtos.find((p) => links(p).some((l) => caminhoDe(l, urlPagina) === caminho));
+  if (peloLink) return peloLink;
+  const og = sem(tituloOg);
+  return (og && produtos.find((p) => sem(texto(p.name)) === og)) || null;
 }
 
 // "R$ 1.234,56", "199,90", "199.90", 199.9 -> 1234.56 / 199.9 / 199.9. Inválido -> null.
@@ -424,10 +449,11 @@ function codigoDoLink(urlPagina) {
 function extrairDadosProduto(html, urlPagina) {
   const pagina = String(html || '');
   const metas = metaTags(pagina);
-  const ld = produtoJsonLd(blocosJsonLd(pagina)) || {};
+  const ld = produtoJsonLd(blocosJsonLd(pagina), urlPagina, metas['og:title']) || {};
   const tituloTag = limpar((/<title[^>]*>([\s\S]*?)<\/title>/i.exec(pagina) || [])[1] || '');
   const host = (() => { try { return new URL(urlPagina).hostname.replace(/^www\./, ''); } catch { return ''; } })();
-  const loja = metas['og:site_name'] || '';
+  // "Clush | Óculos Atacado e Acessórios" -> "Clush"
+  const loja = (metas['og:site_name'] || '').split(/\s+[|–—]\s+/)[0];
 
   const nome = (texto(ld.name) || metas['og:title'] || metas['twitter:title'] || metas['itemprop:name'] || semNomeDaLoja(tituloTag, loja)).slice(0, 255);
 
