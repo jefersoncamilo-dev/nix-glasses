@@ -190,11 +190,12 @@
           </details>
           <div class="bg-white rounded-xl border border-gray-200 p-4">
             <p class="font-medium text-gray-900 mb-1">Adicionar pelo link do fornecedor</p>
-            <p class="text-xs text-gray-500 mb-2">Cole o link do produto na loja do fornecedor: nome fornec., custo, código, link e as especificações da descrição entram numa nova linha.</p>
+            <p class="text-xs text-gray-500 mb-2">Cole um ou vários links de produtos na loja do fornecedor (um por linha): cada um vira uma linha com nome e SKU no padrão Nix, nome fornec., custo, venda, código e as especificações. Ao salvar, a foto principal entra no produto. Link repetido soma 1 na quantidade.</p>
             <div class="flex flex-col sm:flex-row gap-2">
-              <input type="url" id="loteImportarUrl" class="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-orange-500" placeholder="https://loja-do-fornecedor.com.br/produto/...">
-              <button id="btnLoteImportarUrl" class="bg-gray-100 hover:bg-gray-200 text-gray-700 px-4 py-2 rounded-lg text-sm font-medium transition-colors">Importar</button>
+              <textarea id="loteImportarUrl" rows="2" class="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-orange-500" placeholder="https://loja-do-fornecedor.com.br/produto/..."></textarea>
+              <button id="btnLoteImportarUrl" class="self-start bg-gray-100 hover:bg-gray-200 text-gray-700 px-4 py-2 rounded-lg text-sm font-medium transition-colors">Importar</button>
             </div>
+            <p id="loteImportarStatus" class="text-xs text-gray-600 mt-2"></p>
           <p class="pasta-fotos hidden text-xs text-gray-600 mt-2">Fotos dos produtos novos: <span class="rotulo-pasta-fotos font-medium">pasta de Downloads</span> <button type="button" class="btn-pasta-fotos underline text-orange-600 hover:text-orange-700">Escolher pasta</button></p>
           </div>
           <div class="bg-white rounded-xl border border-gray-200 p-4">
@@ -628,7 +629,7 @@
             <input type="text" id="nome" name="nome" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500" required>
           </div>
           <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">Código SKU *</label>
+            <label class="flex justify-between text-sm font-medium text-gray-700 mb-1">Código SKU * <button type="button" id="btnGerarNomeSku" class="text-xs font-normal underline text-orange-600 hover:text-orange-700" title="Monta nome e SKU no padrão Nix a partir do Nome Fornec., formato e cor">Gerar nome e SKU</button></label>
             <input type="text" id="codigo_sku" name="codigo_sku" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500" required>
           </div>
           <div class="md:col-span-2">
@@ -1399,28 +1400,61 @@
     document.getElementById('btnLoteImportarUrl').addEventListener('click', async () => {
       const btn = document.getElementById('btnLoteImportarUrl');
       const campo = document.getElementById('loteImportarUrl');
-      const url = campo.value.trim();
-      if (!linkSeguro(url)) return mostrarToast('Cole um link começando com http:// ou https://', 'error');
+      const status = document.getElementById('loteImportarStatus');
+      const urls = campo.value.split(/\s+/).map(u => u.trim()).filter(Boolean);
+      if (!urls.length || !urls.every(linkSeguro)) return mostrarToast('Cole links começando com http:// ou https:// (um por linha)', 'error');
       btn.disabled = true;
+      const resumo = { novos: 0, repostos: 0, repetidos: 0, falhas: [] };
+      const restantes = [];
       try {
-        const c = camposDaImportacao(await buscarImportacao(url));
-        const fornecedorTodos = document.getElementById('loteFornecedorTodos').value.trim();
-        const linha = { ...linhaLoteVazia(), ...c, fornecedor: fornecedorTodos || c.fornecedor, preco_custo: c.preco_custo.replace('.', ','), preco_venda: c.preco_venda.replace('.', ',') };
-        // Já cadastrado: a linha vira reposição de 1 peça no SKU que já existe
-        const existente = produtoJaCadastrado(todosProdutos, linha);
-        if (existente) Object.assign(linha, { codigo_sku: existente.codigo_sku, quantidade: '1' });
-        else linha.codigo_sku = proximoSku(todosProdutos, linhasLote.map(l => l.codigo_sku));
-        adicionarLinhasLote([linha]);
-        campo.value = '';
-        mostrarToast(existente
-          ? `Já cadastrado como ${existente.codigo_sku}: entra como reposição de 1 peça (ajuste a quantidade).`
-          : `Produto adicionado como ${linha.codigo_sku || 'novo'}. Confira o nome e o preço de venda.`);
-      } catch (err) {
-        mostrarToast(err.message, 'error');
+        for (const [n, url] of urls.entries()) {
+          status.textContent = `Buscando ${n + 1} de ${urls.length}...`;
+          try {
+            const r = await importarLinkLote(url);
+            resumo[r]++;
+          } catch (err) {
+            resumo.falhas.push(`${url}: ${err.message}`);
+            restantes.push(url);
+          }
+        }
       } finally {
         btn.disabled = false;
+        campo.value = restantes.join('\n');
+        status.textContent = [
+          resumo.novos && `${resumo.novos} produto(s) novo(s)`,
+          resumo.repostos && `${resumo.repostos} já cadastrado(s), como reposição`,
+          resumo.repetidos && `${resumo.repetidos} link(s) repetido(s), somados na quantidade`,
+          resumo.falhas.length && `${resumo.falhas.length} não importado(s) (ficaram no campo): ${resumo.falhas.join(' | ')}`,
+        ].filter(Boolean).join('; ') + (resumo.novos ? '. Confira nome, SKU e venda antes de salvar.' : '');
+        if (resumo.falhas.length) mostrarToast('Alguns links não foram importados', 'error');
       }
     });
+    // Um link do fornecedor -> linha do lote. Produto novo: nome e SKU no padrão Nix.
+    // Já cadastrado: reposição de 1 peça no SKU que existe. Link que já está no lote:
+    // soma 1 na quantidade daquela linha. -> 'novos' | 'repostos' | 'repetidos'
+    async function importarLinkLote(url) {
+      const caminho = v => { try { return new URL(v).pathname.replace(/\/+$/, '').toLowerCase(); } catch { return ''; } };
+      const noLote = linhasLote.find(l => caminho(l.link_fornecedor) && caminho(l.link_fornecedor) === caminho(url));
+      if (noLote) {
+        noLote.quantidade = String((Number(noLote.quantidade) || 1) + 1);
+        renderizarLote();
+        return 'repetidos';
+      }
+      const c = camposDaImportacao(await buscarImportacao(url));
+      const fornecedorTodos = document.getElementById('loteFornecedorTodos').value.trim();
+      const linha = { ...linhaLoteVazia(), ...c, fornecedor: fornecedorTodos || c.fornecedor, preco_custo: c.preco_custo.replace('.', ','), preco_venda: c.preco_venda.replace('.', ',') };
+      const existente = produtoJaCadastrado(todosProdutos, linha);
+      if (existente) {
+        Object.assign(linha, { nome: existente.nome, codigo_sku: existente.codigo_sku, quantidade: '1' });
+      } else {
+        const tema = nomeTematico(linha, todosProdutos, linhasLote.map(l => l.codigo_sku));
+        if (tema) Object.assign(linha, tema);
+        else linha.codigo_sku = proximoSku(todosProdutos, linhasLote.map(l => l.codigo_sku));
+      }
+      adicionarLinhasLote([linha]);
+      return existente ? 'repostos' : 'novos';
+    }
+
     document.getElementById('btnLoteFornecedorTodos').addEventListener('click', () => {
       const f = document.getElementById('loteFornecedorTodos').value.trim();
       linhasLote.forEach(l => { if (!linhaLoteEstaVazia(l)) l.fornecedor = f; });
@@ -1465,12 +1499,31 @@
         }
         const ignorados = data.ignorados || [];
         const repostos = data.repostos || [];
-        // Produtos novos que vieram de um link: baixa a foto principal de cada um como <SKU>.jpg
-        const criados = new Set((data.produtos || []).map(p => String(p.codigo_sku || '').toLowerCase()));
+        // Produtos novos que vieram de um link: a foto principal entra como capa do produto
+        // e também vai para o computador como <SKU>.jpg
+        const criados = new Map((data.produtos || []).map(p => [String(p.codigo_sku || '').toLowerCase(), p.id]));
         const fotos = produtos.filter(p => p.imagem_fornecedor && criados.has(String(p.codigo_sku || '').trim().toLowerCase()));
         (async () => {
           const naPasta = await permissaoPasta;
-          for (const p of fotos) await baixarFotoComSku(p.imagem_fornecedor, p.codigo_sku.trim(), naPasta);
+          let anexadas = 0;
+          for (const p of fotos) {
+            const sku = p.codigo_sku.trim();
+            try {
+              const foto = await fotoDoFornecedor(p.imagem_fornecedor);
+              const fd = new FormData();
+              fd.append('foto1', await prepararImagem(foto));
+              const res = await fetchAdmin(`/api/produtos/${criados.get(sku.toLowerCase())}`, { method: 'PUT', body: fd });
+              if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || 'Erro ao salvar a foto');
+              anexadas++;
+              await baixarFotoComSku(p.imagem_fornecedor, sku, naPasta, foto);
+            } catch (err) {
+              mostrarToast(`Foto de ${sku}: ${err.message}`, 'error');
+            }
+          }
+          if (anexadas) {
+            mostrarToast(`${anexadas} foto(s) incluída(s) nos produtos`);
+            carregarProdutos();
+          }
         })();
         mostrarToast(`${data.produtos.length} produto(s) cadastrado(s)${repostos.length ? `, ${repostos.length} reposição(ões) somada(s) no estoque` : ''}${ignorados.length ? `, ${ignorados.length} ignorado(s) por duplicidade` : ''}`,
           data.produtos.length || repostos.length ? 'success' : 'error');
@@ -1847,6 +1900,7 @@
       formProduto.reset();
       ultimaImportacao = {};
       imagemImportada = '';
+      fotoImportada = null;
       document.getElementById('produtoId').value = '';
       iniciarSlotsFotos(produto);
 
@@ -1996,16 +2050,10 @@
 
     // Baixa a foto principal do fornecedor (pelo servidor) e salva no computador como <SKU>.jpg:
     // na pasta escolhida (se `naPasta`) ou, sem ela, na pasta de Downloads
-    async function baixarFotoComSku(urlImagem, sku, naPasta = false) {
-      if (!linkSeguro(urlImagem) || !String(sku || '').trim()) return false;
+    async function baixarFotoComSku(urlImagem, sku, naPasta = false, jaBaixada = null) {
+      if (!jaBaixada && !linkSeguro(urlImagem) || !String(sku || '').trim()) return false;
       try {
-        const res = await fetchAdmin('/api/admin/importar-imagem', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ url: urlImagem }),
-        });
-        if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || 'Não foi possível baixar a foto');
-        const blob = await res.blob();
+        const blob = jaBaixada || await fotoDoFornecedor(urlImagem);
         const extensao = { 'image/png': 'png', 'image/webp': 'webp', 'image/gif': 'gif', 'image/avif': 'avif' }[blob.type] || 'jpg';
         if (naPasta && pastaFotos) {
           try {
@@ -2032,6 +2080,20 @@
       }
     }
 
+    // Foto principal do fornecedor, baixada pelo servidor (a loja não deixa o navegador
+    // buscar direto). -> File (foto.jpg/png/...); erro com a mensagem do servidor
+    async function fotoDoFornecedor(urlImagem) {
+      const res = await fetchAdmin('/api/admin/importar-imagem', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url: urlImagem }),
+      });
+      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || 'Não foi possível baixar a foto');
+      const blob = await res.blob();
+      const extensao = { 'image/png': 'png', 'image/webp': 'webp', 'image/gif': 'gif', 'image/avif': 'avif' }[blob.type] || 'jpg';
+      return new File([blob], `foto.${extensao}`, { type: blob.type || 'image/jpeg' });
+    }
+
     // Próximo SKU: o maior número da sequência mais usada + 1, no mesmo formato
     // (NIX001…NIX022 -> NIX023; NIX-009 -> NIX-010). `usados`: SKUs ainda não salvos
     // (linhas do lote). Sem sequência: ''.
@@ -2052,6 +2114,100 @@
       for (const [letras, s] of series) if (!melhor || s.total > melhor.s.total) melhor = { letras, s };
       if (!melhor) return '';
       return melhor.letras + melhor.s.separador + String(melhor.s.maior + 1).padStart(Math.max(3, melhor.s.digitos), '0');
+    }
+
+    // Nome e SKU no padrão Nix Dinossauros, a partir do nome na loja do fornecedor:
+    // "Óculos de Sol Aviador Monaco Light - Preto/Laranja - Injetado"
+    //   -> nome "Nix Ptero Monaco Light - Onyx Black / Orange", SKU "NIX-MLI-PTE-BLK-ORG".
+    // O dinossauro sai do formato/estilo (Raptor nos esportivos); um modelo já cadastrado
+    // com nome Nix mantém o dinossauro dele. `usados`: SKUs ainda não salvos (linhas do lote).
+    // -> { nome, codigo_sku } ou null (sem nome do fornecedor para montar)
+    function nomeTematico(c, produtos = [], usados = []) {
+      const DINOS = [
+        [/esport|m[aá]scara|shield/, 'Raptor', 'RAP'],
+        [/gatinh|gato|cat ?eye|borboleta/, 'Dilo', 'DIL'],
+        [/aviador|piloto/, 'Ptero', 'PTE'],
+        [/hexagon|geom[eé]tric|octogon/, 'Ankylo', 'ANK'],
+        [/quadrad/, 'Rex', 'REX'],
+        [/retangul/, 'Spino', 'SPI'],
+        [/redond|oval|arredondad/, 'Bronto', 'BRO'],
+      ];
+      // cor: [nome de destaque (1ª cor), nome simples (demais), código]
+      const CORES = {
+        preto: ['Onyx Black', 'Black', 'BLK'], preta: ['Onyx Black', 'Black', 'BLK'],
+        branco: ['Pearl White', 'White', 'WHT'], branca: ['Pearl White', 'White', 'WHT'],
+        marrom: ['Mocha Brown', 'Brown', 'BRW'], azul: ['Ocean Blue', 'Blue', 'BLU'],
+        amarelo: ['Sun Yellow', 'Yellow', 'YLW'], amarela: ['Sun Yellow', 'Yellow', 'YLW'],
+        dourado: ['Royal Gold', 'Gold', 'GLD'], dourada: ['Royal Gold', 'Gold', 'GLD'],
+        prata: ['Silver Chrome', 'Silver', 'SLV'], prateado: ['Silver Chrome', 'Silver', 'SLV'],
+        rosa: ['Blush Pink', 'Pink', 'PNK'], rose: ['Rose Gold', 'Rose Gold', 'RSG'],
+        verde: ['Toxic Green', 'Green', 'GRN'], vermelho: ['Crimson', 'Red', 'CRM'], vermelha: ['Crimson', 'Red', 'CRM'],
+        laranja: ['Amber Flame', 'Orange', 'ORG'], nude: ['Desert Nude', 'Nude', 'NUD'],
+        camuflado: ['Jungle Camo', 'Camo', 'CMO'], roxo: ['Magma Purple', 'Purple', 'PRP'], roxa: ['Magma Purple', 'Purple', 'PRP'],
+        lilas: ['Lilac Mist', 'Lilac', 'LIL'], cinza: ['Storm Grey', 'Grey', 'GRY'], fume: ['Smoke', 'Smoke', 'SMK'],
+        tartaruga: ['Fossil Tortoise', 'Tortoise', 'TRT'], demi: ['Fossil Tortoise', 'Tortoise', 'TRT'],
+        transparente: ['Crystal Clear', 'Clear', 'CLR'], cristal: ['Crystal Clear', 'Clear', 'CLR'],
+        vinho: ['Wine', 'Wine', 'WIN'], bordo: ['Wine', 'Wine', 'WIN'], bege: ['Sand', 'Sand', 'SND'],
+        multicolor: ['Spectrum Flash', 'Spectrum', 'SPF'], multicolors: ['Spectrum Flash', 'Spectrum', 'SPF'],
+        degrade: ['Gradient', 'Gradient', ''], espelhado: ['Mirror', 'Mirror', ''], espelhada: ['Mirror', 'Mirror', ''],
+        translucido: ['Translucent', 'Translucent', ''], fosco: ['Matte', 'Matte', ''],
+      };
+      const MATERIAIS = /^(metal|acetato|injetado|nylon|tr ?90|policarbonato|madeira|titanio)$/;
+      const FORMATOS = /^(oculos|de|sol|premium|esportivo|mascara|hexagonal|redondo|oval|aviador|retangular|quadrado|maxi|gatinho|gato|arredondado|borboleta|geometrico|classico|oversized|shield|piloto|octogonal|grau|feminino|masculino|unissex)$/;
+      const semAcento = t => String(t || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+      const titulo = String(c.nome_fornecedor || '').trim();
+      if (!titulo) return null;
+      const partes = titulo.split(/\s+[-–]\s+/);
+      // Modelo: o que sobra da 1ª parte sem "Óculos de Sol", formato e referência
+      const limparModelo = t => String(t).replace(/\bref\b.*$/i, '').split(/\s+/)
+        .filter(p => p && !FORMATOS.test(semAcento(p))).join(' ').trim();
+      const modelo = limparModelo(partes[0]);
+      const textoFormato = semAcento([partes[0], c.formato, c.estilo].join(' '));
+      let dino = (DINOS.find(([re]) => re.test(textoFormato)) || [null, 'Tricera', 'TRI']).slice(1);
+      // Modelo já cadastrado como "Nix <Dino> <Modelo> - ...": usa o mesmo dinossauro
+      for (const p of produtos) {
+        const m = /^Nix (\w+) (.+?)\s*-/.exec(String(p.nome || ''));
+        if (m && modelo && semAcento(limparModelo(m[2])) === semAcento(modelo)) {
+          const conhecido = DINOS.find(d => d[1] === m[1]);
+          dino = conhecido ? conhecido.slice(1) : [m[1], semAcento(m[1]).slice(0, 3).toUpperCase()];
+          break;
+        }
+      }
+      // Cores: as demais partes, sem o material; se não houver, a cor da armação
+      let textoCor = partes.slice(1).filter(p => !MATERIAIS.test(semAcento(p).trim())).join(' ');
+      if (!textoCor.trim()) textoCor = String(c.cor_armacao || '').split(/[,;]/)[0];
+      const cores = [];
+      semAcento(textoCor).split(/[^a-z0-9]+/).forEach(p => {
+        const cor = CORES[p];
+        if (cor && !cores.includes(cor)) cores.push(cor);
+      });
+      const principais = cores.filter(cor => cor[2]);
+      const modificadores = cores.filter(cor => !cor[2]).map(cor => cor[1]);
+      let nomeCor = '';
+      if (principais.length) {
+        const resto = principais.slice(1).map(cor => cor[1]);
+        nomeCor = [principais[0][0], ...modificadores].join(' ') + (resto.length ? ` / ${resto.join(' ')}` : '');
+      } else if (modificadores.length) {
+        nomeCor = modificadores.join(' ');
+      }
+      const nome = `Nix ${dino[0]}${modelo ? ` ${modelo}` : ''}${nomeCor ? ` - ${nomeCor}` : ''}`;
+      // Código do modelo: 3 letras (iniciais quando tem mais de uma palavra) + versão (2.0 -> 2)
+      const palavras = semAcento(modelo).replace(/[^a-z0-9 ]/g, ' ').split(/\s+/).filter(Boolean);
+      const letras = palavras.filter(p => /^[a-z]/.test(p));
+      const versao = (palavras.find(p => /^\d/.test(p)) || '').replace(/\D.*$/, '');
+      let codModelo = letras.length > 1
+        ? (letras.map(p => p[0]).join('') + letras[letras.length - 1].slice(1)).slice(0, 3)
+        : (letras[0] || '').slice(0, 3);
+      codModelo = (codModelo + versao).toUpperCase();
+      const codCores = principais.length
+        ? [principais[0][2], principais.length === 2 ? principais[1][2] : principais.slice(1).map(cor => cor[2].slice(0, 2)).join('')].filter(Boolean)
+        : [];
+      const base = ['NIX', codModelo, dino[1], ...codCores].filter(Boolean).join('-');
+      // Mesmo SKU já usado (outra cor que caiu no mesmo código): -2, -3...
+      const existentes = new Set([...produtos.map(p => p.codigo_sku), ...usados].map(s => String(s || '').trim().toUpperCase()));
+      let sku = base;
+      for (let n = 2; existentes.has(sku); n++) sku = `${base}-${n}`;
+      return { nome, codigo_sku: sku };
     }
 
     // Produto já cadastrado com o mesmo link do fornecedor ou o mesmo código no mesmo
@@ -2096,6 +2252,8 @@
     let ultimaImportacao = {};
     // Foto principal da última importação: baixada como <SKU>.jpg quando o produto novo é salvo
     let imagemImportada = '';
+    // Arquivo da foto do fornecedor posto num espaço de foto (trocado numa nova importação)
+    let fotoImportada = null;
 
     // Nome e fornecedor só entram vazios (ou ainda com o valor importado antes): o nome da
     // vitrine e o do fornecedor podem ser diferentes dos da loja (o da loja fica em Nome Fornec.)
@@ -2128,9 +2286,13 @@
       try {
         const dados = await buscarImportacao(url);
         const c = camposDaImportacao(dados);
-        // Produto novo: SKU seguinte da sequência. Já cadastrado: oferece a reposição.
+        // Produto novo: nome e SKU no padrão Nix. Já cadastrado: oferece a reposição.
         const existente = produtoEditando ? null : produtoJaCadastrado(todosProdutos, c);
-        if (!produtoEditando && !existente) c.codigo_sku = proximoSku(todosProdutos);
+        if (!produtoEditando && !existente) {
+          const tema = nomeTematico(c, todosProdutos);
+          if (tema) Object.assign(c, tema);
+          else c.codigo_sku = proximoSku(todosProdutos);
+        }
         const campos = [...CAMPOS_IMPORTADOS, 'nome', 'fornecedor', 'preco_venda', 'codigo_sku'];
         const atuais = Object.fromEntries(campos.map(campo => [campo, document.getElementById(campo).value]));
         const r = aplicarImportacao(atuais, c, ultimaImportacao);
@@ -2138,6 +2300,17 @@
         ultimaImportacao = r.importados;
         imagemImportada = c.imagem_fornecedor;
         const preenchidos = r.preenchidos;
+        // Produto novo: a foto principal já entra como capa (ou na primeira posição livre)
+        if (!produtoEditando && !existente && c.imagem_fornecedor) {
+          fotoDoFornecedor(c.imagem_fornecedor).then(foto => {
+            if (imagemImportada !== c.imagem_fornecedor || modalProduto.classList.contains('hidden')) return;
+            let i = slotsFotos.findIndex(sl => sl.file && sl.file === fotoImportada);
+            if (i < 0) i = slotsFotos.findIndex(sl => !sl.file && !sl.url);
+            if (i < 0) return;
+            fotoImportada = foto;
+            definirFotoSlot(i, foto);
+          }).catch(err => mostrarToast(`Foto do fornecedor: ${err.message}`, 'error'));
+        }
         atualizarAbrirLink();
         const nomes = { nome: 'nome', nome_fornecedor: 'nome fornec.', fornecedor: 'fornecedor', preco_custo: 'custo', preco_venda: 'venda', codigo_sku: 'SKU', codigo_fornecedor: 'código', link_fornecedor: 'link', formato: 'formato', estilo: 'estilo', cor_armacao: 'cor', diametro_cm: 'diâmetro', ponte_cm: 'ponte', largura_total_cm: 'largura', material: 'material', tipo: 'tipo', genero: 'gênero' };
         const sugerido = dados.preco_venda_sugerido;
@@ -2169,6 +2342,14 @@
       }
     });
 
+    document.getElementById('btnGerarNomeSku').addEventListener('click', () => {
+      const campos = Object.fromEntries(['nome_fornecedor', 'formato', 'estilo', 'cor_armacao'].map(c => [c, document.getElementById(c).value]));
+      const outros = todosProdutos.filter(p => !produtoEditando || p.id !== produtoEditando.id);
+      const tema = nomeTematico(campos, outros);
+      if (!tema) return mostrarToast('Preencha o Nome Fornec. (ex.: Óculos de Sol Aviador Monaco Light - Preto - Injetado)', 'error');
+      document.getElementById('nome').value = tema.nome;
+      document.getElementById('codigo_sku').value = tema.codigo_sku;
+    });
     document.getElementById('disponibilidade').addEventListener('change', atualizarAvisoSinal);
     document.getElementById('preco_venda').addEventListener('input', atualizarAvisoSinal);
     // Venda = custo + R$ 100,00 enquanto a venda estiver vazia ou ainda com o valor automático
@@ -2229,8 +2410,9 @@
         // Produto novo importado do fornecedor: a foto principal vai para o computador como <SKU>.jpg
         const foto = !id && imagemImportada;
         const skuFoto = document.getElementById('codigo_sku').value.trim();
+        const arquivoFoto = slotsFotos.some(sl => sl.file && sl.file === fotoImportada) ? fotoImportada : null;
         fecharModal();
-        if (foto) baixarFotoComSku(foto, skuFoto, await permissaoPasta);
+        if (foto) baixarFotoComSku(foto, skuFoto, await permissaoPasta, arquivoFoto);
         carregarProdutos();
       } catch (err) {
         console.error(err);
