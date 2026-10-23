@@ -1,7 +1,8 @@
 // Importação de produto a partir do link na loja do fornecedor.
 // baixarPagina busca o HTML (só http/https, nunca endereços internos);
 // extrairDadosProduto lê título, preço e referências de JSON-LD (schema.org
-// Product), meta tags (Open Graph / product:*, itemprop) e <title>.
+// Product), meta tags (Open Graph / product:*, itemprop) e <title>, e as
+// especificações (medidas, material, cor...) da descrição e do nome.
 // Funciona com a maioria das lojas (Nuvemshop, Shopify, VTEX, Loja Integrada,
 // WooCommerce), porque todas publicam esses dados para Google e redes sociais.
 const http = require('node:http');
@@ -288,6 +289,126 @@ function semNomeDaLoja(titulo, loja) {
   return partes.join(' - ');
 }
 
+// ---------- Especificações (descrição e nome do produto) ----------
+
+// HTML -> texto em linhas (cada <p>, <br>, <li>, <div> vira uma quebra)
+function textoDoHtml(html) {
+  return decodificarEntidades(String(html || '')
+    .replace(/<(script|style)\b[\s\S]*?<\/\1>/gi, ' ')
+    .replace(/<(br|\/p|\/li|\/div|\/h\d|\/tr|li|p|div|tr)\b[^>]*>/gi, '\n')
+    .replace(/<[^>]+>/g, ' '))
+    .split('\n').map((l) => l.replace(/\s+/g, ' ').trim()).filter(Boolean).join('\n');
+}
+
+// Descrição do produto: o bloco da página (Nuvemshop: class="product-description",
+// Shopify/WooCommerce: "product__description" / "woocommerce-product-details"),
+// mais a do JSON-LD e da meta tag. Repetições não atrapalham a leitura.
+function descricaoDoProduto(pagina, ld, metas) {
+  const partes = [];
+  const bloco = /<(div|section)\b[^>]*(?:class|id|data-store)\s*=\s*["'][^"']*(product-description|product__description|product-single__description|woocommerce-product-details__short-description|description-content|descricao)[^"']*["'][^>]*>/i.exec(pagina);
+  if (bloco) partes.push(textoDoHtml(pagina.slice(bloco.index + bloco[0].length, bloco.index + bloco[0].length + 20000).split(/<(?:form|footer|script)\b/i)[0]));
+  partes.push(textoDoHtml(texto(ld.description) ? String(ld.description) : ''));
+  partes.push(metas['og:description'] || metas.description || '');
+  return partes.filter(Boolean).join('\n').slice(0, 30000);
+}
+
+// "6,2", "62" mm -> 6.2 cm; fora da faixa da medida -> null
+function medidaCm(numero, unidade, min, max) {
+  let n = Number(String(numero).replace(',', '.'));
+  if (!Number.isFinite(n)) return null;
+  if (/mm/i.test(unidade || '') || (!unidade && n >= max * 1.5)) n /= 10;
+  n = Math.round(n * 10) / 10;
+  return n >= min && n <= max ? n : null;
+}
+
+// Medida pelo rótulo ("Ponte: 1cm", "Largura total 160 mm"). O número não pode estar
+// colado em letra (UV400) e fica a no máximo 25 caracteres do rótulo, na mesma linha.
+function medidaDoTexto(t, rotulos, min, max) {
+  for (const rotulo of rotulos) {
+    const re = new RegExp(`(?:${rotulo})[^\\d\\n]{0,25}?(?<![A-Za-z\\d])(\\d{1,3}(?:[.,]\\d{1,2})?)\\s*(mm|cm|mil[ií]metros?|cent[ií]metros?)?`, 'gi');
+    for (const m of t.matchAll(re)) {
+      const n = medidaCm(m[1], m[2] && (/^m/i.test(m[2]) && !/^mil/i.test(m[2]) ? m[2] : /^mil/i.test(m[2]) ? 'mm' : 'cm'), min, max);
+      if (n !== null) return n;
+    }
+  }
+  return null;
+}
+
+// Valor de uma linha "Rótulo: valor" (ex.: "Material: Acetato")
+function valorDoRotulo(t, rotulo, max = 60) {
+  const m = new RegExp(`(?:^|\\n)\\s*[-•*]?\\s*(?:${rotulo})\\s*[:\\-–]\\s*([^\\n]{1,${max}})`, 'i').exec(t);
+  return m ? m[1].replace(/[.;]+$/, '').trim() : '';
+}
+
+const sem = (t) => String(t || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+
+// Primeira palavra da lista encontrada (palavra inteira, sem acento) -> forma de exibição
+function primeiraPalavra(t, lista) {
+  const base = sem(t);
+  let melhor = null;
+  for (const [padrao, exibir] of lista) {
+    const m = new RegExp(`(^|[^a-z0-9])(${padrao})([^a-z0-9]|$)`).exec(base);
+    if (m && (!melhor || m.index < melhor.index)) melhor = { index: m.index, exibir };
+  }
+  return melhor ? melhor.exibir : '';
+}
+
+const MATERIAIS = [['injetad[oa]', 'Injetado'], ['acetato', 'Acetato'], ['tr-?90', 'TR90'], ['bambu', 'Bambu'], ['madeira', 'Madeira'],
+  ['policarbonato', 'Policarbonato'], ['nylon', 'Nylon'], ['titanio', 'Titânio'], ['aco', 'Aço'], ['metal(ica?|ico)?', 'Metal'], ['plastico', 'Plástico']];
+const FORMATOS = [['mascara', 'Máscara'], ['aviador', 'Aviador'], ['redond[oa]', 'Redondo'], ['quadrad[oa]', 'Quadrado'], ['retangular', 'Retangular'],
+  ['gatinho', 'Gatinho'], ['cat ?eye', 'Gatinho'], ['oval', 'Oval'], ['hexagonal', 'Hexagonal'], ['geometric[oa]', 'Geométrico'],
+  ['clubmaster', 'Clubmaster'], ['escudo', 'Escudo'], ['borboleta', 'Borboleta'], ['oversized?', 'Oversized']];
+const ESTILOS = [['esportiv[oa]', 'Esportivo'], ['classic[oa]', 'Clássico'], ['vintage', 'Vintage'], ['retro', 'Retrô'], ['futurista', 'Futurista'],
+  ['fashion', 'Fashion'], ['casual', 'Casual'], ['executiv[oa]', 'Executivo']];
+const TIPOS = [['polarizad[oa]s?', 'Polarizado'], ['fotocromatic[oa]s?', 'Fotocromático'], ['espelhad[oa]s?', 'Espelhado'], ['degrade', 'Degradê'], ['uv ?400', 'UV400']];
+
+function extrairEspecificacoes(nome, descricao) {
+  // Lista numa linha só ("... * Ponte: 1 cm • Material: ..."): um item por linha
+  const t = String(descricao || '').replace(/\s+[•*]\s+/g, '\n');
+  const tudo = `${nome}\n${t}`;
+  // "Óculos X - Multicolors Espelhado - Injetado": os trechos depois do 1º " - " são cor e material
+  const trechos = String(nome || '').split(/\s+[-–|]\s+/).slice(1).map((x) => x.trim()).filter(Boolean);
+  const materialNome = trechos.map((x) => primeiraPalavra(x, MATERIAIS) && sem(x).split(' ').length <= 2 ? primeiraPalavra(x, MATERIAIS) : '').find(Boolean) || '';
+  const corNome = trechos.find((x) => !(primeiraPalavra(x, MATERIAIS) && sem(x).split(' ').length <= 2)) || '';
+
+  const material = valorDoRotulo(t, 'material(?: da arma[cç][aã]o)?|arma[cç][aã]o') || materialNome || primeiraPalavra(t, MATERIAIS);
+  const haste = valorDoRotulo(t, 'haste', 40);
+  const cor = valorDoRotulo(t, 'cor(?:es)?(?: da arma[cç][aã]o)?') || [corNome, haste && `haste ${haste.toLowerCase()}`].filter(Boolean).join(', ');
+  const formato = valorDoRotulo(t, 'formato(?: da lente)?') || primeiraPalavra(nome, FORMATOS) || primeiraPalavra(t, FORMATOS);
+  const estilo = valorDoRotulo(t, 'estilo') || primeiraPalavra(nome, ESTILOS) || primeiraPalavra(t, ESTILOS);
+  // Tipo = proteção da lente: "Proteção: UV400 (100% ...)" -> "UV400"; sem o rótulo, pelas palavras
+  const protecao = valorDoRotulo(t, 'prote[cç][aã]o(?: uv)?', 100).replace(/\s*\(.*$/, '');
+  const tipos = TIPOS.filter(([padrao]) => new RegExp(`(^|[^a-z0-9])(${padrao})([^a-z0-9]|$)`).test(sem(protecao || tudo))).map(([, exibir]) => exibir);
+  if (/polarizad/.test(sem(tudo)) && !tipos.includes('Polarizado')) tipos.unshift('Polarizado');
+  const g = sem(valorDoRotulo(t, 'g[eê]nero|sexo') || tudo);
+  const masc = /(^|[^a-z])masculin/.test(g);
+  const fem = /(^|[^a-z])feminin/.test(g);
+  const genero = /(^|[^a-z])unisse?x/.test(g) || (masc && fem) ? 'UNISSEX' : masc ? 'MASCULINO' : fem ? 'FEMININO' : '';
+
+  return {
+    diametro_cm: medidaDoTexto(t, ['di[aâ]metro(?: da lente)?', 'largura d[ao]s? lentes?', 'tamanho d[ao]s? lentes?', '(?<!altura d[ao]s? )lentes?'], 3, 9),
+    ponte_cm: medidaDoTexto(t, ['ponte'], 0.5, 3.5),
+    largura_total_cm: medidaDoTexto(t, ['largura (?:total|frontal|da arma[cç][aã]o|da frente)', 'frente', 'frontal'], 10, 20),
+    material: material.slice(0, 60),
+    cor_armacao: cor.slice(0, 100),
+    formato: formato.slice(0, 100),
+    estilo: estilo.slice(0, 100),
+    tipo: (tipos.length ? tipos.slice(0, 2).join(' ') : protecao).slice(0, 100),
+    genero,
+  };
+}
+
+// Código no fim do link da Nuvemshop (".../oculos-nitro-djy8z/" -> "DJY8Z"): letras e números juntos
+function codigoDoLink(urlPagina) {
+  try {
+    const u = new URL(urlPagina);
+    const m = /\/produtos?\/[^/]*-([a-z0-9]{4,8})\/?$/i.exec(u.pathname);
+    return m && /\d/.test(m[1]) && /[a-z]/i.test(m[1]) ? m[1].toUpperCase() : '';
+  } catch {
+    return '';
+  }
+}
+
 function extrairDadosProduto(html, urlPagina) {
   const pagina = String(html || '');
   const metas = metaTags(pagina);
@@ -312,14 +433,16 @@ function extrairDadosProduto(html, urlPagina) {
   const mpn = texto(ld.mpn) || metas['itemprop:mpn'] || '';
   const gtin = texto(ld.gtin13 || ld.gtin || ld.gtin12 || ld.gtin14 || ld.gtin8) || '';
   const marca = texto(ld.brand) || metas['product:brand'] || '';
-  const referencia = (sku || mpn || texto(ld.productID) || gtin).slice(0, 100);
+  const referencia = (sku || mpn || texto(ld.productID) || gtin || codigoDoLink(urlPagina)).slice(0, 100);
 
   return {
     nome,
+    nome_fornecedor: nome,
     preco_custo: preco,
     codigo_fornecedor: referencia,
     referencias: { sku, mpn, gtin, marca },
     fornecedor: (loja || host).slice(0, 120),
+    ...extrairEspecificacoes(nome, descricaoDoProduto(pagina, ld, metas)),
     imagens: [...urlsImagens(ld.image, urlPagina), ...urlsImagens(metas['og:image'], urlPagina)]
       .filter((u, i, todas) => todas.indexOf(u) === i).slice(0, 4),
   };
@@ -334,4 +457,4 @@ async function importarProduto(url, opcoes) {
   return { ...dados, link_fornecedor: lerUrlProduto(url).href };
 }
 
-module.exports = { importarProduto, baixarPagina, extrairDadosProduto, lerPrecoTexto, enderecoBloqueado, ErroImportacao };
+module.exports = { importarProduto, baixarPagina, extrairDadosProduto, extrairEspecificacoes, lerPrecoTexto, enderecoBloqueado, ErroImportacao };

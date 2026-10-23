@@ -19,10 +19,11 @@ function extrairFuncao(nome) {
 }
 
 const funcoes = ['escapeHtml', 'linkSeguro', 'botaoLinkFornecedor', 'variacaoCusto', 'htmlVariacao', 'htmlUltimaCompra',
-  'camposDaImportacao', 'associarFotosPorSku', 'montarResumoMaleta', 'calcularAcerto'];
+  'formatarMedida', 'camposDaImportacao', 'associarFotosPorSku', 'montarResumoMaleta', 'calcularAcerto'];
 const ctx = vm.createContext({ Number, String, Math, Map, Set, Object, URL, Intl });
 vm.runInContext(`
   const MAX_FOTOS = 4;
+  const CAMPOS_MEDIDA = ['diametro_cm', 'ponte_cm', 'largura_total_cm'];
   const formatarMoeda = (valor) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(valor || 0);
   const formatarDia = (iso) => { const m = /^(\\d{4})-(\\d{2})-(\\d{2})/.exec(String(iso || '')); return m ? m[3] + '/' + m[2] + '/' + m[1] : '-'; };
   ${funcoes.map(extrairFuncao).join('\n')}
@@ -69,7 +70,19 @@ describe('painel: última compra e variação de custo', () => {
 describe('painel: importação pelo link', () => {
   it('converte os dados importados para os campos do formulário', () => {
     const c = ctx.camposDaImportacao({ nome: 'Aviador', preco_custo: 79.9, codigo_fornecedor: 'CL-1', fornecedor: 'Clush', link_fornecedor: 'https://clush.com.br/p' });
-    assert.deepEqual({ ...c }, { nome: 'Aviador', preco_custo: '79.90', codigo_fornecedor: 'CL-1', fornecedor: 'Clush', link_fornecedor: 'https://clush.com.br/p' });
+    assert.deepEqual({ ...c }, {
+      nome: 'Aviador', nome_fornecedor: 'Aviador', preco_custo: '79.90', codigo_fornecedor: 'CL-1', fornecedor: 'Clush', link_fornecedor: 'https://clush.com.br/p',
+      formato: '', estilo: '', cor_armacao: '', material: '', tipo: '', genero: '', diametro_cm: '', ponte_cm: '', largura_total_cm: '',
+    });
+    // Especificações da descrição: medidas com vírgula, gênero só se for um código válido
+    const e = ctx.camposDaImportacao({
+      nome: 'Máscara Nitro', nome_fornecedor: 'Máscara Nitro - Injetado', diametro_cm: 6.2, ponte_cm: 1, largura_total_cm: 16,
+      material: 'Injetado', formato: 'Máscara', tipo: 'UV400', genero: 'UNISSEX',
+    });
+    assert.equal(e.nome_fornecedor, 'Máscara Nitro - Injetado');
+    assert.deepEqual([e.diametro_cm, e.ponte_cm, e.largura_total_cm], ['6,2', '1,0', '16,0']);
+    assert.deepEqual([e.material, e.formato, e.tipo, e.genero], ['Injetado', 'Máscara', 'UV400', 'UNISSEX']);
+    assert.equal(ctx.camposDaImportacao({ genero: '<b>' }).genero, '');
     const vazio = ctx.camposDaImportacao({ nome: 'X', preco_custo: null, link_fornecedor: 'javascript:alert(1)' });
     assert.equal(vazio.preco_custo, '');
     assert.equal(vazio.link_fornecedor, '');

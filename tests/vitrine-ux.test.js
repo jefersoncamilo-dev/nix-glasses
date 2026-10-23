@@ -237,7 +237,7 @@ describe('nome curto: painel', () => {
   it('vem depois das colunas antigas (e antes do gênero e da compra), para planilhas sem cabeçalho manterem a ordem', () => {
     const html = fs.readFileSync(path.join(__dirname, '..', 'admin', 'index.html'), 'utf8');
     const colunas = vm.runInNewContext(`${html.match(/const COLUNAS_LOTE = \[[\s\S]*?\n {4}\];/)[0]}; COLUNAS_LOTE`);
-    assert.deepEqual(JSON.parse(JSON.stringify(colunas.slice(-8).map((c) => c.campo))), ['tipo', 'nome_curto', 'genero', 'quantidade', 'pedido_fornecedor', 'data_compra', 'tamanho', 'grade']);
+    assert.deepEqual(JSON.parse(JSON.stringify(colunas.slice(-9).map((c) => c.campo))), ['tipo', 'nome_curto', 'genero', 'quantidade', 'pedido_fornecedor', 'data_compra', 'tamanho', 'grade', 'nome_fornecedor']);
     assert.match(html, /\['nome_curto', 'fornecedor', 'codigo_fornecedor'/);
   });
 });
