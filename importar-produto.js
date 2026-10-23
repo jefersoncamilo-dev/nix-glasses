@@ -305,6 +305,9 @@ function textoDoHtml(html) {
 // mais a do JSON-LD e da meta tag. Repetições não atrapalham a leitura.
 function descricaoDoProduto(pagina, ld, metas) {
   const partes = [];
+  // Seção "Especificações Técnicas" onde estiver na página (Clush: <strong> + <ul><li><strong>Rótulo:</strong> valor)
+  const secao = /especifica(?:ç|c|&ccedil;)(?:õ|o|&otilde;)es\s+t(?:é|e|&eacute;)cnicas/i.exec(pagina);
+  if (secao) partes.push(textoDoHtml(pagina.slice(secao.index, secao.index + 15000).split(/<(?:form|footer|script)\b/i)[0]));
   const bloco = /<(div|section)\b[^>]*(?:class|id|data-store)\s*=\s*["'][^"']*(product-description|product__description|product-single__description|woocommerce-product-details__short-description|description-content|descricao)[^"']*["'][^>]*>/i.exec(pagina);
   if (bloco) partes.push(textoDoHtml(pagina.slice(bloco.index + bloco[0].length, bloco.index + bloco[0].length + 20000).split(/<(?:form|footer|script)\b/i)[0]));
   partes.push(textoDoHtml(texto(ld.description) ? String(ld.description) : ''));
@@ -357,25 +360,34 @@ const MATERIAIS = [['injetad[oa]', 'Injetado'], ['acetato', 'Acetato'], ['tr-?90
   ['policarbonato', 'Policarbonato'], ['nylon', 'Nylon'], ['titanio', 'Titânio'], ['aco', 'Aço'], ['metal(ica?|ico)?', 'Metal'], ['plastico', 'Plástico']];
 const FORMATOS = [['mascara', 'Máscara'], ['aviador', 'Aviador'], ['redond[oa]', 'Redondo'], ['quadrad[oa]', 'Quadrado'], ['retangular', 'Retangular'],
   ['gatinho', 'Gatinho'], ['cat ?eye', 'Gatinho'], ['oval', 'Oval'], ['hexagonal', 'Hexagonal'], ['geometric[oa]', 'Geométrico'],
-  ['clubmaster', 'Clubmaster'], ['escudo', 'Escudo'], ['borboleta', 'Borboleta'], ['oversized?', 'Oversized']];
+  ['clubmaster', 'Clubmaster'], ['escudo|shield', 'Shield'], ['borboleta', 'Borboleta'], ['oversized?', 'Oversized']];
 const ESTILOS = [['esportiv[oa]', 'Esportivo'], ['classic[oa]', 'Clássico'], ['vintage', 'Vintage'], ['retro', 'Retrô'], ['futurista', 'Futurista'],
   ['fashion', 'Fashion'], ['casual', 'Casual'], ['executiv[oa]', 'Executivo']];
 const TIPOS = [['polarizad[oa]s?', 'Polarizado'], ['fotocromatic[oa]s?', 'Fotocromático'], ['espelhad[oa]s?', 'Espelhado'], ['degrade', 'Degradê'], ['uv ?400', 'UV400']];
 
 function extrairEspecificacoes(nome, descricao) {
   // Lista numa linha só ("... * Ponte: 1 cm • Material: ..."): um item por linha
-  const t = String(descricao || '').replace(/\s+[•*]\s+/g, '\n');
-  const tudo = `${nome}\n${t}`;
+  // e rótulos conhecidos no meio da linha (descrição do JSON-LD sem quebras) também começam linha
+  const t = String(descricao || '').replace(/\s+[•*]\s+/g, '\n')
+    .replace(/(?<!\b(?:d[aeo]s?|cor|material))[ \t]+(?=(?:modelo|cor(?: d[ao] [a-zçã]+)?|estilo|tamanho|di[aâ]metro[^:\n]{0,15}|ponte|largura[^:\n]{0,15}|hastes?|material[^:\n]{0,15}|formatos?[^:\n]{0,30}|prote[cç][aã]o[^:\n]{0,5}|g[eê]nero|lente|tecnologia)\s*:)/gi, '\n');
+  // Linhas sobre o rosto ("Formatos de rosto compatíveis: Oval, quadrado") e sobre a lente
+  // não dizem o formato nem o material da armação
+  const linhas = t.split('\n');
+  const semRosto = linhas.filter((l) => !/rosto/i.test(l)).join('\n');
+  const semLente = linhas.filter((l) => !/rosto|lente/i.test(l)).join('\n');
+  const tudo = `${nome}\n${semRosto}`;
   // "Óculos X - Multicolors Espelhado - Injetado": os trechos depois do 1º " - " são cor e material
   const trechos = String(nome || '').split(/\s+[-–|]\s+/).slice(1).map((x) => x.trim()).filter(Boolean);
   const materialNome = trechos.map((x) => primeiraPalavra(x, MATERIAIS) && sem(x).split(' ').length <= 2 ? primeiraPalavra(x, MATERIAIS) : '').find(Boolean) || '';
   const corNome = trechos.find((x) => !(primeiraPalavra(x, MATERIAIS) && sem(x).split(' ').length <= 2)) || '';
 
-  const material = valorDoRotulo(t, 'material(?: da arma[cç][aã]o)?|arma[cç][aã]o') || materialNome || primeiraPalavra(t, MATERIAIS);
-  const haste = valorDoRotulo(t, 'haste', 40);
-  const cor = valorDoRotulo(t, 'cor(?:es)?(?: da arma[cç][aã]o)?') || [corNome, haste && `haste ${haste.toLowerCase()}`].filter(Boolean).join(', ');
-  const formato = valorDoRotulo(t, 'formato(?: da lente)?') || primeiraPalavra(nome, FORMATOS) || primeiraPalavra(t, FORMATOS);
-  const estilo = valorDoRotulo(t, 'estilo') || primeiraPalavra(nome, ESTILOS) || primeiraPalavra(t, ESTILOS);
+  const material = valorDoRotulo(t, 'material(?: da arma[cç][aã]o)?|arma[cç][aã]o') || materialNome || primeiraPalavra(semLente, MATERIAIS);
+  const haste = valorDoRotulo(t, 'hastes?', 40);
+  const corLente = valorDoRotulo(t, 'cor d[ao]s? lentes?', 40);
+  const cor = [valorDoRotulo(t, 'cor(?:es)?(?: da arma[cç][aã]o)?') || corNome, haste && `haste ${haste.toLowerCase()}`, corLente && `lente ${corLente.toLowerCase()}`]
+    .filter(Boolean).join(', ');
+  const formato = valorDoRotulo(t, 'formato(?: da (?:lente|arma[cç][aã]o))?') || primeiraPalavra(nome, FORMATOS) || primeiraPalavra(semRosto, FORMATOS);
+  const estilo = valorDoRotulo(t, 'estilo') || primeiraPalavra(nome, ESTILOS) || primeiraPalavra(semRosto, ESTILOS);
   // Tipo = proteção da lente: "Proteção: UV400 (100% ...)" -> "UV400"; sem o rótulo, pelas palavras
   const protecao = valorDoRotulo(t, 'prote[cç][aã]o(?: uv)?', 100).replace(/\s*\(.*$/, '');
   const tipos = TIPOS.filter(([padrao]) => new RegExp(`(^|[^a-z0-9])(${padrao})([^a-z0-9]|$)`).test(sem(protecao || tudo))).map(([, exibir]) => exibir);
