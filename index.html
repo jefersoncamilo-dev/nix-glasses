@@ -40,7 +40,9 @@
     @keyframes slideIn { from { opacity: 0; transform: translateX(100%); } to { opacity: 1; transform: translateX(0); } }
     input, select, textarea { color-scheme: dark; }
     /* Nas áreas brancas (catálogo e janelas) os campos ficam claros, não cinza-escuro */
-    #catalogo select, #modalMaleta input, #modalCliente input { color-scheme: light; background-color: #fff; }
+    #modalMaleta input, #modalCliente input { color-scheme: light; background-color: #fff; }
+    /* O catálogo é escuro: os seletores (tamanho, gênero) acompanham */
+    #catalogo select { color-scheme: dark; background-color: #1f1f1f; }
     .foto-nav { opacity: 0; transition: opacity 0.2s ease; }
     .glass-card:hover .foto-nav, .foto-nav:focus-visible { opacity: 1; }
     .miniaturas { scrollbar-width: thin; }
@@ -66,7 +68,7 @@
     .btn-lg { min-height: 48px; padding: 0 2rem; font-size: 1rem; }
     @media (min-width: 640px) { .btn-sm { padding: 0 0.75rem; font-size: 0.875rem; } }
     /* Primário: o prateado do botão "Coleção" do topo */
-    .btn-primario, .btn.atalho-topo[aria-pressed="true"]:not(:disabled), .filtro-pilula[aria-pressed="true"] { background: linear-gradient(180deg, #f5f5f5 0%, #c9c9c9 45%, #9a9a9a 55%, #d7d7d7 100%); color: #161616; border-color: rgba(0,0,0,0.12); box-shadow: 0 1px 2px rgba(0,0,0,0.25), inset 0 1px 0 rgba(255,255,255,0.7); }
+    .btn-primario, .btn.atalho-topo[aria-pressed="true"]:not(:disabled), .filtro-pilula[aria-pressed="true"], .chip-formato[aria-pressed="true"] { background: linear-gradient(180deg, #f5f5f5 0%, #c9c9c9 45%, #9a9a9a 55%, #d7d7d7 100%); color: #161616; border-color: rgba(0,0,0,0.12); box-shadow: 0 1px 2px rgba(0,0,0,0.25), inset 0 1px 0 rgba(255,255,255,0.7); }
     .btn-primario:hover:not(:disabled), .atalho-topo[aria-pressed="true"]:hover { filter: brightness(1.08); }
     /* Encomenda: grafite com brilho prateado na borda */
     .btn-encomenda { background: linear-gradient(180deg, #3a3a3a 0%, #1c1c1c 100%); color: #f5f5f5; border-color: #8f8f8f; box-shadow: 0 1px 2px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.15); }
@@ -105,10 +107,37 @@
     .filtro-pilula { touch-action: manipulation; -webkit-tap-highlight-color: transparent; transition: background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease; }
     #barraMaleta { transition: transform 0.25s ease, opacity 0.25s ease; }
     #barraMaleta.escondida { transform: translateY(140%); opacity: 0; pointer-events: none; }
+    /* Barra flutuante da maleta: vidro escuro discreto, com o contador à esquerda e a
+       ação "Ver Maleta" (prateada) à direita. Respeita a área do gesto do iPhone. */
+    .btn.barra-maleta { bottom: calc(0.75rem + env(safe-area-inset-bottom, 0px)); min-height: 56px; padding: 0.375rem 0.375rem 0.375rem 1rem; border-radius: 1rem; background: rgba(28,28,28,0.94); color: #f5f5f5; border-color: rgba(255,255,255,0.14); box-shadow: 0 12px 32px rgba(0,0,0,0.45); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); }
+    .btn.barra-maleta:active { transform: none; }
+    .barra-maleta-acao { display: inline-flex; align-items: center; gap: 0.25rem; min-height: 44px; padding: 0 1rem; border-radius: 0.75rem; background: linear-gradient(180deg, #f5f5f5 0%, #c9c9c9 45%, #9a9a9a 55%, #d7d7d7 100%); color: #161616; font-weight: 700; white-space: nowrap; }
+    .barra-maleta.vazia .barra-maleta-acao { background: transparent; color: #e5e5e5; border: 1px solid rgba(255,255,255,0.25); }
     @media (prefers-reduced-motion: reduce) {
       .guia-cutuca { animation: none; }
       #barraMaleta { transition: none; }
     }
+    /* Chips de formato: uma fileira que rola para o lado; um toque filtra.
+       A borda direita esmaece para mostrar que há mais formatos. */
+    .chips-formato { display: flex; gap: 0.5rem; overflow-x: auto; scroll-snap-type: x proximity; scrollbar-width: none; -webkit-overflow-scrolling: touch; overscroll-behavior-x: contain; -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent); mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent); }
+    .chips-formato::-webkit-scrollbar { display: none; }
+    .chip-formato { flex: none; scroll-snap-align: start; display: inline-flex; align-items: center; min-height: 36px; padding: 0 0.95rem; border-radius: 9999px; border: 1px solid rgba(255,255,255,0.16); background: rgba(255,255,255,0.04); color: #d4d4d4; font-size: 0.8125rem; font-weight: 500; white-space: nowrap; cursor: pointer; touch-action: manipulation; -webkit-tap-highlight-color: transparent; transition: background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease; }
+    .chip-formato:last-child { margin-right: 28px; }
+    .chip-formato:not([aria-pressed="true"]):hover { border-color: rgba(255,255,255,0.32); color: #fff; }
+    .chip-formato:focus-visible { outline: 2px solid #8f8f8f; outline-offset: 2px; }
+    /* Catálogo escuro: o card é uma moldura neutra, a foto ganha respiro e cantos
+       arredondados; nome e materiais em cinza, preço e botão em destaque. */
+    .card-produto { background: var(--nix-card); border: 1px solid var(--nix-border); }
+    .card-produto:hover { border-color: rgba(255,255,255,0.18); }
+    .card-produto .foto-moldura { background: #2c2c2c; }
+    .card-produto .btn-na-maleta { background: transparent; color: #e5e5e5; border-color: rgba(229,229,229,0.45); }
+    .card-produto .btn-na-maleta:hover:not(:disabled) { background: rgba(255,255,255,0.08); }
+    #guiaCatalogo strong { color: #e5e5e5; }
+    /* Confirmação do "Adicionar à Maleta": o botão vira um check verde por 1 segundo */
+    .btn.btn-maleta.btn-sucesso, .btn.btn-maleta.btn-sucesso:hover { background: #16a34a; border-color: #16a34a; color: #fff; box-shadow: 0 0 0 4px rgba(22,163,74,0.22); filter: none; }
+    .btn-sucesso svg { animation: checkEntra 0.32s cubic-bezier(0.2, 1.4, 0.4, 1); }
+    @keyframes checkEntra { from { transform: scale(0.3); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+    @media (prefers-reduced-motion: reduce) { .btn-sucesso svg { animation: none; } .chip-formato { transition: none; } }
   </style>
 </head>
 <body class="min-h-screen" style="background:var(--nix-bg);color:var(--nix-text)">
@@ -155,58 +184,88 @@
         <a href="#catalogo" data-atalho-filtro="DISPONIVEL" aria-pressed="false" class="btn btn-lg btn-contorno-escuro atalho-topo">Pronta Entrega <span class="hidden sm:inline font-normal opacity-70">· prove em casa</span></a>
         <a href="#catalogo" data-atalho-filtro="SOB_ENCOMENDA" aria-pressed="false" class="btn btn-lg btn-contorno-escuro atalho-topo">Sob Encomenda <span class="hidden sm:inline font-normal opacity-70">· encontre seu estilo</span></a>
       </div>
-      <!-- Como funciona: uma linha só, sem caixas -->
-      <ol class="mt-6 sm:mt-8 flex items-center justify-center gap-2 sm:gap-4 text-[11px] sm:text-sm" style="color:var(--nix-muted)" aria-label="Como funciona">
-        <li class="flex items-center gap-1.5"><span class="chrome-btn inline-flex w-5 h-5 rounded-full items-center justify-center text-[10px] font-bold">1</span>Escolha</li>
-        <li aria-hidden="true" class="opacity-40">—</li>
-        <li class="flex items-center gap-1.5"><span class="chrome-btn inline-flex w-5 h-5 rounded-full items-center justify-center text-[10px] font-bold">2</span>Envie a maleta</li>
-        <li aria-hidden="true" class="opacity-40">—</li>
-        <li class="flex items-center gap-1.5"><span class="chrome-btn inline-flex w-5 h-5 rounded-full items-center justify-center text-[10px] font-bold">3</span>Prove em casa</li>
+    </div>
+  </section>
+
+  <!-- Como funciona: 3 passos com ícones de linha, logo abaixo do banner.
+       No celular os três ficam lado a lado (bloco baixo, o catálogo continua perto). -->
+  <section id="comoFunciona" class="border-y" style="background:#121212;border-color:var(--nix-border)" aria-labelledby="comoFuncionaTitulo">
+    <div class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-5 sm:py-9">
+      <h2 id="comoFuncionaTitulo" class="text-center text-[10px] sm:text-xs font-semibold uppercase mb-4 sm:mb-6" style="letter-spacing:0.3em;color:var(--nix-muted)">Como funciona</h2>
+      <ol class="grid grid-cols-3 gap-3 sm:gap-10">
+        <li data-passo="1" class="flex flex-col items-center text-center">
+          <span class="passo-icone flex items-center justify-center w-11 h-11 sm:w-14 sm:h-14 rounded-full border text-neutral-200" style="border-color:rgba(255,255,255,0.18)" aria-hidden="true">
+            <svg class="w-5 h-5 sm:w-6 sm:h-6" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><rect x="3" y="7" width="18" height="13" rx="2"/><path d="M8.5 7V5.5A1.5 1.5 0 0110 4h4a1.5 1.5 0 011.5 1.5V7M3 12.5h18M10.5 12.5v1.5h3v-1.5"/></svg>
+          </span>
+          <span class="mt-2 sm:mt-3 text-xs sm:text-base font-semibold text-white leading-tight">Monte a Maleta</span>
+          <span class="mt-1 text-[11px] sm:text-sm leading-snug" style="color:var(--nix-muted)">Escolha seus modelos favoritos</span>
+        </li>
+        <li data-passo="2" class="flex flex-col items-center text-center">
+          <span class="passo-icone flex items-center justify-center w-11 h-11 sm:w-14 sm:h-14 rounded-full border text-neutral-200" style="border-color:rgba(255,255,255,0.18)" aria-hidden="true">
+            <svg class="w-5 h-5 sm:w-6 sm:h-6" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="M3 10.5L12 3.5l9 7"/><path d="M5.5 9v10.5a1 1 0 001 1H10v-6h4v6h3.5a1 1 0 001-1V9"/></svg>
+          </span>
+          <span class="mt-2 sm:mt-3 text-xs sm:text-base font-semibold text-white leading-tight">Receba em Casa</span>
+          <span class="mt-1 text-[11px] sm:text-sm leading-snug" style="color:var(--nix-muted)">Experimente sem compromisso</span>
+        </li>
+        <li data-passo="3" class="flex flex-col items-center text-center">
+          <span class="passo-icone flex items-center justify-center w-11 h-11 sm:w-14 sm:h-14 rounded-full border text-neutral-200" style="border-color:rgba(255,255,255,0.18)" aria-hidden="true">
+            <svg class="w-5 h-5 sm:w-6 sm:h-6" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><rect x="2.5" y="5.5" width="19" height="13" rx="2"/><path d="M2.5 10h19M6.5 14.5h4"/></svg>
+          </span>
+          <span class="mt-2 sm:mt-3 text-xs sm:text-base font-semibold text-white leading-tight">Pague o que Ficar</span>
+          <span class="mt-1 text-[11px] sm:text-sm leading-snug" style="color:var(--nix-muted)">Devolva o restante com facilidade</span>
+        </li>
       </ol>
     </div>
   </section>
 
-  <!-- Catálogo -->
-  <section id="catalogo" class="pb-16 lg:pb-24 bg-white scroll-mt-16">
+  <!-- Catálogo (fundo escuro, como o resto da marca) -->
+  <section id="catalogo" class="pb-24 lg:pb-24 scroll-mt-16" style="background:var(--nix-bg)">
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
       <!-- Filtros: ficam presos abaixo do topo enquanto a cliente rola os modelos -->
-      <div id="barraFiltros" class="sticky top-16 z-30 -mx-4 sm:-mx-6 lg:-mx-8 px-4 sm:px-6 lg:px-8 pt-3 pb-2 sm:pt-8 sm:pb-4 mb-2 sm:mb-4 bg-white/95 border-b border-gray-100 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between" style="backdrop-filter:blur(8px)">
-        <h2 class="hidden sm:block text-2xl sm:text-3xl font-bold text-gray-900 text-left">Nossa Coleção</h2>
+      <div id="barraFiltros" class="sticky top-16 z-30 -mx-4 sm:-mx-6 lg:-mx-8 px-4 sm:px-6 lg:px-8 pt-3 pb-2.5 sm:pt-8 sm:pb-4 mb-2 sm:mb-4 border-b flex flex-col gap-2.5 sm:gap-4" style="background:rgba(22,22,22,0.94);border-color:var(--nix-border);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px)">
+       <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+        <h2 class="hidden sm:block text-2xl sm:text-3xl font-bold text-white text-left">Nossa Coleção</h2>
         <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-4">
           <input type="hidden" id="filtroStatus" value="">
-          <div id="filtroPilulas" class="flex gap-1 p-1 rounded-full bg-gray-100" role="group" aria-label="Mostrar">
-            <button type="button" data-filtro="" aria-pressed="true" class="filtro-pilula flex-auto px-3 py-2 rounded-full text-xs sm:text-sm font-medium text-gray-700 border border-transparent">Coleção <span data-contagem="" class="opacity-60"></span></button>
-            <button type="button" data-filtro="DISPONIVEL" aria-pressed="false" class="filtro-pilula flex-auto px-2 py-2 rounded-full text-xs sm:text-sm font-medium text-gray-700 border border-transparent whitespace-nowrap">Pronta Entrega <span data-contagem="DISPONIVEL" class="opacity-60"></span></button>
-            <button type="button" data-filtro="SOB_ENCOMENDA" aria-pressed="false" class="filtro-pilula flex-auto px-2 py-2 rounded-full text-xs sm:text-sm font-medium text-gray-700 border border-transparent whitespace-nowrap"><span class="sm:hidden">Encomenda</span><span class="hidden sm:inline">Sob Encomenda</span> <span data-contagem="SOB_ENCOMENDA" class="opacity-60"></span></button>
+          <div id="filtroPilulas" class="flex gap-1 p-1 rounded-full border" style="background:rgba(255,255,255,0.05);border-color:var(--nix-border)" role="group" aria-label="Mostrar">
+            <button type="button" data-filtro="" aria-pressed="true" class="filtro-pilula flex-auto px-3 py-2 rounded-full text-xs sm:text-sm font-medium text-neutral-300 border border-transparent">Coleção <span data-contagem="" class="opacity-60"></span></button>
+            <button type="button" data-filtro="DISPONIVEL" aria-pressed="false" class="filtro-pilula flex-auto px-2 py-2 rounded-full text-xs sm:text-sm font-medium text-neutral-300 border border-transparent whitespace-nowrap">Pronta Entrega <span data-contagem="DISPONIVEL" class="opacity-60"></span></button>
+            <button type="button" data-filtro="SOB_ENCOMENDA" aria-pressed="false" class="filtro-pilula flex-auto px-2 py-2 rounded-full text-xs sm:text-sm font-medium text-neutral-300 border border-transparent whitespace-nowrap"><span class="sm:hidden">Encomenda</span><span class="hidden sm:inline">Sob Encomenda</span> <span data-contagem="SOB_ENCOMENDA" class="opacity-60"></span></button>
           </div>
-          <select id="filtroFormato" class="hidden w-full sm:w-auto px-3 sm:px-4 py-1.5 sm:py-2 text-sm text-gray-700 border border-gray-200 rounded-full focus:outline-none focus:ring-2 focus:ring-gray-400" aria-label="Formato">
-            <option value="">Todos os formatos</option>
-          </select>
-          <select id="filtroTamanho" class="hidden w-full sm:w-auto px-3 sm:px-4 py-1.5 sm:py-2 text-sm text-gray-700 border border-gray-200 rounded-full focus:outline-none focus:ring-2 focus:ring-gray-400" aria-label="Tamanho">
+          <!-- Formato escolhido nos chips (abaixo); o catálogo lê este valor -->
+          <input type="hidden" id="filtroFormato" value="">
+          <select id="filtroTamanho" class="hidden w-full sm:w-auto px-3 sm:px-4 py-1.5 sm:py-2 text-sm text-neutral-200 border border-white/15 rounded-full focus:outline-none focus:ring-2 focus:ring-neutral-500" aria-label="Tamanho">
             <option value="">Todos os tamanhos</option>
           </select>
-          <select id="filtroGenero" class="hidden w-full sm:w-auto px-3 sm:px-4 py-1.5 sm:py-2 text-sm text-gray-700 border border-gray-200 rounded-full focus:outline-none focus:ring-2 focus:ring-gray-400" aria-label="Gênero">
+          <select id="filtroGenero" class="hidden w-full sm:w-auto px-3 sm:px-4 py-1.5 sm:py-2 text-sm text-neutral-200 border border-white/15 rounded-full focus:outline-none focus:ring-2 focus:ring-neutral-500" aria-label="Gênero">
             <option value="">Todos os gêneros</option>
           </select>
         </div>
+       </div>
+        <!-- Chips de formato: rolagem lateral, um toque filtra (preenchidos com os formatos cadastrados) -->
+        <div id="chipsFormato" class="chips-formato hidden -mx-4 px-4 sm:mx-0 sm:px-0" role="group" aria-label="Formato"></div>
       </div>
       <!-- Orientação: uma linha que muda com o filtro (some quando não há o que dizer) -->
-      <p id="guiaCatalogo" class="mb-3 sm:mb-6 text-xs sm:text-sm text-gray-500" role="status"><span id="guiaCatalogoTexto"></span></p>
+      <p id="guiaCatalogo" class="mb-3 sm:mb-6 text-xs sm:text-sm text-neutral-400" role="status"><span id="guiaCatalogoTexto"></span></p>
       <div id="catalogoGrid" class="grid grid-cols-3 gap-2 sm:gap-6">
         <!-- Cards inseridos via JS -->
       </div>
       <div id="emptyState" class="hidden text-center py-12">
-        <svg class="mx-auto h-16 w-16 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4"/></svg>
-        <h3 class="mt-4 text-lg font-medium text-gray-900">Nenhum produto encontrado</h3>
-        <p class="mt-2 text-gray-500">Tente alterar os filtros ou volte mais tarde.</p>
+        <svg class="mx-auto h-16 w-16 text-neutral-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4"/></svg>
+        <h3 class="mt-4 text-lg font-medium text-white">Nenhum produto encontrado</h3>
+        <p class="mt-2 text-neutral-400">Tente alterar os filtros ou volte mais tarde.</p>
       </div>
     </div>
   </section>
 
-  <!-- Atalho para a maleta: aparece quando já há modelos escolhidos -->
-  <button type="button" id="barraMaleta" class="escondida fixed z-40 bottom-4 left-4 right-4 sm:left-auto sm:right-6 sm:w-auto btn btn-primario justify-between gap-4 pl-5 pr-4 shadow-xl" aria-label="Abrir minha maleta">
-    <span id="barraMaletaTexto"></span>
-    <span class="inline-flex items-center gap-1">Ver maleta <svg class="guia-cutuca w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M9 5l7 7-7 7"/></svg></span>
+  <!-- Barra flutuante da maleta: com modelos escolhidos fica sempre à vista; com a maleta
+       vazia aparece no celular depois que a cliente rola a página. Toque em qualquer ponto abre a gaveta. -->
+  <button type="button" id="barraMaleta" class="escondida vazia btn barra-maleta fixed z-40 left-3 right-3 sm:left-auto sm:right-6 sm:w-auto justify-between gap-3" aria-label="Abrir minha maleta" aria-controls="modalMaleta">
+    <span class="flex items-center gap-2.5 min-w-0">
+      <svg class="w-5 h-5 flex-none text-neutral-300" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="7" width="18" height="13" rx="2"/><path d="M8.5 7V5.5A1.5 1.5 0 0110 4h4a1.5 1.5 0 011.5 1.5V7M3 12.5h18M10.5 12.5v1.5h3v-1.5"/></svg>
+      <span id="barraMaletaTexto" class="truncate text-sm font-medium"></span>
+    </span>
+    <span class="barra-maleta-acao text-sm">Ver Maleta <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M9 5l7 7-7 7"/></svg></span>
   </button>
 
   <!-- Sobre e contato -->
@@ -424,6 +483,7 @@
     const emptyState = document.getElementById('emptyState');
     const filtroStatus = document.getElementById('filtroStatus');
     const filtroFormato = document.getElementById('filtroFormato');
+    const chipsFormato = document.getElementById('chipsFormato');
     const filtroGenero = document.getElementById('filtroGenero');
     const filtroTamanho = document.getElementById('filtroTamanho');
     const modalMaleta = document.getElementById('modalMaleta');
@@ -555,19 +615,26 @@
       }
     }
 
-    // Preencher filtro de formato
+    // Chips de formato (óculos) ou categoria (roupas/geral): uma pílula por formato
+    // cadastrado nos produtos, em ordem alfabética, depois de "Todos os formatos".
+    // O escolhido fica em #filtroFormato (campo escondido), que o catálogo lê.
     function preencherFiltroFormato() {
-      const formatos = [...new Set(produtos.map(p => p.formato).filter(Boolean))];
-      filtroFormato.innerHTML = `<option value="">${rotulos.formatos}</option>`;
-      filtroFormato.setAttribute('aria-label', rotulos.formato);
-      formatos.forEach(f => {
-        const opt = document.createElement('option');
-        opt.value = f;
-        opt.textContent = f;
-        filtroFormato.appendChild(opt);
-      });
-      // Com um formato só (ou nenhum) o filtro não ajuda: fica escondido
-      filtroFormato.classList.toggle('hidden', formatos.length < 2);
+      const formatos = [...new Set(produtos.map(p => p.formato).filter(Boolean))].sort((a, b) => String(a).localeCompare(String(b), 'pt-BR'));
+      // O formato escolhido sumiu do catálogo (produto vendido/apagado): volta para "Todos"
+      if (!formatos.includes(filtroFormato.value)) filtroFormato.value = '';
+      chipsFormato.setAttribute('aria-label', rotulos.formato);
+      chipsFormato.innerHTML = ['', ...formatos].map(f =>
+        `<button type="button" data-formato="${escapeHtml(f)}" aria-pressed="${f === filtroFormato.value}" class="chip-formato">${escapeHtml(f || rotulos.formatos)}</button>`
+      ).join('');
+      // Com um formato só (ou nenhum) o filtro não ajuda: a fileira fica escondida
+      chipsFormato.classList.toggle('hidden', formatos.length < 2);
+    }
+
+    // Um toque no chip filtra o catálogo e marca o chip escolhido
+    function aplicarFiltroFormato(formato) {
+      filtroFormato.value = formato;
+      chipsFormato.querySelectorAll('[data-formato]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.formato === formato)));
+      renderizarCatalogo();
     }
 
     // Ordem dos tamanhos: letras (PP ao EGG), depois a numeração (34, 36...), depois o resto
@@ -717,8 +784,19 @@
       const guia = textoGuiaCatalogo(filtroStatus.value, n);
       document.getElementById('guiaCatalogoTexto').innerHTML = guia;
       document.getElementById('guiaCatalogo').classList[guia ? 'remove' : 'add']('hidden');
-      document.getElementById('barraMaletaTexto').textContent = `${n} ${n === 1 ? 'modelo' : 'modelos'} na maleta`;
-      document.getElementById('barraMaleta').classList[n === 0 ? 'add' : 'remove']('escondida');
+      atualizarBarraMaleta();
+    }
+
+    // Barra flutuante da maleta (rodapé). Com modelos escolhidos fica sempre à vista,
+    // com o contador. Com a maleta vazia aparece só no celular, depois que a cliente
+    // rola para além do banner, como um lembrete discreto.
+    function atualizarBarraMaleta() {
+      const n = maleta.itens.length;
+      const barra = document.getElementById('barraMaleta');
+      const rolou = typeof window !== 'undefined' && window.innerWidth < 640 && window.scrollY > 320;
+      document.getElementById('barraMaletaTexto').textContent = n ? `${n} ${n === 1 ? 'modelo' : 'modelos'} na maleta` : 'Sua maleta está vazia';
+      barra.classList[n > 0 || rolou ? 'remove' : 'add']('escondida');
+      barra.classList[n > 0 ? 'remove' : 'add']('vazia');
     }
 
     // Etiqueta do card: encomenda tem a sua; pronta entrega mostra o status
@@ -828,9 +906,12 @@
         // "Disponível" é o normal da vitrine: só condicional ganha etiqueta. A encomenda
         // ganha uma faixa azul por cima da foto, que se vê até no card pequeno do celular.
         const mostraEtiqueta = !encomenda && produto.status !== 'DISPONIVEL';
-        card.className = 'glass-card bg-white rounded-xl sm:rounded-2xl overflow-hidden border border-gray-100 flex flex-col';
+        card.className = 'glass-card card-produto rounded-xl sm:rounded-2xl overflow-hidden flex flex-col';
+        // Foto com respiro (moldura escura) e cantos arredondados; abaixo, nome e
+        // materiais em cinza e só o preço e o botão em destaque.
         card.innerHTML = `
-          <div class="aspect-square bg-gray-100 relative overflow-hidden">
+          <div class="p-1.5 sm:p-3 pb-0 sm:pb-0">
+          <div class="foto-moldura aspect-square relative overflow-hidden rounded-lg sm:rounded-xl">
             <button type="button" onclick="abrirDetalhes(${id})" class="block w-full h-full" aria-label="Ver fotos e detalhes de ${escapeHtml(produto.nome)}">
               ${fotos.length ? `<img data-foto-card src="${escapeHtml(fotos[indice])}" alt="${escapeHtml(produto.nome)}" loading="lazy" class="w-full h-full object-cover" onerror="imgFallback(this)">` : '<div class="w-full h-full flex items-center justify-center text-gray-300"><svg class="w-8 h-8 sm:w-16 sm:h-16" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg></div>'}
             </button>
@@ -846,14 +927,15 @@
             </div>` : ''}
             <div data-selo-maleta class="${jaNaMaleta ? '' : 'hidden '}chrome-btn absolute bottom-1.5 left-1.5 sm:bottom-3 sm:left-3 w-5 h-5 sm:w-7 sm:h-7 flex items-center justify-center rounded-full shadow text-[10px] sm:text-sm font-bold" title="Na maleta" aria-label="Na maleta">✓</div>
           </div>
-          <div class="p-2 sm:p-4 flex-1 flex flex-col">
-            <h3 class="font-semibold text-gray-900 text-xs sm:text-base leading-snug mb-0.5 line-clamp-2 break-words" title="${escapeHtml(produto.nome)}">${escapeHtml(nomeCard(produto))}</h3>
-            ${tags.length ? `<p data-tags-card class="hidden sm:block text-xs text-gray-500 mb-2 truncate">${tags.map(escapeHtml).join(' · ')}</p>` : ''}
-            ${tamanhos.length ? `<p data-tamanhos-card class="text-[10px] sm:text-xs font-medium text-gray-700 mb-1 sm:mb-2 truncate" title="Tamanhos">${tamanhos.map(escapeHtml).join(' · ')}</p>` : ''}
+          </div>
+          <div class="p-2 sm:p-4 pt-2 sm:pt-3 flex-1 flex flex-col">
+            <h3 class="font-medium text-neutral-300 text-xs sm:text-[15px] leading-snug mb-0.5 line-clamp-2 break-words" title="${escapeHtml(produto.nome)}">${escapeHtml(nomeCard(produto))}</h3>
+            ${tags.length ? `<p data-tags-card class="hidden sm:block text-xs text-neutral-500 mb-2 truncate">${tags.map(escapeHtml).join(' · ')}</p>` : ''}
+            ${tamanhos.length ? `<p data-tamanhos-card class="text-[10px] sm:text-xs font-medium text-neutral-400 mb-1 sm:mb-2 truncate" title="Tamanhos">${tamanhos.map(escapeHtml).join(' · ')}</p>` : ''}
             <div class="mt-auto mb-2 sm:mb-3">
-              ${variaPreco ? '<span class="block text-[10px] sm:text-xs text-gray-500">a partir de</span>' : ''}
-              <span class="block text-sm sm:text-xl font-bold text-gray-900">${formatarMoeda(Math.min(...precos))}</span>
-              ${encomenda ? `<span data-selo-sinal class="block text-[10px] sm:text-xs font-semibold text-blue-700 whitespace-nowrap" title="50% de sinal agora e 50% na entrega">Sinal 50%: ${formatarMoeda(calcularSinal(produto.preco_venda))}</span>` : ''}
+              ${variaPreco ? '<span class="block text-[10px] sm:text-xs text-neutral-500">a partir de</span>' : ''}
+              <span class="block text-sm sm:text-xl font-bold text-white tracking-tight">${formatarMoeda(Math.min(...precos))}</span>
+              ${encomenda ? `<span data-selo-sinal class="block text-[10px] sm:text-xs font-semibold text-sky-300 whitespace-nowrap" title="50% de sinal agora e 50% na entrega">Sinal 50%: ${formatarMoeda(calcularSinal(produto.preco_venda))}</span>` : ''}
             </div>
             <div data-acao-maleta>${grupo.length > 1 ? botaoGrupoCard(grupo) : botaoMaletaCard(produto, jaNaMaleta)}</div>
           </div>
@@ -893,7 +975,17 @@
       const tinhaFoco = acao.contains(document.activeElement);
       acao.innerHTML = grupo.length > 1 ? botaoGrupoCard(grupo) : botaoMaletaCard(produto, jaNaMaleta);
       const botao = acao.querySelector('[data-btn-maleta]');
-      botao.classList.add('pulso');
+      if (grupo.length <= 1 && jaNaMaleta) {
+        // Acabou de entrar na maleta: o botão vira um check verde por 1 segundo (no
+        // lugar de um aviso flutuante) e depois mostra "✓ Na Maleta". Se a cliente
+        // tocar de novo antes disso, o botão é trocado e este temporizador não faz nada.
+        const rotulo = botao.innerHTML;
+        botao.classList.add('btn-sucesso');
+        botao.innerHTML = '<svg class="w-4 h-4 sm:w-5 sm:h-5" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg><span class="sr-only">Adicionado à maleta</span>';
+        if (typeof setTimeout === 'function') setTimeout(() => { botao.classList.remove('btn-sucesso'); botao.innerHTML = rotulo; }, 1000);
+      } else {
+        botao.classList.add('pulso');
+      }
       if (tinhaFoco) botao.focus();
       const selo = card.querySelector('[data-selo-maleta]');
       if (selo) selo.classList.toggle('hidden', !jaNaMaleta);
@@ -1475,7 +1567,9 @@
       atualizarMaletaUI();
       // Roupas: o nome completo leva o tamanho ("Vestido - M")
       const nome = NICHO === 'roupas' && produto.tamanho ? produto.nome : nomeCard(produto);
-      mostrarToast(index >= 0 ? `${nome} removido da maleta` : `${nome} adicionado à maleta${encomenda ? ' (sob encomenda)' : ''}`);
+      // Ao adicionar, quem confirma é o próprio botão (check verde) e a barra da maleta;
+      // só a remoção ganha aviso.
+      if (index >= 0) mostrarToast(`${nome} removido da maleta`);
     }
 
     // Na maleta, cada peça de pronta entrega escolhe: provar em casa (condicional) ou compra direta
@@ -1944,7 +2038,24 @@
       fecharModalMaleta();
       document.getElementById('catalogo').scrollIntoView({ behavior: 'smooth' });
     });
-    filtroFormato.addEventListener('change', renderizarCatalogo);
+    chipsFormato.addEventListener('click', (e) => {
+      const chip = e.target.closest('[data-formato]');
+      if (!chip) return;
+      aplicarFiltroFormato(chip.dataset.formato);
+      chip.scrollIntoView({ behavior: 'smooth', inline: 'nearest', block: 'nearest' });
+      // Com a lista mais curta, a cliente pode ficar abaixo dos cards: volta ao início do catálogo
+      const catalogo = document.getElementById('catalogo');
+      if (catalogo.getBoundingClientRect().top < 0) catalogo.scrollIntoView({ behavior: 'smooth' });
+    });
+    // Barra da maleta: no celular aparece ao rolar (no máximo uma conta por quadro)
+    let barraAgendada = false;
+    const agendarBarraMaleta = () => {
+      if (barraAgendada) return;
+      barraAgendada = true;
+      requestAnimationFrame(() => { barraAgendada = false; atualizarBarraMaleta(); });
+    };
+    window.addEventListener('scroll', agendarBarraMaleta, { passive: true });
+    window.addEventListener('resize', agendarBarraMaleta);
     filtroGenero.addEventListener('change', renderizarCatalogo);
     filtroTamanho.addEventListener('change', renderizarCatalogo);
   </script>

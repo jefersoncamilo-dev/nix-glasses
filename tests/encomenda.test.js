@@ -100,7 +100,7 @@ function extrairFuncao(html, nome) {
 }
 
 const FUNCOES = ['ordemTamanho', 'agruparCards', 'nomeModelo', 'tamanhosCard', 'botaoGrupoCard', 'escapeHtml', 'fotosDoProduto', 'indiceCircular', 'ehSobEncomenda', 'calcularSinal', 'passaFiltroStatus', 'etiquetaProduto',
-  'nomeCard', 'tagsCard', 'botaoMaletaCard', 'atualizarCardMaleta', 'itemEhEncomenda', 'resumoMaleta', 'passaFiltroGenero', 'renderizarCatalogo', 'toggleMaleta', 'salvarMaleta', 'textoGuiaCatalogo', 'atualizarGuias', 'atualizarMaletaUI', 'montarTextoWhatsapp'];
+  'nomeCard', 'tagsCard', 'botaoMaletaCard', 'atualizarCardMaleta', 'itemEhEncomenda', 'resumoMaleta', 'passaFiltroGenero', 'renderizarCatalogo', 'toggleMaleta', 'salvarMaleta', 'textoGuiaCatalogo', 'atualizarGuias', 'atualizarBarraMaleta', 'atualizarMaletaUI', 'montarTextoWhatsapp'];
 
 function elemento() {
   return {
@@ -199,10 +199,12 @@ describe('maleta com itens Sob Encomenda', () => {
     v.ctx.toggleMaleta(1);
     v.ctx.toggleMaleta(3);
     assert.deepEqual(v.ctx.maleta.itens.map((i) => [i.id, i.preco, i.encomenda]), [[1, 199.99, false], [3, 350.25, true]]);
-    assert.match(v.toasts[1], /Cat Eye adicionado à maleta \(sob encomenda\)/);
+    // Adicionar não abre aviso flutuante (o botão vira um check verde); remover avisa
+    assert.equal(v.toasts.length, 0);
     assert.equal(JSON.parse(v.guardado.nix_maleta).itens.length, 2);
     v.ctx.toggleMaleta(3);
     assert.deepEqual(v.ctx.maleta.itens.map((i) => i.id), [1]);
+    assert.match(v.toasts[0], /Cat Eye removido da maleta/);
   });
 
   it('destaca a encomenda na lista com a etiqueta e o sinal de 50%', () => {
