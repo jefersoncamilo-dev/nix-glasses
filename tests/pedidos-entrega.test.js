@@ -376,8 +376,10 @@ describe('vitrine: intenção de cada item no carrinho', () => {
     const r = v.ctx.resumoMaleta(v.ctx.maleta.itens);
     assert.deepEqual([r.compras.length, r.prova.length, r.encomendas.length, r.totalCompra, r.totalProva], [1, 1, 1, 100, 50]);
     const msg = v.ctx.montarTextoWhatsapp(v.ctx.maleta, dados);
-    assert.match(msg, /\*Compra direta \(pronta entrega\):\*\n1\. Aviador - R\$ 100,00\n\*Subtotal da compra direta:\* R\$ 100,00\n/);
-    assert.match(msg, /\*Para provar \(pronta entrega\):\*\n1\. Redondo - R\$ 50,00/);
+    // Provar e compra direta ficam juntos em PRONTA ENTREGA; a encomenda vem à parte
+    assert.match(msg, /\*PRONTA ENTREGA\*\n_Para provar em casa:_\n1\. Redondo - R\$ 50,00\nSubtotal para provar: R\$ 50,00\n\n_Compra direta:_\n1\. Aviador - R\$ 100,00\nSubtotal da compra direta: R\$ 100,00\n/);
+    assert.match(msg, /\*SOB ENCOMENDA\* \(sinal de 50%\)\n1\. Cat Eye - R\$ 200,00\n    Sinal: R\$ 100,00 \| Na entrega: R\$ 100,00\n/);
+    assert.match(msg, /Pronta entrega: 2 itens - R\$ 150,00\n/);
   });
 
   it('o checkout manda a intenção de cada item', () => {

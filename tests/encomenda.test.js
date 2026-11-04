@@ -171,8 +171,11 @@ describe('vitrine: produtos Sob Encomenda', () => {
     assert.doesNotMatch(cards[0], /50% sinal/);
     assert.match(cards[0], /toggleMaleta\(1\)/);
 
-    assert.match(cards[1], /bg-blue-100 text-blue-700">SOB ENCOMENDA</);
-    assert.match(cards[1], /data-selo-sinal[^>]*>Sinal: R\$ 175,13</);
+    // Encomenda: faixa azul por cima da foto (no lugar da etiqueta pequena) e o sinal de 50%
+    assert.match(cards[1], /data-selo-encomenda[^>]*bg-blue-600[^>]*>SOB ENCOMENDA</);
+    assert.doesNotMatch(cards[1], /bg-blue-100 text-blue-700">SOB ENCOMENDA</);
+    assert.doesNotMatch(cards[0], /data-selo-encomenda/);
+    assert.match(cards[1], /data-selo-sinal[^>]*>Sinal 50%: R\$ 175,13</);
     assert.doesNotMatch(cards[1], /50% sinal \+ 50% na entrega/);
     assert.match(cards[1], /toggleMaleta\(3\)/);
     assert.match(cards[1], /btn-encomenda/);
@@ -225,30 +228,40 @@ describe('maleta com itens Sob Encomenda', () => {
 
   const cliente = { nome: 'Ana', telefone: '11 99999-0000', rua: 'Rua A', numero: '10', bairro: 'Centro', cidade: 'São Paulo/SP' };
 
-  it('separa a mensagem do WhatsApp em itens para prova e encomendas com sinal', () => {
+  it('separa a mensagem do WhatsApp em pronta entrega e encomendas, com o sinal de cada uma e um resumo', () => {
     const v = vitrine([pronta, condicional, encomenda, encomenda2]);
     for (const id of [1, 3, 2, 4]) v.ctx.toggleMaleta(id);
     assert.equal(v.ctx.montarTextoWhatsapp(v.ctx.maleta, cliente), [
-      '*Nix Glasses - Novo Pedido*',
+      '*Nix Glasses - Novo pedido da maleta*',
       '',
       '*Cliente:* Ana',
       '*Telefone:* 11 99999-0000',
       '*Endereço:* Rua A, 10 - Centro, São Paulo/SP',
       '',
-      '*Para provar (pronta entrega):*',
-      '1. Aviador - R$ 199,99',
-      '2. Aviador - R$ 199,99',
-      '*Subtotal para prova:* R$ 399,98',
+      '━━━━━━━━━━━━━━',
+      '*PRONTA ENTREGA*',
+      '_Para provar em casa:_',
+      '1. Aviador (Ref. AV-01) - R$ 199,99',
+      '2. Aviador (Ref. AV-02) - R$ 199,99',
+      'Subtotal para provar: R$ 399,98',
       '',
-      '*Sob encomenda (sinal de 50%):*',
-      '1. Cat Eye - R$ 350,25 | Sinal 50%: R$ 175,13',
-      '2. Redondo - R$ 99,99 | Sinal 50%: R$ 50,00',
-      '*Total das encomendas:* R$ 450,24',
-      '*Sinal a pagar (50%):* R$ 225,13',
+      '━━━━━━━━━━━━━━',
+      '*SOB ENCOMENDA* (sinal de 50%)',
+      '1. Cat Eye (Ref. CE-09) - R$ 350,25',
+      '    Sinal: R$ 175,13 | Na entrega: R$ 175,12',
+      '2. Redondo (Ref. RD-01) - R$ 99,99',
+      '    Sinal: R$ 50,00 | Na entrega: R$ 49,99',
+      'Total das encomendas: R$ 450,24',
       '',
+      '━━━━━━━━━━━━━━',
+      '*RESUMO*',
+      'Pronta entrega: 2 itens - R$ 399,98',
+      'Sob encomenda: 2 itens - R$ 450,24',
+      '*Sinal a pagar agora (50%):* R$ 225,13',
+      '*Restante das encomendas na entrega:* R$ 225,11',
       '*Total geral:* R$ 850,22',
       '',
-      'Aguardamos sua confirmação!',
+      'Aguardo a confirmação. Obrigado(a)!',
     ].join('\n'));
   });
 
@@ -256,13 +269,13 @@ describe('maleta com itens Sob Encomenda', () => {
     const v = vitrine([pronta, encomenda]);
     v.ctx.toggleMaleta(3);
     const soEncomenda = v.ctx.montarTextoWhatsapp(v.ctx.maleta, cliente);
-    assert.doesNotMatch(soEncomenda, /Para provar/);
-    assert.match(soEncomenda, /\*Sinal a pagar \(50%\):\* R\$ 175,13/);
+    assert.doesNotMatch(soEncomenda, /PRONTA ENTREGA|Para provar/);
+    assert.match(soEncomenda, /\*Sinal a pagar agora \(50%\):\* R\$ 175,13/);
 
     v.ctx.toggleMaleta(3);
     v.ctx.toggleMaleta(1);
     const soProva = v.ctx.montarTextoWhatsapp(v.ctx.maleta, cliente);
-    assert.match(soProva, /\*Para provar \(pronta entrega\):\*\n1\. Aviador - R\$ 199,99/);
+    assert.match(soProva, /\*PRONTA ENTREGA\*\n_Para provar em casa:_\n1\. Aviador \(Ref\. AV-01\) - R\$ 199,99/);
     assert.doesNotMatch(soProva, /encomenda|Sinal/i);
   });
 });

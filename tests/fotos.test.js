@@ -240,7 +240,8 @@ describe('vitrine: carrossel de fotos', () => {
     const { ctx } = vitrine([{ ...produto, disponibilidade: 'SOB_ENCOMENDA' }]);
     ctx.detalhes = { id: 1, indice: 0 };
     ctx.renderizarDetalhes();
-    assert.match(ctx.detalhesConteudo.innerHTML, /50% sinal \+ 50% na entrega/);
+    assert.match(ctx.detalhesConteudo.innerHTML, /data-aviso-encomenda[\s\S]*SOB ENCOMENDA[\s\S]*Reserva com sinal de 50%/);
+    assert.match(ctx.detalhesConteudo.innerHTML, /<strong>R\$ 100<\/strong> de sinal ao fechar pelo WhatsApp e <strong>R\$ 99\.99<\/strong> na entrega/);
     assert.match(ctx.detalhesConteudo.innerHTML, /toggleMaleta\(1\)/);
     assert.match(ctx.detalhesConteudo.innerHTML, /Encomendar \(adicionar à Maleta\)/);
     assert.doesNotMatch(ctx.detalhesConteudo.innerHTML, /encomendarProduto/);
