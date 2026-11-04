@@ -169,10 +169,19 @@ describe('vitrine: card limpo', () => {
 
   it('encomenda mostra o preço total e um selo só com o sinal', () => {
     const card = vitrine([hexagonal]).cards[0].innerHTML;
-    assert.match(card, /font-bold text-gray-900">R\$ 135,00</);
+    assert.match(card, /font-bold text-white[^"]*">R\$ 135,00</);
     assert.match(card, /data-selo-sinal[^>]*>Sinal 50%: R\$ 67,50</);
     assert.match(card, /data-selo-encomenda[^>]*>SOB ENCOMENDA</);
     assert.doesNotMatch(card, /50% sinal \+ 50% na entrega|sinal de R\$/);
+  });
+
+  it('card escuro: foto com respiro e cantos arredondados, nome em cinza e preço em destaque', () => {
+    const { cards } = vitrine([hexagonal]);
+    assert.match(cards[0].className, /\bcard-produto\b/);
+    assert.doesNotMatch(cards[0].className, /bg-white/);
+    assert.match(cards[0].innerHTML, /<div class="p-1\.5 sm:p-3[^"]*">\s*<div class="foto-moldura aspect-square [^"]*rounded-lg/);
+    assert.match(cards[0].innerHTML, /<h3 class="[^"]*text-neutral-300/);
+    assert.match(cards[0].innerHTML, /data-tags-card class="[^"]*text-neutral-500/);
   });
 
   it('pronta entrega não tem selo de sinal', () => {
@@ -196,26 +205,40 @@ describe('vitrine: botão da maleta muda na hora', () => {
 
   it('clicar troca só o botão e o selo do card, sem redesenhar o catálogo', () => {
     const classes = [];
-    const botao = { classList: { add: (c) => classes.push(c) }, focus() {} };
-    const acao = { innerHTML: '', querySelector: () => botao, contains: () => false };
+    const timers = [];
+    const botao = { innerHTML: '', classList: { add: (c) => classes.push(c), remove: (c) => classes.push(`-${c}`) }, focus() {} };
+    // O HTML novo do botão vai para o próprio botão (como no navegador)
+    const acao = { set innerHTML(v) { this.html = v; botao.innerHTML = v; }, get innerHTML() { return this.html; }, querySelector: () => botao, contains: () => false };
     let seloEscondido = true;
     const selo = { classList: { toggle: (c, v) => { seloEscondido = v; } } };
     const card = { dataset: { produtos: '5' }, querySelector: (s) => ({ '[data-acao-maleta]': acao, '[data-selo-maleta]': selo })[s] };
     let redesenhos = 0;
     const grid = { innerHTML: '', classList: { add() {}, remove() {} }, appendChild() { redesenhos++; }, querySelector: (s) => (s === '[data-produtos~="5"]' ? card : null) };
-    const { ctx } = vitrine([hexagonal], { catalogoGrid: grid, document: { createElement: elemento, activeElement: null } });
+    const { ctx } = vitrine([hexagonal], {
+      catalogoGrid: grid, document: { createElement: elemento, activeElement: null },
+      setTimeout: (fn, ms) => timers.push([fn, ms]),
+    });
     redesenhos = 0;
 
     ctx.toggleMaleta(5);
     assert.equal(redesenhos, 0);
     assert.match(acao.innerHTML, /✓ Na Maleta/);
     assert.equal(seloEscondido, false);
-    assert.deepEqual(classes, ['pulso']);
+    // Micro-interação: check verde (sem texto visível) por 1 segundo, sem aviso flutuante
+    assert.deepEqual(classes, ['btn-sucesso']);
+    assert.match(botao.innerHTML, /<svg[\s\S]*sr-only">Adicionado à maleta</);
+    assert.doesNotMatch(botao.innerHTML, /Na Maleta/);
+    assert.equal(timers.length, 1);
+    assert.equal(timers[0][1], 1000);
+    timers[0][0]();
+    assert.deepEqual(classes, ['btn-sucesso', '-btn-sucesso']);
+    assert.match(botao.innerHTML, /✓ Na Maleta/);
 
     ctx.toggleMaleta(5);
     assert.match(acao.innerHTML, /Encomendar \(na Maleta\)/);
     assert.equal(seloEscondido, true);
     assert.equal(ctx.maleta.itens.length, 0);
+    assert.deepEqual(classes.slice(2), ['pulso']);
   });
 });
 

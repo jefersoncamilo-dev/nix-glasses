@@ -119,7 +119,7 @@ describe('vitrine: maleta no topo e na gaveta lateral', () => {
     const el = () => ({ innerHTML: '', textContent: '', classList: { add() {}, remove() {} } });
     const porId = {};
     const btnMaleta = { atributos: {}, setAttribute(k, v) { this.atributos[k] = v; } };
-    const ctx = carregar(['escapeHtml', 'calcularSinal', 'itemEhEncomenda', 'resumoMaleta', 'textoGuiaCatalogo', 'atualizarGuias', 'atualizarMaletaUI'], {
+    const ctx = carregar(['escapeHtml', 'calcularSinal', 'itemEhEncomenda', 'resumoMaleta', 'textoGuiaCatalogo', 'atualizarGuias', 'atualizarBarraMaleta', 'atualizarMaletaUI'], {
       maletaVazia: el(), maletaItens: el(), maletaFormulario: el(), maletaFooter: el(), maletaTotal: el(), maletaSinal: el(),
       maleta: { itens: [{ id: 1, nome: 'Aviador', preco: 100 }, { id: 2, nome: 'Cat Eye', preco: 200, encomenda: true }] },
       filtroStatus: { value: '' }, NICHO: 'oculos', formatarMoeda, btnMaleta,
