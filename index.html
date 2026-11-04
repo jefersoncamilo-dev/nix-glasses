@@ -59,7 +59,7 @@
        Tamanhos: .btn (44px, área de toque), .btn-sm (cards) e .btn-lg (topo).
        Cores: primário (prateado, como o "Coleção"), encomenda (grafite), na-maleta
        (contorno prateado), secundário (contorno claro) e contorno-escuro (sobre fundo escuro).
-       Os atalhos do topo e as pílulas do catálogo ficam prateados quando escolhidos. */
+       As pílulas e os chips do catálogo ficam prateados quando escolhidos. */
     .btn { display: inline-flex; align-items: center; justify-content: center; gap: 0.5rem; min-height: 44px; padding: 0 1.25rem; border: 1px solid transparent; border-radius: 9999px; font-size: 0.875rem; font-weight: 600; line-height: 1.2; text-align: center; cursor: pointer; touch-action: manipulation; -webkit-tap-highlight-color: transparent; transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease, filter 0.15s ease, transform 0.1s ease; }
     .btn:active { transform: scale(0.97); }
     .btn:focus-visible { outline: 2px solid #8f8f8f; outline-offset: 2px; }
@@ -68,8 +68,11 @@
     .btn-lg { min-height: 48px; padding: 0 2rem; font-size: 1rem; }
     @media (min-width: 640px) { .btn-sm { padding: 0 0.75rem; font-size: 0.875rem; } }
     /* Primário: o prateado do botão "Coleção" do topo */
-    .btn-primario, .btn.atalho-topo[aria-pressed="true"]:not(:disabled), .filtro-pilula[aria-pressed="true"], .chip-formato[aria-pressed="true"] { background: linear-gradient(180deg, #f5f5f5 0%, #c9c9c9 45%, #9a9a9a 55%, #d7d7d7 100%); color: #161616; border-color: rgba(0,0,0,0.12); box-shadow: 0 1px 2px rgba(0,0,0,0.25), inset 0 1px 0 rgba(255,255,255,0.7); }
-    .btn-primario:hover:not(:disabled), .atalho-topo[aria-pressed="true"]:hover { filter: brightness(1.08); }
+    .btn-primario, .filtro-pilula[aria-pressed="true"], .chip-formato[aria-pressed="true"] { background: linear-gradient(180deg, #f5f5f5 0%, #c9c9c9 45%, #9a9a9a 55%, #d7d7d7 100%); color: #161616; border-color: rgba(0,0,0,0.12); box-shadow: 0 1px 2px rgba(0,0,0,0.25), inset 0 1px 0 rgba(255,255,255,0.7); }
+    .btn-primario:hover:not(:disabled) { filter: brightness(1.08); }
+    /* Banner do Provador Virtual no topo: grafite com um brilho prateado */
+    .banner-provador { background: radial-gradient(120% 140% at 0% 0%, rgba(255,255,255,0.14) 0%, rgba(255,255,255,0) 45%), linear-gradient(135deg, #2c2c2c 0%, #1a1a1a 55%, #111 100%); box-shadow: 0 20px 50px rgba(0,0,0,0.45), inset 0 1px 0 rgba(255,255,255,0.08); }
+    .banner-provador-icone { background: linear-gradient(180deg, #f5f5f5 0%, #c9c9c9 45%, #9a9a9a 55%, #d7d7d7 100%); color: #161616; box-shadow: 0 6px 16px rgba(0,0,0,0.35); }
     /* Encomenda: grafite com brilho prateado na borda */
     .btn-encomenda { background: linear-gradient(180deg, #3a3a3a 0%, #1c1c1c 100%); color: #f5f5f5; border-color: #8f8f8f; box-shadow: 0 1px 2px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.15); }
     .btn-encomenda:hover:not(:disabled) { filter: brightness(1.25); }
@@ -178,12 +181,27 @@
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
       <h1 data-loja="chamada" class="font-brand text-3xl sm:text-5xl lg:text-6xl font-bold tracking-wide mb-3 sm:mb-5 chrome-text">Óculos que definem seu estilo</h1>
       <p data-loja="descricao" class="text-sm sm:text-lg max-w-2xl mx-auto mb-6 sm:mb-8" style="color:var(--nix-muted)">Design exclusivo, qualidade premium e proteção UV400. Escolha os modelos e prove em casa.</p>
-      <!-- Atalhos: cada um leva ao catálogo já com o filtro escolhido (o complemento só aparece em telas maiores) -->
-      <div class="flex flex-col sm:flex-row items-stretch sm:items-center justify-center gap-2 sm:gap-3 max-w-md sm:max-w-none mx-auto">
-        <a href="#catalogo" data-atalho-filtro="" aria-pressed="true" class="btn btn-lg btn-contorno-escuro atalho-topo">Coleção <span class="hidden sm:inline font-normal opacity-70">· todos os modelos</span></a>
-        <a href="#catalogo" data-atalho-filtro="DISPONIVEL" aria-pressed="false" class="btn btn-lg btn-contorno-escuro atalho-topo">Pronta Entrega <span class="hidden sm:inline font-normal opacity-70">· prove em casa</span></a>
-        <a href="#catalogo" data-atalho-filtro="SOB_ENCOMENDA" aria-pressed="false" class="btn btn-lg btn-contorno-escuro atalho-topo">Sob Encomenda <span class="hidden sm:inline font-normal opacity-70">· encontre seu estilo</span></a>
+      <!-- Provador Virtual logo de cara: o botão abre a câmera com um modelo da vitrine e a
+           cliente troca de óculos pelo carrossel do provador. Os filtros de disponibilidade
+           ficam só no catálogo (pílulas), sem repetir aqui. Lojas que não são de óculos
+           veem só o atalho para a coleção. -->
+      <div id="bannerProvador" class="banner-provador relative overflow-hidden max-w-3xl mx-auto rounded-2xl sm:rounded-3xl border text-left p-5 sm:p-8 flex flex-col sm:flex-row sm:items-center gap-4 sm:gap-8" style="border-color:rgba(255,255,255,0.14)">
+        <div class="flex items-center gap-4 sm:gap-6 flex-1 min-w-0">
+        <span class="banner-provador-icone flex-none flex items-center justify-center w-12 h-12 sm:w-16 sm:h-16 rounded-2xl" aria-hidden="true">
+          <svg class="w-7 h-7 sm:w-9 sm:h-9" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="M4 8V6a2 2 0 012-2h2M16 4h2a2 2 0 012 2v2M20 16v2a2 2 0 01-2 2h-2M8 20H6a2 2 0 01-2-2v-2"/><circle cx="9" cy="11.5" r="2.2"/><circle cx="15" cy="11.5" r="2.2"/><path d="M11.2 11.3h1.6M6.8 11h-1M17.2 11h1"/></svg>
+        </span>
+        <div class="flex-1 min-w-0">
+          <p class="text-[10px] sm:text-xs font-semibold uppercase mb-1" style="letter-spacing:0.25em;color:#c9c9c9">Provador Virtual</p>
+          <h2 class="text-lg sm:text-2xl font-bold text-white leading-tight">Veja os óculos no seu rosto agora</h2>
+          <p class="mt-1 text-xs sm:text-sm" style="color:var(--nix-muted)">Use a câmera do celular, troque de modelo em tempo real e só depois monte sua maleta.</p>
+        </div>
+        </div>
+        <button type="button" id="abrirProvadorTopo" class="btn btn-lg btn-primario flex-none w-full sm:w-auto">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 8.5A1.5 1.5 0 014.5 7h2.3l1.4-2h7.6l1.4 2h2.3A1.5 1.5 0 0121 8.5v9a1.5 1.5 0 01-1.5 1.5h-15A1.5 1.5 0 013 17.5z"/><circle cx="12" cy="13" r="3.5"/></svg>
+          Experimentar agora
+        </button>
       </div>
+      <a href="#catalogo" id="heroColecao" class="hidden btn btn-lg btn-primario">Ver coleção</a>
     </div>
   </section>
 
@@ -765,11 +783,10 @@
         : 'Toque em <strong>+ Maleta</strong> nos modelos que quer provar em casa.';
     }
 
-    // Troca o filtro de disponibilidade (pílulas do catálogo e atalhos do topo)
+    // Troca o filtro de disponibilidade (pílulas do catálogo)
     function aplicarFiltroStatus(filtro) {
       filtroStatus.value = filtro;
       document.querySelectorAll('#filtroPilulas [data-filtro]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.filtro === filtro)));
-      document.querySelectorAll('[data-atalho-filtro]').forEach(a => a.setAttribute('aria-pressed', String(a.dataset.atalhoFiltro === filtro)));
       renderizarCatalogo();
       atualizarGuias();
     }
@@ -1401,6 +1418,21 @@
     }
     window.abrirProvador = abrirProvador;
 
+    // Modelo que o botão do topo põe no rosto: o primeiro com foto, de preferência
+    // pronta entrega livre (dá para provar em casa). Sem nenhum, devolve null.
+    function produtoParaProvadorTopo(lista) {
+      const comFoto = lista.filter(p => fotosDoProduto(p).length);
+      return comFoto.find(p => passaFiltroStatus(p, 'DISPONIVEL')) || comFoto[0] || null;
+    }
+
+    // Botão "Experimentar agora" do topo: abre a câmera já com um modelo; o carrossel
+    // do provador troca de óculos. Antes de o catálogo carregar, leva aos modelos.
+    function abrirProvadorTopo() {
+      const produto = produtoParaProvadorTopo(produtos);
+      if (produto) return abrirProvador(produto.id);
+      document.getElementById('catalogo').scrollIntoView({ behavior: 'smooth' });
+    }
+
     function oculosDoCache(url) {
       if (!cacheOculosProvador.has(url)) {
         const promessa = carregarImagemOculos(url);
@@ -2031,7 +2063,12 @@
     // Filtros
     document.querySelectorAll('#filtroPilulas [data-filtro]').forEach(b => b.addEventListener('click', () => aplicarFiltroStatus(b.dataset.filtro)));
     // Atalhos do topo: o link rola até o catálogo e o filtro já vem escolhido
-    document.querySelectorAll('[data-atalho-filtro]').forEach(a => a.addEventListener('click', () => aplicarFiltroStatus(a.dataset.atalhoFiltro)));
+    document.getElementById('abrirProvadorTopo').addEventListener('click', abrirProvadorTopo);
+    // Loja que não é de óculos: sem provador, o topo leva direto à coleção
+    if (globalThis.LOJA?.oculos === false) {
+      document.getElementById('bannerProvador').classList.add('hidden');
+      document.getElementById('heroColecao').classList.remove('hidden');
+    }
     document.getElementById('barraMaleta').addEventListener('click', abrirModalMaleta);
     // Maleta vazia: "Ver modelos" fecha a janela e leva ao catálogo
     document.getElementById('verModelosMaleta').addEventListener('click', () => {
