@@ -171,7 +171,7 @@ describe('vitrine: card limpo', () => {
     const card = vitrine([hexagonal]).cards[0].innerHTML;
     assert.match(card, /font-bold text-white[^"]*">R\$ 135,00</);
     assert.match(card, /data-selo-sinal[^>]*>Sinal 50%: R\$ 67,50</);
-    assert.match(card, /data-selo-encomenda[^>]*>SOB ENCOMENDA</);
+    assert.match(card, /data-selo-encomenda[^>]*>Encomenda</);
     assert.doesNotMatch(card, /50% sinal \+ 50% na entrega|sinal de R\$/);
   });
 

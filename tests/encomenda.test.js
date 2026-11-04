@@ -164,17 +164,17 @@ describe('vitrine: produtos Sob Encomenda', () => {
     assert.equal(ctx.calcularSinal(120), 60);
   });
 
-  it('só a encomenda ganha etiqueta (azul SOB ENCOMENDA), e os dois vão para a maleta', () => {
+  it('selos discretos: Pronta (livre) ou Encomenda (azul), e os dois vão para a maleta', () => {
     const { ctx, cards } = vitrine([pronta, encomenda]);
-    assert.doesNotMatch(cards[0], /DISPONÍVEL|SOB ENCOMENDA/);
+    assert.doesNotMatch(cards[0], /DISPONÍVEL|SOB ENCOMENDA|data-selo-encomenda/);
+    assert.match(cards[0], /data-selo-pronta[^>]*>[\s\S]*?Pronta<\/span>/);
     assert.equal(ctx.etiquetaProduto(pronta).texto, 'DISPONÍVEL');
     assert.doesNotMatch(cards[0], /50% sinal/);
     assert.match(cards[0], /toggleMaleta\(1\)/);
 
-    // Encomenda: faixa azul por cima da foto (no lugar da etiqueta pequena) e o sinal de 50%
-    assert.match(cards[1], /data-selo-encomenda[^>]*bg-blue-600[^>]*>SOB ENCOMENDA</);
-    assert.doesNotMatch(cards[1], /bg-blue-100 text-blue-700">SOB ENCOMENDA</);
-    assert.doesNotMatch(cards[0], /data-selo-encomenda/);
+    // Encomenda: selo azul pequeno no canto da foto e o sinal de 50%
+    assert.match(cards[1], /data-selo-encomenda class="selo-card [^"]*bg-blue-600[^>]*>Encomenda</);
+    assert.doesNotMatch(cards[1], /data-selo-pronta/);
     assert.match(cards[1], /data-selo-sinal[^>]*>Sinal 50%: R\$ 175,13</);
     assert.doesNotMatch(cards[1], /50% sinal \+ 50% na entrega/);
     assert.match(cards[1], /toggleMaleta\(3\)/);

@@ -72,6 +72,10 @@
     .btn-primario:hover:not(:disabled) { filter: brightness(1.08); }
     /* Banner do Provador Virtual no topo: grafite com um brilho prateado */
     .banner-provador { background: radial-gradient(120% 140% at 0% 0%, rgba(255,255,255,0.14) 0%, rgba(255,255,255,0) 45%), linear-gradient(135deg, #2c2c2c 0%, #1a1a1a 55%, #111 100%); box-shadow: 0 20px 50px rgba(0,0,0,0.45), inset 0 1px 0 rgba(255,255,255,0.08); }
+    /* Link de ajuda do topo ("? Como funciona a maleta"): discreto, sem parecer botão */
+    .link-ajuda { color: var(--nix-muted); text-decoration: underline; text-decoration-color: rgba(163,163,163,0.4); text-underline-offset: 3px; touch-action: manipulation; }
+    .link-ajuda:hover { color: #fff; }
+    .link-ajuda:focus-visible { outline: 2px solid #8f8f8f; outline-offset: 2px; border-radius: 6px; }
     .banner-provador-icone { background: linear-gradient(180deg, #f5f5f5 0%, #c9c9c9 45%, #9a9a9a 55%, #d7d7d7 100%); color: #161616; box-shadow: 0 6px 16px rgba(0,0,0,0.35); }
     /* Encomenda: grafite com brilho prateado na borda */
     .btn-encomenda { background: linear-gradient(180deg, #3a3a3a 0%, #1c1c1c 100%); color: #f5f5f5; border-color: #8f8f8f; box-shadow: 0 1px 2px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.15); }
@@ -125,7 +129,14 @@
     .chips-formato { display: flex; gap: 0.5rem; overflow-x: auto; scroll-snap-type: x proximity; scrollbar-width: none; -webkit-overflow-scrolling: touch; overscroll-behavior-x: contain; -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent); mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent); }
     .chips-formato::-webkit-scrollbar { display: none; }
     .chip-formato { flex: none; scroll-snap-align: start; display: inline-flex; align-items: center; min-height: 36px; padding: 0 0.95rem; border-radius: 9999px; border: 1px solid rgba(255,255,255,0.16); background: rgba(255,255,255,0.04); color: #d4d4d4; font-size: 0.8125rem; font-weight: 500; white-space: nowrap; cursor: pointer; touch-action: manipulation; -webkit-tap-highlight-color: transparent; transition: background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease; }
-    .chip-formato:last-child { margin-right: 28px; }
+    /* Espaço no fim da fileira para a última pílula não ficar sob o esmaecido */
+    .chips-formato::after { content: ''; flex: none; width: 16px; }
+    /* A fileira do catálogo encosta nas bordas da tela no celular: o "imã" da rolagem
+       respeita o recuo, senão a primeira pílula gruda na borda */
+    #filtrosRolagem { scroll-padding-left: 1rem; }
+    @media (min-width: 640px) { #filtrosRolagem { scroll-padding-left: 0; } }
+    /* Celular: sem tamanho/gênero para escolher, a linha dos seletores some */
+    @media (max-width: 639px) { .linha-selecao:not(:has(select:not(.hidden))) { display: none; } }
     .chip-formato:not([aria-pressed="true"]):hover { border-color: rgba(255,255,255,0.32); color: #fff; }
     .chip-formato:focus-visible { outline: 2px solid #8f8f8f; outline-offset: 2px; }
     /* Catálogo escuro: o card é uma moldura neutra, a foto ganha respiro e cantos
@@ -133,6 +144,9 @@
     .card-produto { background: var(--nix-card); border: 1px solid var(--nix-border); }
     .card-produto:hover { border-color: rgba(255,255,255,0.18); }
     .card-produto .foto-moldura { background: #2c2c2c; }
+    /* Selo de status no canto da foto: pequeno, para não brigar com o óculos */
+    .selo-card { display: inline-flex; align-items: center; gap: 0.25rem; padding: 0.125rem 0.375rem; border-radius: 9999px; font-size: 9px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; line-height: 1.4; backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px); }
+    @media (min-width: 640px) { .selo-card { font-size: 10px; padding: 0.1875rem 0.5rem; } }
     .card-produto .btn-na-maleta { background: transparent; color: #e5e5e5; border-color: rgba(229,229,229,0.45); }
     .card-produto .btn-na-maleta:hover:not(:disabled) { background: rgba(255,255,255,0.08); }
     #guiaCatalogo strong { color: #e5e5e5; }
@@ -147,11 +161,11 @@
   <!-- Header -->
   <header class="sticky top-0 z-50 border-b" style="background:rgba(22,22,22,0.92);border-color:var(--nix-border);backdrop-filter:blur(12px)">
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-      <div class="flex items-center justify-between h-16">
+      <div class="flex items-center justify-between h-14 sm:h-16">
         <a href="#" class="flex items-center gap-3" aria-label="Início">
-          <img src="/logo.png" alt="NIX" class="h-12 w-auto" onload="document.getElementById('brandFallback').style.display='none'" onerror="this.remove()">
+          <img src="/logo.png" alt="NIX" class="h-9 sm:h-12 w-auto" onload="document.getElementById('brandFallback').style.display='none'" onerror="this.remove()">
           <span class="flex items-baseline gap-2">
-            <span id="brandFallback" data-loja="marca" class="font-brand text-2xl font-bold tracking-wide chrome-text">NIX</span>
+            <span id="brandFallback" data-loja="marca" class="font-brand text-xl sm:text-2xl font-bold tracking-wide chrome-text">NIX</span>
             <span data-loja="complemento" class="text-[11px] font-medium uppercase" style="letter-spacing:0.35em;color:var(--nix-muted)">Glasses</span>
           </span>
         </a>
@@ -160,8 +174,8 @@
           <a href="#sobre" class="font-medium transition-colors" style="color:var(--nix-muted)" onmouseover="this.style.color='#fff'" onmouseout="this.style.color='var(--nix-muted)'">Sobre</a>
           <a href="#contato" class="font-medium transition-colors" style="color:var(--nix-muted)" onmouseover="this.style.color='#fff'" onmouseout="this.style.color='var(--nix-muted)'">Contato</a>
         </nav>
-        <div class="flex items-center space-x-4">
-          <button id="btnCliente" class="flex items-center gap-2 p-2 transition-colors" style="color:var(--nix-muted)" onmouseover="this.style.color='#fff'" onmouseout="this.style.color='var(--nix-muted)'" aria-label="Área do Cliente">
+        <div class="flex items-center gap-1 sm:gap-4">
+          <button id="btnCliente" class="flex items-center gap-2 p-2.5 transition-colors" style="color:var(--nix-muted)" onmouseover="this.style.color='#fff'" onmouseout="this.style.color='var(--nix-muted)'" aria-label="Área do Cliente">
             <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/></svg>
             <span id="clienteHeader" class="hidden sm:inline text-sm font-medium max-w-[10rem] truncate">Entrar</span>
           </button>
@@ -176,96 +190,75 @@
     </div>
   </header>
 
-  <!-- Hero -->
-  <section class="text-white py-8 sm:py-14 lg:py-20" style="background:radial-gradient(ellipse 80% 60% at 50% -10%, #3a3a3a 0%, #1c1c1c 55%, #101010 100%)">
+  <!-- Hero enxuto: chamada curta, o Provador Virtual numa faixa baixa e os óculos logo
+       em seguida. O "Como funciona" não ocupa mais espaço fixo: abre numa janela pelo
+       link discreto abaixo do banner, só para quem tiver dúvida. -->
+  <section id="hero" class="text-white pt-5 pb-2 sm:pt-10 sm:pb-6" style="background:radial-gradient(ellipse 80% 70% at 50% -10%, #343434 0%, #1c1c1c 55%, var(--nix-bg) 100%)">
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-      <h1 data-loja="chamada" class="font-brand text-3xl sm:text-5xl lg:text-6xl font-bold tracking-wide mb-3 sm:mb-5 chrome-text">Óculos que definem seu estilo</h1>
-      <p data-loja="descricao" class="text-sm sm:text-lg max-w-2xl mx-auto mb-6 sm:mb-8" style="color:var(--nix-muted)">Design exclusivo, qualidade premium e proteção UV400. Escolha os modelos e prove em casa.</p>
-      <!-- Provador Virtual logo de cara: o botão abre a câmera com um modelo da vitrine e a
-           cliente troca de óculos pelo carrossel do provador. Os filtros de disponibilidade
-           ficam só no catálogo (pílulas), sem repetir aqui. Lojas que não são de óculos
-           veem só o atalho para a coleção. -->
-      <div id="bannerProvador" class="banner-provador relative overflow-hidden max-w-3xl mx-auto rounded-2xl sm:rounded-3xl border text-left p-5 sm:p-8 flex flex-col sm:flex-row sm:items-center gap-4 sm:gap-8" style="border-color:rgba(255,255,255,0.14)">
-        <div class="flex items-center gap-4 sm:gap-6 flex-1 min-w-0">
-        <span class="banner-provador-icone flex-none flex items-center justify-center w-12 h-12 sm:w-16 sm:h-16 rounded-2xl" aria-hidden="true">
-          <svg class="w-7 h-7 sm:w-9 sm:h-9" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="M4 8V6a2 2 0 012-2h2M16 4h2a2 2 0 012 2v2M20 16v2a2 2 0 01-2 2h-2M8 20H6a2 2 0 01-2-2v-2"/><circle cx="9" cy="11.5" r="2.2"/><circle cx="15" cy="11.5" r="2.2"/><path d="M11.2 11.3h1.6M6.8 11h-1M17.2 11h1"/></svg>
+      <h1 data-loja="chamada" class="font-brand text-2xl sm:text-4xl lg:text-5xl font-bold tracking-wide mb-1.5 sm:mb-3 chrome-text">Óculos que definem seu estilo</h1>
+      <p data-loja="descricao" class="text-xs sm:text-base max-w-2xl mx-auto mb-4 sm:mb-6 line-clamp-2" style="color:var(--nix-muted)">Design exclusivo, qualidade premium e proteção UV400. Escolha os modelos e prove em casa.</p>
+      <!-- Provador Virtual compacto: uma linha com ícone, texto curto e o botão à direita.
+           O botão abre a câmera com um modelo da vitrine e a cliente troca de óculos pelo
+           carrossel do provador. Os filtros de disponibilidade ficam só no catálogo (pílulas),
+           sem repetir aqui. Lojas que não são de óculos veem só o atalho para a coleção. -->
+      <div id="bannerProvador" class="banner-provador relative overflow-hidden max-w-xl mx-auto rounded-2xl border text-left p-3 sm:p-4 flex items-center gap-3 sm:gap-4" style="border-color:rgba(255,255,255,0.14)">
+        <span class="banner-provador-icone flex-none flex items-center justify-center w-10 h-10 sm:w-12 sm:h-12 rounded-xl" aria-hidden="true">
+          <svg class="w-6 h-6 sm:w-7 sm:h-7" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="M4 8V6a2 2 0 012-2h2M16 4h2a2 2 0 012 2v2M20 16v2a2 2 0 01-2 2h-2M8 20H6a2 2 0 01-2-2v-2"/><circle cx="9" cy="11.5" r="2.2"/><circle cx="15" cy="11.5" r="2.2"/><path d="M11.2 11.3h1.6M6.8 11h-1M17.2 11h1"/></svg>
         </span>
         <div class="flex-1 min-w-0">
-          <p class="text-[10px] sm:text-xs font-semibold uppercase mb-1" style="letter-spacing:0.25em;color:#c9c9c9">Provador Virtual</p>
-          <h2 class="text-lg sm:text-2xl font-bold text-white leading-tight">Veja os óculos no seu rosto agora</h2>
-          <p class="mt-1 text-xs sm:text-sm" style="color:var(--nix-muted)">Use a câmera do celular, troque de modelo em tempo real e só depois monte sua maleta.</p>
+          <h2 class="text-sm sm:text-base font-semibold text-white leading-tight">Provador Virtual</h2>
+          <p class="mt-0.5 text-[11px] sm:text-sm leading-snug" style="color:var(--nix-muted)">Veja no seu rosto em tempo real</p>
         </div>
-        </div>
-        <button type="button" id="abrirProvadorTopo" class="btn btn-lg btn-primario flex-none w-full sm:w-auto">
-          <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 8.5A1.5 1.5 0 014.5 7h2.3l1.4-2h7.6l1.4 2h2.3A1.5 1.5 0 0121 8.5v9a1.5 1.5 0 01-1.5 1.5h-15A1.5 1.5 0 013 17.5z"/><circle cx="12" cy="13" r="3.5"/></svg>
-          Experimentar agora
+        <button type="button" id="abrirProvadorTopo" class="btn btn-primario flex-none px-4">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 8.5A1.5 1.5 0 014.5 7h2.3l1.4-2h7.6l1.4 2h2.3A1.5 1.5 0 0121 8.5v9a1.5 1.5 0 01-1.5 1.5h-15A1.5 1.5 0 013 17.5z"/><circle cx="12" cy="13" r="3.5"/></svg>
+          Experimentar
         </button>
       </div>
-      <a href="#catalogo" id="heroColecao" class="hidden btn btn-lg btn-primario">Ver coleção</a>
-    </div>
-  </section>
-
-  <!-- Como funciona: 3 passos com ícones de linha, logo abaixo do banner.
-       No celular os três ficam lado a lado (bloco baixo, o catálogo continua perto). -->
-  <section id="comoFunciona" class="border-y" style="background:#121212;border-color:var(--nix-border)" aria-labelledby="comoFuncionaTitulo">
-    <div class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-5 sm:py-9">
-      <h2 id="comoFuncionaTitulo" class="text-center text-[10px] sm:text-xs font-semibold uppercase mb-4 sm:mb-6" style="letter-spacing:0.3em;color:var(--nix-muted)">Como funciona</h2>
-      <ol class="grid grid-cols-3 gap-3 sm:gap-10">
-        <li data-passo="1" class="flex flex-col items-center text-center">
-          <span class="passo-icone flex items-center justify-center w-11 h-11 sm:w-14 sm:h-14 rounded-full border text-neutral-200" style="border-color:rgba(255,255,255,0.18)" aria-hidden="true">
-            <svg class="w-5 h-5 sm:w-6 sm:h-6" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><rect x="3" y="7" width="18" height="13" rx="2"/><path d="M8.5 7V5.5A1.5 1.5 0 0110 4h4a1.5 1.5 0 011.5 1.5V7M3 12.5h18M10.5 12.5v1.5h3v-1.5"/></svg>
-          </span>
-          <span class="mt-2 sm:mt-3 text-xs sm:text-base font-semibold text-white leading-tight">Monte a Maleta</span>
-          <span class="mt-1 text-[11px] sm:text-sm leading-snug" style="color:var(--nix-muted)">Escolha seus modelos favoritos</span>
-        </li>
-        <li data-passo="2" class="flex flex-col items-center text-center">
-          <span class="passo-icone flex items-center justify-center w-11 h-11 sm:w-14 sm:h-14 rounded-full border text-neutral-200" style="border-color:rgba(255,255,255,0.18)" aria-hidden="true">
-            <svg class="w-5 h-5 sm:w-6 sm:h-6" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="M3 10.5L12 3.5l9 7"/><path d="M5.5 9v10.5a1 1 0 001 1H10v-6h4v6h3.5a1 1 0 001-1V9"/></svg>
-          </span>
-          <span class="mt-2 sm:mt-3 text-xs sm:text-base font-semibold text-white leading-tight">Receba em Casa</span>
-          <span class="mt-1 text-[11px] sm:text-sm leading-snug" style="color:var(--nix-muted)">Experimente sem compromisso</span>
-        </li>
-        <li data-passo="3" class="flex flex-col items-center text-center">
-          <span class="passo-icone flex items-center justify-center w-11 h-11 sm:w-14 sm:h-14 rounded-full border text-neutral-200" style="border-color:rgba(255,255,255,0.18)" aria-hidden="true">
-            <svg class="w-5 h-5 sm:w-6 sm:h-6" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><rect x="2.5" y="5.5" width="19" height="13" rx="2"/><path d="M2.5 10h19M6.5 14.5h4"/></svg>
-          </span>
-          <span class="mt-2 sm:mt-3 text-xs sm:text-base font-semibold text-white leading-tight">Pague o que Ficar</span>
-          <span class="mt-1 text-[11px] sm:text-sm leading-snug" style="color:var(--nix-muted)">Devolva o restante com facilidade</span>
-        </li>
-      </ol>
+      <a href="#catalogo" id="heroColecao" class="hidden btn btn-primario">Ver coleção</a>
+      <button type="button" id="abrirComoFunciona" class="link-ajuda mt-2 sm:mt-3 inline-flex items-center gap-1.5 min-h-[36px] px-2 text-xs sm:text-sm" aria-haspopup="dialog" aria-controls="modalComoFunciona">
+        <span class="flex items-center justify-center w-4 h-4 rounded-full border text-[10px] font-bold" style="border-color:currentColor" aria-hidden="true">?</span>
+        Como funciona a maleta
+      </button>
     </div>
   </section>
 
   <!-- Catálogo (fundo escuro, como o resto da marca) -->
-  <section id="catalogo" class="pb-24 lg:pb-24 scroll-mt-16" style="background:var(--nix-bg)">
+  <section id="catalogo" class="pb-24 lg:pb-24 scroll-mt-14 sm:scroll-mt-16" style="background:var(--nix-bg)">
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
       <!-- Filtros: ficam presos abaixo do topo enquanto a cliente rola os modelos -->
-      <div id="barraFiltros" class="sticky top-16 z-30 -mx-4 sm:-mx-6 lg:-mx-8 px-4 sm:px-6 lg:px-8 pt-3 pb-2.5 sm:pt-8 sm:pb-4 mb-2 sm:mb-4 border-b flex flex-col gap-2.5 sm:gap-4" style="background:rgba(22,22,22,0.94);border-color:var(--nix-border);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px)">
-       <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+      <!-- Filtros: ficam presos abaixo do topo enquanto a cliente rola os modelos.
+           Coleção / Pronta Entrega / Sob Encomenda e os formatos dividem uma única fileira
+           de pílulas com rolagem lateral (economiza altura no celular). Estes filtros só
+           existem aqui: o topo não repete os atalhos. -->
+      <div id="barraFiltros" class="sticky top-14 sm:top-16 z-30 -mx-4 sm:-mx-6 lg:-mx-8 px-4 sm:px-6 lg:px-8 pt-2.5 pb-2.5 sm:pt-6 sm:pb-4 mb-2 sm:mb-4 border-b flex flex-col gap-2 sm:gap-4" style="background:rgba(22,22,22,0.94);border-color:var(--nix-border);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px)">
+       <div class="linha-selecao flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <h2 class="hidden sm:block text-2xl sm:text-3xl font-bold text-white text-left">Nossa Coleção</h2>
-        <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-4">
+        <div class="flex gap-2 sm:items-center sm:gap-4">
           <input type="hidden" id="filtroStatus" value="">
-          <div id="filtroPilulas" class="flex gap-1 p-1 rounded-full border" style="background:rgba(255,255,255,0.05);border-color:var(--nix-border)" role="group" aria-label="Mostrar">
-            <button type="button" data-filtro="" aria-pressed="true" class="filtro-pilula flex-auto px-3 py-2 rounded-full text-xs sm:text-sm font-medium text-neutral-300 border border-transparent">Coleção <span data-contagem="" class="opacity-60"></span></button>
-            <button type="button" data-filtro="DISPONIVEL" aria-pressed="false" class="filtro-pilula flex-auto px-2 py-2 rounded-full text-xs sm:text-sm font-medium text-neutral-300 border border-transparent whitespace-nowrap">Pronta Entrega <span data-contagem="DISPONIVEL" class="opacity-60"></span></button>
-            <button type="button" data-filtro="SOB_ENCOMENDA" aria-pressed="false" class="filtro-pilula flex-auto px-2 py-2 rounded-full text-xs sm:text-sm font-medium text-neutral-300 border border-transparent whitespace-nowrap"><span class="sm:hidden">Encomenda</span><span class="hidden sm:inline">Sob Encomenda</span> <span data-contagem="SOB_ENCOMENDA" class="opacity-60"></span></button>
-          </div>
           <!-- Formato escolhido nos chips (abaixo); o catálogo lê este valor -->
           <input type="hidden" id="filtroFormato" value="">
-          <select id="filtroTamanho" class="hidden w-full sm:w-auto px-3 sm:px-4 py-1.5 sm:py-2 text-sm text-neutral-200 border border-white/15 rounded-full focus:outline-none focus:ring-2 focus:ring-neutral-500" aria-label="Tamanho">
+          <select id="filtroTamanho" class="hidden flex-1 sm:flex-none min-w-0 px-3 sm:px-4 py-1.5 sm:py-2 text-sm text-neutral-200 border border-white/15 rounded-full focus:outline-none focus:ring-2 focus:ring-neutral-500" aria-label="Tamanho">
             <option value="">Todos os tamanhos</option>
           </select>
-          <select id="filtroGenero" class="hidden w-full sm:w-auto px-3 sm:px-4 py-1.5 sm:py-2 text-sm text-neutral-200 border border-white/15 rounded-full focus:outline-none focus:ring-2 focus:ring-neutral-500" aria-label="Gênero">
+          <select id="filtroGenero" class="hidden flex-1 sm:flex-none min-w-0 px-3 sm:px-4 py-1.5 sm:py-2 text-sm text-neutral-200 border border-white/15 rounded-full focus:outline-none focus:ring-2 focus:ring-neutral-500" aria-label="Gênero">
             <option value="">Todos os gêneros</option>
           </select>
         </div>
        </div>
-        <!-- Chips de formato: rolagem lateral, um toque filtra (preenchidos com os formatos cadastrados) -->
-        <div id="chipsFormato" class="chips-formato hidden -mx-4 px-4 sm:mx-0 sm:px-0" role="group" aria-label="Formato"></div>
+        <div id="filtrosRolagem" class="chips-formato -mx-4 px-4 sm:mx-0 sm:px-0">
+          <div id="filtroPilulas" class="flex flex-none gap-2" role="group" aria-label="Mostrar">
+            <button type="button" data-filtro="" aria-pressed="true" class="chip-formato filtro-pilula">Coleção <span data-contagem="" class="ml-1 opacity-60"></span></button>
+            <button type="button" data-filtro="DISPONIVEL" aria-pressed="false" class="chip-formato filtro-pilula">Pronta Entrega <span data-contagem="DISPONIVEL" class="ml-1 opacity-60"></span></button>
+            <button type="button" data-filtro="SOB_ENCOMENDA" aria-pressed="false" class="chip-formato filtro-pilula">Sob Encomenda <span data-contagem="SOB_ENCOMENDA" class="ml-1 opacity-60"></span></button>
+          </div>
+          <!-- Chips de formato: na mesma fileira, depois de um divisor; um toque filtra
+               (preenchidos com os formatos cadastrados, só com dois formatos ou mais) -->
+          <div id="chipsFormato" class="chips-grupo hidden flex flex-none gap-2 pl-2 border-l" style="border-color:rgba(255,255,255,0.14)" role="group" aria-label="Formato"></div>
+        </div>
       </div>
       <!-- Orientação: uma linha que muda com o filtro (some quando não há o que dizer) -->
       <p id="guiaCatalogo" class="mb-3 sm:mb-6 text-xs sm:text-sm text-neutral-400" role="status"><span id="guiaCatalogoTexto"></span></p>
-      <div id="catalogoGrid" class="grid grid-cols-3 gap-2 sm:gap-6">
+      <div id="catalogoGrid" class="grid grid-cols-3 lg:grid-cols-4 gap-2 sm:gap-5">
         <!-- Cards inseridos via JS -->
       </div>
       <div id="emptyState" class="hidden text-center py-12">
@@ -383,6 +376,52 @@
           <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path d="M12.04 2C6.58 2 2.13 6.45 2.13 11.91c0 1.75.46 3.45 1.32 4.95L2.05 22l5.25-1.38a9.9 9.9 0 004.74 1.21h.01c5.46 0 9.91-4.45 9.91-9.91A9.85 9.85 0 0012.04 2zm5.79 14.06c-.24.68-1.42 1.32-1.96 1.37-.5.05-.98.23-3.3-.69-2.79-1.1-4.56-3.95-4.7-4.13-.13-.18-1.12-1.49-1.12-2.85 0-1.35.71-2.02.96-2.29.25-.28.55-.35.73-.35l.53.01c.17 0 .4-.06.62.47.24.56.79 1.92.86 2.06.07.14.11.3.02.48-.09.18-.14.3-.27.46-.14.16-.29.36-.41.48-.14.14-.28.29-.12.56.16.28.71 1.17 1.53 1.9 1.05.94 1.94 1.23 2.21 1.37.28.14.44.12.6-.07.16-.18.69-.8.88-1.08.18-.28.37-.23.62-.14.25.09 1.6.76 1.87.9.28.14.46.2.53.32.07.12.07.68-.17 1.36z"/></svg>
           Finalizar pelo WhatsApp
         </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Como funciona a maleta: janela aberta pelo link "? Como funciona a maleta" do topo.
+       No celular sobe de baixo (folha), no computador fica no centro. -->
+  <div id="modalComoFunciona" class="fixed inset-0 modal-overlay bg-black/60 hidden z-50 flex items-end sm:items-center justify-center sm:p-4" role="dialog" aria-modal="true" aria-labelledby="comoFuncionaTitulo">
+    <div class="w-full sm:max-w-md rounded-t-2xl sm:rounded-2xl border" style="background:var(--nix-surface);color:var(--nix-text);border-color:var(--nix-border);padding-bottom:env(safe-area-inset-bottom, 0px)">
+      <div class="flex items-center justify-between gap-3 px-5 pt-4 pb-3 border-b" style="border-color:var(--nix-border)">
+        <h3 id="comoFuncionaTitulo" class="font-semibold text-white">Como funciona a maleta</h3>
+        <button type="button" id="fecharComoFunciona" class="p-2 rounded-full hover:bg-white/10" aria-label="Fechar">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+        </button>
+      </div>
+      <ol class="px-5 py-5 flex flex-col gap-4">
+        <li data-passo="1" class="flex items-center gap-4">
+          <span class="passo-icone flex-none flex items-center justify-center w-12 h-12 rounded-full border text-neutral-200" style="border-color:rgba(255,255,255,0.18)" aria-hidden="true">
+            <svg class="w-6 h-6" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><rect x="3" y="7" width="18" height="13" rx="2"/><path d="M8.5 7V5.5A1.5 1.5 0 0110 4h4a1.5 1.5 0 011.5 1.5V7M3 12.5h18M10.5 12.5v1.5h3v-1.5"/></svg>
+          </span>
+          <span class="flex flex-col min-w-0">
+            <span class="text-sm sm:text-base font-semibold text-white leading-tight">Monte a Maleta</span>
+            <span class="mt-0.5 text-xs sm:text-sm leading-snug" style="color:var(--nix-muted)">Escolha seus modelos favoritos</span>
+          </span>
+        </li>
+        <li data-passo="2" class="flex items-center gap-4">
+          <span class="passo-icone flex-none flex items-center justify-center w-12 h-12 rounded-full border text-neutral-200" style="border-color:rgba(255,255,255,0.18)" aria-hidden="true">
+            <svg class="w-6 h-6" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="M3 10.5L12 3.5l9 7"/><path d="M5.5 9v10.5a1 1 0 001 1H10v-6h4v6h3.5a1 1 0 001-1V9"/></svg>
+          </span>
+          <span class="flex flex-col min-w-0">
+            <span class="text-sm sm:text-base font-semibold text-white leading-tight">Receba em Casa</span>
+            <span class="mt-0.5 text-xs sm:text-sm leading-snug" style="color:var(--nix-muted)">Experimente sem compromisso</span>
+          </span>
+        </li>
+        <li data-passo="3" class="flex items-center gap-4">
+          <span class="passo-icone flex-none flex items-center justify-center w-12 h-12 rounded-full border text-neutral-200" style="border-color:rgba(255,255,255,0.18)" aria-hidden="true">
+            <svg class="w-6 h-6" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><rect x="2.5" y="5.5" width="19" height="13" rx="2"/><path d="M2.5 10h19M6.5 14.5h4"/></svg>
+          </span>
+          <span class="flex flex-col min-w-0">
+            <span class="text-sm sm:text-base font-semibold text-white leading-tight">Pague o que Ficar</span>
+            <span class="mt-0.5 text-xs sm:text-sm leading-snug" style="color:var(--nix-muted)">Devolva o restante com facilidade</span>
+          </span>
+        </li>
+      </ol>
+      <p data-como-funciona-encomenda class="mx-5 mb-4 px-3 py-2.5 rounded-xl text-xs leading-snug text-sky-200" style="background:rgba(37,99,235,0.14)">Sob encomenda: você reserva com sinal de 50% e paga o restante na entrega.</p>
+      <div class="px-5 pb-5">
+        <button type="button" id="entendiComoFunciona" class="btn btn-primario w-full">Entendi, ver modelos</button>
       </div>
     </div>
   </div>
@@ -547,6 +586,7 @@
       provador: () => fecharProvador(),
       maleta: () => fecharModalMaleta(),
       cliente: () => fecharCliente(),
+      comoFunciona: () => fecharComoFunciona(),
     };
 
     function entrarModalHistorico(nome) {
@@ -922,9 +962,10 @@
         card.dataset.card = id;
         card.dataset.produtos = grupo.map(p => Number(p.id)).join(' ');
         const tags = tagsCard(produto);
-        // "Disponível" é o normal da vitrine: só condicional ganha etiqueta. A encomenda
-        // ganha uma faixa azul por cima da foto, que se vê até no card pequeno do celular.
+        // Selo discreto no canto da foto: "Pronta entrega" (livre para provar) ou
+        // "Encomenda" (azul). Condicional (já está com outra cliente) mantém a etiqueta própria.
         const mostraEtiqueta = !encomenda && produto.status !== 'DISPONIVEL';
+        const prontaEntrega = !encomenda && !mostraEtiqueta;
         card.className = 'glass-card card-produto rounded-xl sm:rounded-2xl overflow-hidden flex flex-col';
         // Foto com respiro (moldura escura) e cantos arredondados; abaixo, nome e
         // materiais em cinza e só o preço e o botão em destaque.
@@ -940,7 +981,8 @@
             <div class="absolute bottom-1.5 sm:bottom-2 left-0 right-0 flex justify-center gap-1 pointer-events-none">
               ${fotos.map((_, i) => `<span data-dot class="w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full ${i === indice ? 'bg-white' : 'bg-white/50'} shadow"></span>`).join('')}
             </div>` : ''}
-            ${encomenda ? `<div data-selo-encomenda class="absolute top-0 inset-x-0 bg-blue-600/95 text-white text-center text-[9px] sm:text-xs font-bold tracking-wide py-0.5 sm:py-1 shadow-sm pointer-events-none" title="Sob encomenda: 50% de sinal para reservar e 50% na entrega">SOB ENCOMENDA</div>` : ''}
+            ${encomenda ? `<span data-selo-encomenda class="selo-card absolute top-1.5 left-1.5 sm:top-2.5 sm:left-2.5 bg-blue-600/95 text-white pointer-events-none" title="Sob encomenda: 50% de sinal para reservar e 50% na entrega">Encomenda</span>` : ''}
+            ${prontaEntrega ? `<span data-selo-pronta class="selo-card absolute top-1.5 left-1.5 sm:top-2.5 sm:left-2.5 text-white pointer-events-none" style="background:rgba(16,16,16,0.72)" title="Pronta entrega: vai na maleta para provar em casa"><span class="w-1.5 h-1.5 rounded-full bg-emerald-400" aria-hidden="true"></span>Pronta</span>` : ''}
             ${mostraEtiqueta ? `<div class="absolute top-1.5 right-1.5 sm:top-3 sm:right-3">
               <span class="px-1.5 sm:px-2 py-0.5 sm:py-1 text-[9px] sm:text-xs font-medium rounded-full ${etiqueta.classe}">${escapeHtml(etiqueta.texto)}</span>
             </div>` : ''}
@@ -948,7 +990,7 @@
           </div>
           </div>
           <div class="p-2 sm:p-4 pt-2 sm:pt-3 flex-1 flex flex-col">
-            <h3 class="font-medium text-neutral-300 text-xs sm:text-[15px] leading-snug mb-0.5 line-clamp-2 break-words" title="${escapeHtml(produto.nome)}">${escapeHtml(nomeCard(produto))}</h3>
+            <h3 class="font-medium text-neutral-300 text-xs sm:text-[15px] leading-snug mb-0.5 line-clamp-2 min-h-[2.75em] break-words" title="${escapeHtml(produto.nome)}">${escapeHtml(nomeCard(produto))}</h3>
             ${tags.length ? `<p data-tags-card class="hidden sm:block text-xs text-neutral-500 mb-2 truncate">${tags.map(escapeHtml).join(' · ')}</p>` : ''}
             ${tamanhos.length ? `<p data-tamanhos-card class="text-[10px] sm:text-xs font-medium text-neutral-400 mb-1 sm:mb-2 truncate" title="Tamanhos">${tamanhos.map(escapeHtml).join(' · ')}</p>` : ''}
             <div class="mt-auto mb-2 sm:mb-3">
@@ -2105,6 +2147,32 @@
         mostrarToast('Erro ao finalizar pedido. Tente novamente.', 'error');
       }
     });
+
+    // "Como funciona a maleta": janela de ajuda aberta pelo link discreto do topo
+    const modalComoFunciona = document.getElementById('modalComoFunciona');
+
+    function abrirComoFunciona() {
+      modalComoFunciona.classList.remove('hidden');
+      document.body.style.overflow = 'hidden';
+      entrarModalHistorico('comoFunciona');
+      document.getElementById('fecharComoFunciona').focus();
+    }
+
+    function fecharComoFunciona() {
+      if (modalComoFunciona.classList.contains('hidden')) return;
+      modalComoFunciona.classList.add('hidden');
+      document.body.style.overflow = '';
+      sairModalHistorico('comoFunciona');
+    }
+
+    document.getElementById('abrirComoFunciona').addEventListener('click', abrirComoFunciona);
+    document.getElementById('fecharComoFunciona').addEventListener('click', fecharComoFunciona);
+    document.getElementById('entendiComoFunciona').addEventListener('click', () => {
+      fecharComoFunciona();
+      document.getElementById('catalogo').scrollIntoView({ behavior: 'smooth' });
+    });
+    modalComoFunciona.addEventListener('click', (e) => { if (e.target === modalComoFunciona) fecharComoFunciona(); });
+    document.addEventListener('keydown', (e) => { if (e.key === 'Escape') fecharComoFunciona(); });
 
     // Inicialização
     document.addEventListener('DOMContentLoaded', () => {
