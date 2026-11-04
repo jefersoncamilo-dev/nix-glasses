@@ -32,10 +32,16 @@ const produtos = [
 describe('vitrine: atalhos e pílulas de filtro', () => {
   it('o topo convida para o Provador Virtual (sem repetir os filtros do catálogo)', () => {
     assert.doesNotMatch(html, /data-atalho-filtro|atalho-topo/);
-    const banner = html.match(/<div id="bannerProvador"[\s\S]*?<button type="button" id="abrirProvadorTopo" class="btn btn-lg btn-primario[^"]*">[\s\S]*?<\/button>/);
+    const banner = html.match(/<div id="bannerProvador"[\s\S]*?<button type="button" id="abrirProvadorTopo" class="btn btn-primario[^"]*">[\s\S]*?<\/button>/);
     assert.ok(banner, 'faltou o banner do provador com o botão principal');
     assert.match(banner[0], /Provador Virtual/);
-    assert.ok(html.indexOf('id="bannerProvador"') < html.indexOf('id="comoFunciona"'));
+    // banner compacto: uma linha (ícone, texto e botão lado a lado), sem empilhar no celular
+    assert.match(banner[0], /<div id="bannerProvador" class="[^"]*\bflex items-center\b/);
+    assert.doesNotMatch(banner[0], /flex-col|btn-lg/);
+    // o hero não tem mais blocos de texto/tutorial antes do catálogo
+    const hero = html.match(/<section id="hero"[\s\S]*?<\/section>/)[0];
+    assert.ok(hero.includes('id="bannerProvador"'));
+    assert.doesNotMatch(hero, /data-passo/);
     assert.match(html, /getElementById\('abrirProvadorTopo'\)\.addEventListener\('click', abrirProvadorTopo\)/);
     // loja que não é de óculos: some o banner e fica o atalho para a coleção
     assert.match(html, /LOJA\?\.oculos === false\) \{\s*document\.getElementById\('bannerProvador'\)\.classList\.add\('hidden'\);\s*document\.getElementById\('heroColecao'\)\.classList\.remove\('hidden'\)/);
@@ -94,9 +100,12 @@ describe('vitrine: atalhos e pílulas de filtro', () => {
   it('os formatos viram chips (sem o <select>): ordem alfabética, "Todos" primeiro e só com dois formatos ou mais', () => {
     assert.doesNotMatch(html, /<select id="filtroFormato"/);
     assert.match(html, /<input type="hidden" id="filtroFormato" value="">/);
-    assert.match(html, /<div id="chipsFormato" class="chips-formato hidden[^"]*" role="group"/);
-    // os chips ficam logo abaixo das pílulas Coleção / Pronta Entrega / Sob Encomenda
-    assert.ok(html.indexOf('id="chipsFormato"') > html.indexOf('id="filtroPilulas"'));
+    // pílulas Coleção / Pronta Entrega / Sob Encomenda e chips de formato dividem
+    // uma única fileira com rolagem lateral
+    const fileira = html.match(/<div id="filtrosRolagem" class="chips-formato[^"]*">[\s\S]*?<div id="chipsFormato" class="chips-grupo hidden[^"]*"[^>]*role="group"/);
+    assert.ok(fileira, 'pílulas e formatos deveriam estar na mesma fileira');
+    assert.ok(fileira[0].indexOf('id="filtroPilulas"') > 0);
+    for (const f of ['', 'DISPONIVEL', 'SOB_ENCOMENDA']) assert.match(fileira[0], new RegExp(`data-filtro="${f}" aria-pressed="(true|false)" class="chip-formato filtro-pilula"`));
     assert.match(html, /\.chips-formato \{[^}]*overflow-x: auto/);
 
     const chips = { innerHTML: '', setAttribute() {}, classList: { toggle: (c, v) => { chips.escondido = v; } } };
@@ -155,11 +164,18 @@ describe('vitrine: atalhos e pílulas de filtro', () => {
     assert.equal(estado([{ id: 1 }, { id: 2 }]).texto, '2 modelos na maleta');
   });
 
-  it('"Como funciona" em 3 passos com ícones de linha, logo abaixo do banner', () => {
-    const secao = html.match(/<section id="comoFunciona"[\s\S]*?<\/section>/);
-    assert.ok(secao, 'faltou a seção Como funciona');
-    assert.ok(html.indexOf('id="comoFunciona"') < html.indexOf('id="catalogo"'));
-    assert.ok(html.indexOf('id="comoFunciona"') > html.indexOf('data-loja="chamada"'));
+  it('"Como funciona" sai do fluxo: link discreto no topo abre uma janela com os 3 passos', () => {
+    assert.doesNotMatch(html, /<section id="comoFunciona"/);
+    const link = html.match(/<button type="button" id="abrirComoFunciona" class="link-ajuda[^"]*"[^>]*aria-controls="modalComoFunciona">[\s\S]*?<\/button>/);
+    assert.ok(link, 'faltou o link "Como funciona a maleta"');
+    assert.match(link[0], /\?<\/span>\s*Como funciona a maleta/);
+    assert.ok(html.indexOf('id="abrirComoFunciona"') < html.indexOf('id="catalogo"'));
+    const secao = html.match(/<div id="modalComoFunciona" class="fixed inset-0 [^"]*hidden[^"]*" role="dialog" aria-modal="true"[\s\S]*?id="entendiComoFunciona"/);
+    assert.ok(secao, 'faltou a janela Como funciona');
+    // o Voltar do celular fecha a janela (histórico), como as outras
+    assert.match(html, /comoFunciona: \(\) => fecharComoFunciona\(\)/);
+    assert.match(extrairFuncao('abrirComoFunciona'), /entrarModalHistorico\('comoFunciona'\)/);
+    assert.match(extrairFuncao('fecharComoFunciona'), /sairModalHistorico\('comoFunciona'\)/);
     const passos = [...secao[0].matchAll(/<li data-passo="(\d)"[\s\S]*?<svg[^>]*fill="none" stroke="currentColor"[\s\S]*?text-white[^"]*">([^<]+)<\/span>\s*<span[^>]*>([^<]+)<\/span>/g)];
     assert.deepEqual(passos.map(m => [m[1], m[2], m[3]]), [
       ['1', 'Monte a Maleta', 'Escolha seus modelos favoritos'],
