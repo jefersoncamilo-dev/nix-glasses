@@ -1,4 +1,4 @@
-// Vitrine: atalhos Coleção / Pronta Entrega / Sob Encomenda, contagem das pílulas
+// Vitrine: banner do Provador Virtual no topo, contagem das pílulas
 // de filtro e o texto de orientação acima dos cards.
 const { describe, it } = require('node:test');
 const assert = require('node:assert/strict');
@@ -30,14 +30,29 @@ const produtos = [
 ];
 
 describe('vitrine: atalhos e pílulas de filtro', () => {
-  it('o topo tem Coleção, Pronta Entrega e Sob Encomenda no lugar de "Ver Coleção"', () => {
-    assert.ok(!html.includes('>Ver Coleção<'));
-    assert.match(html, /data-atalho-filtro="DISPONIVEL"[^>]*>Pronta Entrega </);
-    assert.match(html, /data-atalho-filtro="SOB_ENCOMENDA"[^>]*>Sob Encomenda </);
-    for (const filtro of ['""', '"DISPONIVEL"', '"SOB_ENCOMENDA"']) {
-      assert.match(html, new RegExp(`data-atalho-filtro=${filtro}`));
-      assert.match(html, new RegExp(`data-filtro=${filtro}`));
-    }
+  it('o topo convida para o Provador Virtual (sem repetir os filtros do catálogo)', () => {
+    assert.doesNotMatch(html, /data-atalho-filtro|atalho-topo/);
+    const banner = html.match(/<div id="bannerProvador"[\s\S]*?<button type="button" id="abrirProvadorTopo" class="btn btn-lg btn-primario[^"]*">[\s\S]*?<\/button>/);
+    assert.ok(banner, 'faltou o banner do provador com o botão principal');
+    assert.match(banner[0], /Provador Virtual/);
+    assert.ok(html.indexOf('id="bannerProvador"') < html.indexOf('id="comoFunciona"'));
+    assert.match(html, /getElementById\('abrirProvadorTopo'\)\.addEventListener\('click', abrirProvadorTopo\)/);
+    // loja que não é de óculos: some o banner e fica o atalho para a coleção
+    assert.match(html, /LOJA\?\.oculos === false\) \{\s*document\.getElementById\('bannerProvador'\)\.classList\.add\('hidden'\);\s*document\.getElementById\('heroColecao'\)\.classList\.remove\('hidden'\)/);
+    // as pílulas do catálogo continuam com os três filtros
+    for (const filtro of ['""', '"DISPONIVEL"', '"SOB_ENCOMENDA"']) assert.match(html, new RegExp(`data-filtro=${filtro}`));
+  });
+
+  it('o botão do topo abre o provador com um modelo com foto, de preferência pronta entrega', () => {
+    const c = vm.createContext({});
+    vm.runInContext(`${['fotosDoProduto', 'ehSobEncomenda', 'passaFiltroStatus', 'produtoParaProvadorTopo'].map(extrairFuncao).join('\n')}; this.f = produtoParaProvadorTopo;`, c);
+    const semFoto = { id: 1, status: 'DISPONIVEL', disponibilidade: 'PRONTA_ENTREGA' };
+    const encomenda = { id: 2, imagem_url: 'a.jpg', status: 'DISPONIVEL', disponibilidade: 'SOB_ENCOMENDA' };
+    const pronta = { id: 3, imagem_url: 'b.jpg', status: 'DISPONIVEL', disponibilidade: 'PRONTA_ENTREGA' };
+    assert.equal(c.f([semFoto, encomenda, pronta]).id, 3);
+    assert.equal(c.f([semFoto, encomenda]).id, 2);
+    assert.equal(c.f([semFoto]), null);
+    assert.equal(c.f([]), null);
   });
 
   it('conta todos na Coleção, só pronta entrega livre em Pronta Entrega e só encomendas em Sob Encomenda', () => {
@@ -64,10 +79,8 @@ describe('vitrine: atalhos e pílulas de filtro', () => {
     }
   });
 
-  it('o botão principal é prateado como o "Coleção" e o atalho escolhido fica prateado', () => {
-    assert.match(html, /\.btn-primario, \.btn\.atalho-topo\[aria-pressed="true"\][^{]*\{ background: linear-gradient\(180deg, #f5f5f5/);
-    assert.match(html, /data-atalho-filtro="" aria-pressed="true"/);
-    assert.match(html, /querySelectorAll\('\[data-atalho-filtro\]'\)\.forEach\(a => a\.setAttribute\('aria-pressed'/);
+  it('o botão principal e a pílula escolhida são prateados', () => {
+    assert.match(html, /\.btn-primario, \.filtro-pilula\[aria-pressed="true"\][^{]*\{ background: linear-gradient\(180deg, #f5f5f5/);
   });
 
   it('maleta: endereço editável que aparece depois do CEP e texto que serve para qualquer loja', () => {
