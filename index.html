@@ -78,6 +78,26 @@
     .btn-secundario:hover:not(:disabled) { background: #f9fafb; }
     .btn-contorno-escuro { background: transparent; color: #fff; border-color: rgba(255,255,255,0.35); }
     .btn-contorno-escuro:hover:not(:disabled) { background: rgba(255,255,255,0.1); }
+    /* Destaque: ação principal sobre fundo branco (detalhes do produto). Sólido e escuro,
+       com o brilho prateado da marca só na borda, para não sumir no branco. */
+    .btn-destaque { background: #161616; color: #fff; border-color: #161616; box-shadow: 0 6px 16px rgba(0,0,0,0.22), inset 0 1px 0 rgba(255,255,255,0.12); }
+    .btn-destaque:hover:not(:disabled) { background: #2a2a2a; }
+    .btn-destaque:disabled { background: #6b7280; border-color: #6b7280; box-shadow: none; }
+    /* Finalizar pelo WhatsApp: o verde que a cliente reconhece */
+    .btn-whatsapp { background: #1fa855; color: #fff; border-color: #1a9a4c; box-shadow: 0 6px 16px rgba(31,168,85,0.28); }
+    .btn-whatsapp:hover:not(:disabled) { background: #188f47; }
+    /* Sanfona "Mais Detalhes e Medidas Técnicas" dos detalhes do produto */
+    .detalhes-tecnicos summary { list-style: none; }
+    .detalhes-tecnicos summary::-webkit-details-marker { display: none; }
+    .detalhes-tecnicos .seta-detalhes { transition: transform 0.2s ease; }
+    .detalhes-tecnicos[open] .seta-detalhes { transform: rotate(180deg); }
+    /* Maleta: gaveta lateral que desliza da direita (no celular ocupa a tela toda) */
+    #modalMaleta .gaveta-maleta { transform: translateX(100%); transition: transform 0.28s cubic-bezier(0.22, 1, 0.36, 1); }
+    #modalMaleta.aberta .gaveta-maleta { transform: translateX(0); }
+    #modalMaleta { transition: background-color 0.28s ease; }
+    /* Contador do topo: pulsa quando entra ou sai um modelo */
+    #maletaCount.pulso { animation: pulsoMaleta 0.35s ease; }
+    @media (prefers-reduced-motion: reduce) { #modalMaleta .gaveta-maleta, .detalhes-tecnicos .seta-detalhes { transition: none; } #maletaCount.pulso { animation: none; } }
     @media (prefers-reduced-motion: reduce) { .btn { transition: none; } .btn:active { transform: none; } }
     /* Guias da vitrine: seta da barra da maleta que "cutuca" e filtros em pílula */
     .guia-cutuca { animation: guiaCutuca 1.4s ease-in-out infinite; }
@@ -113,9 +133,11 @@
             <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/></svg>
             <span id="clienteHeader" class="hidden sm:inline text-sm font-medium max-w-[10rem] truncate">Entrar</span>
           </button>
-          <button id="btnMaleta" class="relative p-2 transition-colors" style="color:var(--nix-muted)" onmouseover="this.style.color='#fff'" onmouseout="this.style.color='var(--nix-muted)'" aria-label="Minha Maleta">
-            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z"/></svg>
-            <span id="maletaCount" class="chrome-btn absolute -top-1 -right-1 text-xs font-bold w-5 h-5 rounded-full flex items-center justify-center hidden">0</span>
+          <!-- Maleta sempre à mão: o contador muda na hora e o clique abre a gaveta lateral -->
+          <button id="btnMaleta" class="relative flex items-center gap-2 h-10 pl-3 pr-3 sm:pr-4 rounded-full border text-white transition-colors hover:bg-white/10" style="border-color:rgba(255,255,255,0.28)" aria-label="Minha Maleta: vazia" aria-haspopup="dialog" aria-controls="modalMaleta">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="7" width="18" height="13" rx="2" stroke-width="1.8"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M8.5 7V5.5A1.5 1.5 0 0110 4h4a1.5 1.5 0 011.5 1.5V7M3 12.5h18M10.5 12.5v1.5h3v-1.5"/></svg>
+            <span class="hidden sm:inline text-sm font-semibold">Maleta</span>
+            <span id="maletaCount" class="chrome-btn absolute -top-1.5 -right-1.5 text-xs font-bold min-w-[1.25rem] h-5 px-1 rounded-full flex items-center justify-center hidden" aria-hidden="true">0</span>
           </button>
         </div>
       </div>
@@ -210,9 +232,10 @@
     </div>
   </footer>
 
-  <!-- Modal Maleta: 1. modelos escolhidos, 2. dados para entrega, botão de envio fixo no rodapé -->
-  <div id="modalMaleta" class="fixed inset-0 modal-overlay bg-black/50 hidden z-50 flex items-end sm:items-center justify-center p-0 sm:p-4" role="dialog" aria-modal="true" aria-labelledby="maletaTitulo">
-    <div class="bg-white rounded-t-2xl sm:rounded-2xl max-w-2xl w-full max-h-[92vh] sm:max-h-[90vh] overflow-hidden flex flex-col">
+  <!-- Maleta em gaveta lateral: 1. modelos escolhidos (miniatura e nome), 2. dados para
+       entrega e o botão "Finalizar pelo WhatsApp" fixo no rodapé da gaveta -->
+  <div id="modalMaleta" class="fixed inset-0 modal-overlay bg-black/50 hidden z-50 flex justify-end" role="dialog" aria-modal="true" aria-labelledby="maletaTitulo">
+    <div class="gaveta-maleta bg-white w-full sm:max-w-md h-full overflow-hidden flex flex-col shadow-2xl">
       <div class="flex items-center justify-between px-5 py-4 sm:px-6 border-b border-gray-200">
         <div>
           <h3 id="maletaTitulo" class="text-lg sm:text-xl font-bold text-gray-900">Minha Maleta</h3>
@@ -273,13 +296,16 @@
           </div>
         </div>
       </div>
-      <div id="maletaFooter" class="hidden px-5 py-4 sm:p-6 border-t border-gray-200 bg-gray-50 sm:rounded-b-2xl flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div class="flex flex-wrap items-baseline justify-between gap-x-2 sm:block">
+      <div id="maletaFooter" class="hidden px-5 py-4 border-t border-gray-200 bg-gray-50 flex flex-col gap-3" style="padding-bottom:max(1rem, env(safe-area-inset-bottom))">
+        <div class="flex flex-wrap items-baseline justify-between gap-x-2">
           <p class="text-sm text-gray-500">Total</p>
-          <p id="maletaTotal" class="text-xl sm:text-2xl font-bold text-gray-900">R$ 0,00</p>
-          <p id="maletaSinal" class="hidden w-full text-right sm:text-left text-xs font-medium text-blue-700"></p>
+          <p id="maletaTotal" class="text-xl font-bold text-gray-900">R$ 0,00</p>
+          <p id="maletaSinal" class="hidden w-full text-right text-xs font-medium text-blue-700"></p>
         </div>
-        <button id="finalizarPedido" class="btn btn-lg btn-primario w-full sm:w-auto">Enviar pedido pelo WhatsApp</button>
+        <button id="finalizarPedido" class="btn btn-lg btn-whatsapp w-full">
+          <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path d="M12.04 2C6.58 2 2.13 6.45 2.13 11.91c0 1.75.46 3.45 1.32 4.95L2.05 22l5.25-1.38a9.9 9.9 0 004.74 1.21h.01c5.46 0 9.91-4.45 9.91-9.91A9.85 9.85 0 0012.04 2zm5.79 14.06c-.24.68-1.42 1.32-1.96 1.37-.5.05-.98.23-3.3-.69-2.79-1.1-4.56-3.95-4.7-4.13-.13-.18-1.12-1.49-1.12-2.85 0-1.35.71-2.02.96-2.29.25-.28.55-.35.73-.35l.53.01c.17 0 .4-.06.62.47.24.56.79 1.92.86 2.06.07.14.11.3.02.48-.09.18-.14.3-.27.46-.14.16-.29.36-.41.48-.14.14-.28.29-.12.56.16.28.71 1.17 1.53 1.9 1.05.94 1.94 1.23 2.21 1.37.28.14.44.12.6-.07.16-.18.69-.8.88-1.08.18-.28.37-.23.62-.14.25.09 1.6.76 1.87.9.28.14.46.2.53.32.07.12.07.68-.17 1.36z"/></svg>
+          Finalizar pelo WhatsApp
+        </button>
       </div>
     </div>
   </div>
@@ -799,8 +825,9 @@
         card.dataset.card = id;
         card.dataset.produtos = grupo.map(p => Number(p.id)).join(' ');
         const tags = tagsCard(produto);
-        // "Disponível" é o normal da vitrine: só encomenda e condicional ganham etiqueta
-        const mostraEtiqueta = encomenda || produto.status !== 'DISPONIVEL';
+        // "Disponível" é o normal da vitrine: só condicional ganha etiqueta. A encomenda
+        // ganha uma faixa azul por cima da foto, que se vê até no card pequeno do celular.
+        const mostraEtiqueta = !encomenda && produto.status !== 'DISPONIVEL';
         card.className = 'glass-card bg-white rounded-xl sm:rounded-2xl overflow-hidden border border-gray-100 flex flex-col';
         card.innerHTML = `
           <div class="aspect-square bg-gray-100 relative overflow-hidden">
@@ -813,6 +840,7 @@
             <div class="absolute bottom-1.5 sm:bottom-2 left-0 right-0 flex justify-center gap-1 pointer-events-none">
               ${fotos.map((_, i) => `<span data-dot class="w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full ${i === indice ? 'bg-white' : 'bg-white/50'} shadow"></span>`).join('')}
             </div>` : ''}
+            ${encomenda ? `<div data-selo-encomenda class="absolute top-0 inset-x-0 bg-blue-600/95 text-white text-center text-[9px] sm:text-xs font-bold tracking-wide py-0.5 sm:py-1 shadow-sm pointer-events-none" title="Sob encomenda: 50% de sinal para reservar e 50% na entrega">SOB ENCOMENDA</div>` : ''}
             ${mostraEtiqueta ? `<div class="absolute top-1.5 right-1.5 sm:top-3 sm:right-3">
               <span class="px-1.5 sm:px-2 py-0.5 sm:py-1 text-[9px] sm:text-xs font-medium rounded-full ${etiqueta.classe}">${escapeHtml(etiqueta.texto)}</span>
             </div>` : ''}
@@ -825,7 +853,7 @@
             <div class="mt-auto mb-2 sm:mb-3">
               ${variaPreco ? '<span class="block text-[10px] sm:text-xs text-gray-500">a partir de</span>' : ''}
               <span class="block text-sm sm:text-xl font-bold text-gray-900">${formatarMoeda(Math.min(...precos))}</span>
-              ${encomenda ? `<span data-selo-sinal class="block text-[10px] sm:text-xs font-medium text-blue-700 whitespace-nowrap" title="50% de sinal agora e 50% na entrega">Sinal: ${formatarMoeda(calcularSinal(produto.preco_venda))}</span>` : ''}
+              ${encomenda ? `<span data-selo-sinal class="block text-[10px] sm:text-xs font-semibold text-blue-700 whitespace-nowrap" title="50% de sinal agora e 50% na entrega">Sinal 50%: ${formatarMoeda(calcularSinal(produto.preco_venda))}</span>` : ''}
             </div>
             <div data-acao-maleta>${grupo.length > 1 ? botaoGrupoCard(grupo) : botaoMaletaCard(produto, jaNaMaleta)}</div>
           </div>
@@ -960,39 +988,50 @@
       detalhesConteudo.innerHTML = `
         <div class="grid md:grid-cols-2">
           <div class="p-3 sm:p-4">
-            <div data-foto-principal class="aspect-square bg-gray-100 rounded-xl overflow-hidden relative select-none">
-              ${fotos.length ? `<img src="${escapeHtml(fotos[indice])}" alt="${escapeHtml(produto.nome)} - foto ${indice + 1} de ${fotos.length}" class="w-full h-full object-cover" onerror="imgFallback(this)">` : '<div class="w-full h-full flex items-center justify-center text-gray-300 text-sm">Sem foto</div>'}
+            <!-- No celular a foto é mais baixa (4:3, sem cortar) para o preço e o botão da maleta aparecerem sem rolar -->
+            <div data-foto-principal class="aspect-[4/3] sm:aspect-square bg-gray-100 rounded-xl overflow-hidden relative select-none">
+              ${fotos.length ? `<img src="${escapeHtml(fotos[indice])}" alt="${escapeHtml(produto.nome)} - foto ${indice + 1} de ${fotos.length}" class="w-full h-full object-contain sm:object-cover" onerror="imgFallback(this)">` : '<div class="w-full h-full flex items-center justify-center text-gray-300 text-sm">Sem foto</div>'}
               ${fotos.length > 1 ? `
               <button type="button" onclick="mostrarFotoDetalhes(${indice - 1})" class="absolute left-2 top-1/2 -translate-y-1/2 w-10 h-10 flex items-center justify-center rounded-full bg-white/90 text-gray-800 text-2xl shadow" aria-label="Foto anterior">&#8249;</button>
               <button type="button" onclick="mostrarFotoDetalhes(${indice + 1})" class="absolute right-2 top-1/2 -translate-y-1/2 w-10 h-10 flex items-center justify-center rounded-full bg-white/90 text-gray-800 text-2xl shadow" aria-label="Próxima foto">&#8250;</button>
               <span class="absolute bottom-2 right-2 bg-black/60 text-white text-xs px-2 py-0.5 rounded-full">${indice + 1}/${fotos.length}</span>` : ''}
             </div>
             ${fotos.length > 1 ? `
-            <div class="miniaturas flex gap-2 mt-3 overflow-x-auto">
+            <div class="miniaturas hidden sm:flex gap-2 mt-3 overflow-x-auto">
               ${fotos.map((f, i) => `<button type="button" onclick="mostrarFotoDetalhes(${i})" class="flex-shrink-0 w-16 h-16 sm:w-20 sm:h-20 rounded-lg overflow-hidden border-2 ${i === indice ? 'border-orange-500' : 'border-transparent opacity-70 hover:opacity-100'}" aria-label="Ver foto ${i + 1}"${i === indice ? ' aria-current="true"' : ''}>
                 <img src="${escapeHtml(f)}" alt="" class="w-full h-full object-cover" onerror="imgFallback(this)">
               </button>`).join('')}
             </div>` : ''}
           </div>
           <div class="p-4 sm:p-6 md:pl-2 flex flex-col">
-            <span class="self-start px-2 py-1 text-xs font-medium rounded-full mb-3 ${etiqueta.classe}">${escapeHtml(etiqueta.texto)}</span>
-            <h3 class="text-xl sm:text-2xl font-bold text-gray-900 mb-1">${escapeHtml(comTamanhos ? nomeModelo(produto) : produto.nome)}</h3>
-            <p class="text-sm text-gray-500 mb-4">Ref: ${escapeHtml(produto.codigo_sku)}</p>
+            ${encomenda ? '' : `<span class="self-start px-2 py-1 text-xs font-medium rounded-full mb-3 ${etiqueta.classe}">${escapeHtml(etiqueta.texto)}</span>`}
+            <h3 class="text-xl sm:text-2xl font-bold text-gray-900 mb-1 pr-8">${escapeHtml(comTamanhos ? nomeModelo(produto) : produto.nome)}</h3>
+            <p class="text-sm text-gray-500 mb-3">Ref: ${escapeHtml(produto.codigo_sku)}</p>
             <p class="text-2xl sm:text-3xl font-bold text-gray-900 mb-4">${formatarMoeda(produto.preco_venda)}</p>
+            ${encomenda ? `
+            <div data-aviso-encomenda class="rounded-xl border border-blue-200 bg-blue-50 px-3 py-2.5 mb-4">
+              <p class="flex flex-wrap items-center gap-2 text-sm font-semibold text-blue-900"><span class="px-2 py-0.5 rounded-full bg-blue-600 text-white text-[11px] font-bold tracking-wide">SOB ENCOMENDA</span>Reserva com sinal de 50%</p>
+              <p class="mt-1.5 text-sm text-blue-900">Você paga <strong>${formatarMoeda(calcularSinal(produto.preco_venda))}</strong> de sinal ao fechar pelo WhatsApp e <strong>${formatarMoeda(Math.round(Number(produto.preco_venda) * 100 - calcularSinal(produto.preco_venda) * 100) / 100)}</strong> na entrega.</p>
+            </div>` : ''}
             ${comTamanhos ? `
             <h4 class="text-sm font-semibold text-gray-900 mb-2">Tamanho${falteTamanho ? '' : `: <span class="font-normal">${escapeHtml(produto.tamanho)}</span>`}</h4>
             <div data-tamanhos class="flex flex-wrap gap-2 mb-4" role="group" aria-label="Tamanhos">${botoesTamanho(grupo, falteTamanho ? null : id)}</div>` : ''}
-            ${produto.estilo ? `<p class="text-sm text-gray-500 mb-4">Estilo: <span class="text-gray-900">${escapeHtml(produto.estilo)}</span></p>` : ''}
-            ${especificacoes.length ? `
-            <h4 class="text-sm font-semibold text-gray-900 mb-2">Especificações Técnicas</h4>
-            <dl class="grid grid-cols-2 gap-x-4 gap-y-2 text-sm mb-4">
-              ${especificacoes.map(([rotulo, valor]) => `<dt class="text-gray-500">${escapeHtml(rotulo)}</dt><dd class="text-gray-900">${escapeHtml(valor)}</dd>`).join('')}
-            </dl>` : ''}
-            ${encomenda ? `<p class="text-sm text-blue-700 bg-blue-50 rounded-lg px-3 py-2 mb-4">50% sinal + 50% na entrega (sinal de ${formatarMoeda(calcularSinal(produto.preco_venda))})</p>` : ''}
-            <div class="mt-auto">
-              ${fotos.length && globalThis.LOJA?.oculos !== false ? `<button type="button" onclick="abrirProvador(${id})" class="btn btn-secundario w-full mb-2">Provar virtualmente</button>` : ''}
-              <button type="button" onclick="toggleMaleta(${id}); renderizarDetalhes()" aria-pressed="${jaNaMaleta}"${falteTamanho ? ' disabled' : ''} class="btn btn-maleta w-full ${jaNaMaleta ? 'btn-na-maleta' : encomenda ? 'btn-encomenda' : 'btn-primario'}">${textoBotao}</button>
+            <!-- Ações: "Adicionar à Maleta" é o botão principal (sólido); o provador fica logo abaixo, como apoio -->
+            <div class="mt-auto flex flex-col gap-2">
+              <button type="button" onclick="toggleMaleta(${id}); renderizarDetalhes()" aria-pressed="${jaNaMaleta}"${falteTamanho ? ' disabled' : ''} class="btn btn-lg btn-maleta w-full ${jaNaMaleta ? 'btn-na-maleta' : 'btn-destaque'}">${textoBotao}</button>
+              ${fotos.length && globalThis.LOJA?.oculos !== false ? `<button type="button" onclick="abrirProvador(${id})" class="btn btn-secundario w-full">Provar virtualmente</button>` : ''}
             </div>
+            ${especificacoes.length || produto.estilo ? `
+            <details data-detalhes-tecnicos class="detalhes-tecnicos mt-4 rounded-xl border border-gray-200"${detalhes.tecnicosAbertos ? ' open' : ''} ontoggle="if (detalhes) detalhes.tecnicosAbertos = this.open">
+              <summary class="flex items-center justify-between gap-2 px-4 py-3 text-sm font-semibold text-gray-900 cursor-pointer select-none">
+                <span>📋 Mais Detalhes e Medidas Técnicas</span>
+                <svg class="seta-detalhes w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+              </summary>
+              <dl class="grid grid-cols-2 gap-x-4 gap-y-2 px-4 pb-4 text-sm">
+                ${produto.estilo ? `<dt class="text-gray-500">Estilo</dt><dd class="text-gray-900">${escapeHtml(produto.estilo)}</dd>` : ''}
+                ${especificacoes.map(([rotulo, valor]) => `<dt class="text-gray-500">${escapeHtml(rotulo)}</dt><dd class="text-gray-900">${escapeHtml(valor)}</dd>`).join('')}
+              </dl>
+            </details>` : ''}
           </div>
         </div>
       `;
@@ -1479,12 +1518,20 @@
       const count = maleta.itens.length;
       atualizarGuias();
       const countEl = document.getElementById('maletaCount');
+      const mudou = countEl.textContent !== String(count);
       if (count > 0) {
         countEl.textContent = count;
         countEl.classList.remove('hidden');
       } else {
+        countEl.textContent = '0';
         countEl.classList.add('hidden');
       }
+      if (mudou && count > 0) {
+        countEl.classList.remove('pulso');
+        void countEl.offsetWidth;
+        countEl.classList.add('pulso');
+      }
+      if (typeof btnMaleta !== 'undefined' && btnMaleta.setAttribute) btnMaleta.setAttribute('aria-label', count ? `Minha Maleta: ${count} ${count === 1 ? 'modelo' : 'modelos'}` : 'Minha Maleta: vazia');
 
       if (maleta.itens.length === 0) {
         document.getElementById('maletaSubtitulo').textContent = '';
@@ -1535,16 +1582,25 @@
     }
 
     // Modal maleta
+    // A gaveta desliza da direita: some do layout (hidden) só depois de terminar de sair
+    let saidaGavetaMaleta = 0;
     function abrirModalMaleta() {
       atualizarMaletaUI();
       preencherDadosCliente();
+      clearTimeout(saidaGavetaMaleta);
       modalMaleta.classList.remove('hidden');
+      // Força o navegador a desenhar a gaveta fora da tela antes de deslizar para dentro
+      void modalMaleta.offsetWidth;
+      modalMaleta.classList.add('aberta');
       document.body.style.overflow = 'hidden';
       entrarModalHistorico('maleta');
+      document.getElementById('fecharMaleta').focus({ preventScroll: true });
     }
 
     function fecharModalMaleta() {
-      modalMaleta.classList.add('hidden');
+      modalMaleta.classList.remove('aberta');
+      clearTimeout(saidaGavetaMaleta);
+      saidaGavetaMaleta = setTimeout(() => modalMaleta.classList.add('hidden'), 280);
       document.body.style.overflow = '';
       sairModalHistorico('maleta');
     }
@@ -1552,6 +1608,7 @@
     btnMaleta.addEventListener('click', abrirModalMaleta);
     fecharMaleta.addEventListener('click', fecharModalMaleta);
     modalMaleta.addEventListener('click', (e) => { if (e.target === modalMaleta) fecharModalMaleta(); });
+    document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && modalMaleta.classList.contains('aberta')) fecharModalMaleta(); });
 
     // Máscara de CEP (00000-000) + busca ViaCEP funcional no modal da maleta
     cepInput.addEventListener('input', () => {
@@ -1757,39 +1814,57 @@
       }
     }
 
-    // Montar mensagem WhatsApp
+    // Mensagem do WhatsApp para a atendente: cliente e endereço, depois a pronta entrega
+    // (para provar em casa e compra direta), as encomendas com o sinal de 50% de cada uma
+    // e um resumo com o que se paga agora e na entrega. Usa o negrito (*) e o itálico (_)
+    // do WhatsApp; sem emojis, que alguns aparelhos trocam por "?" ao abrir o link wa.me.
     function montarTextoWhatsapp(maleta, dados) {
-      let msg = `*${(globalThis.LOJA?.nome || 'Nix Glasses')} - Novo Pedido*\n\n`;
+      const linha = '━━━━━━━━━━━━━━';
+      const centavos = v => Math.round(Number(v) * 100);
+      const ref = item => item.sku ? ` (Ref. ${item.sku})` : '';
+      const lista = itens => itens.map((item, i) => `${i + 1}. ${item.nome}${ref(item)} - ${formatarMoeda(item.preco)}\n`).join('');
+      const qtd = n => `${n} ${n === 1 ? 'item' : 'itens'}`;
+      const resumo = resumoMaleta(maleta.itens);
+      const pronta = resumo.prova.length + resumo.compras.length;
+
+      let msg = `*${(globalThis.LOJA?.nome || 'Nix Glasses')} - Novo pedido da maleta*\n\n`;
       msg += `*Cliente:* ${dados.nome}\n`;
       msg += `*Telefone:* ${dados.telefone}\n`;
       if (dados.email) msg += `*E-mail:* ${dados.email}\n`;
       msg += `*Endereço:* ${dados.rua}, ${dados.numero} - ${dados.bairro}, ${dados.cidade}\n`;
       if (dados.complemento) msg += `*Complemento:* ${dados.complemento}\n`;
-      const resumo = resumoMaleta(maleta.itens);
-      if (resumo.compras.length) {
-        msg += `\n*Compra direta (pronta entrega):*\n`;
-        resumo.compras.forEach((item, i) => {
-          msg += `${i + 1}. ${item.nome} - ${formatarMoeda(item.preco)}\n`;
-        });
-        msg += `*Subtotal da compra direta:* ${formatarMoeda(resumo.totalCompra)}\n`;
-      }
-      if (resumo.prova.length) {
-        msg += `\n*Para provar (pronta entrega):*\n`;
-        resumo.prova.forEach((item, i) => {
-          msg += `${i + 1}. ${item.nome} - ${formatarMoeda(item.preco)}\n`;
-        });
-        msg += `*Subtotal para prova:* ${formatarMoeda(resumo.totalProva)}\n`;
+
+      if (pronta) {
+        msg += `\n${linha}\n*PRONTA ENTREGA*\n`;
+        if (resumo.prova.length) {
+          msg += `_Para provar em casa:_\n${lista(resumo.prova)}`;
+          msg += `Subtotal para provar: ${formatarMoeda(resumo.totalProva)}\n`;
+        }
+        if (resumo.compras.length) {
+          if (resumo.prova.length) msg += '\n';
+          msg += `_Compra direta:_\n${lista(resumo.compras)}`;
+          msg += `Subtotal da compra direta: ${formatarMoeda(resumo.totalCompra)}\n`;
+        }
       }
       if (resumo.encomendas.length) {
-        msg += `\n*Sob encomenda (sinal de 50%):*\n`;
+        msg += `\n${linha}\n*SOB ENCOMENDA* (sinal de 50%)\n`;
         resumo.encomendas.forEach((item, i) => {
-          msg += `${i + 1}. ${item.nome} - ${formatarMoeda(item.preco)} | Sinal 50%: ${formatarMoeda(calcularSinal(item.preco))}\n`;
+          const sinal = calcularSinal(item.preco);
+          msg += `${i + 1}. ${item.nome}${ref(item)} - ${formatarMoeda(item.preco)}\n`;
+          msg += `    Sinal: ${formatarMoeda(sinal)} | Na entrega: ${formatarMoeda((centavos(item.preco) - centavos(sinal)) / 100)}\n`;
         });
-        msg += `*Total das encomendas:* ${formatarMoeda(resumo.totalEncomendas)}\n`;
-        msg += `*Sinal a pagar (50%):* ${formatarMoeda(resumo.sinal)}\n`;
+        msg += `Total das encomendas: ${formatarMoeda(resumo.totalEncomendas)}\n`;
       }
-      msg += `\n*Total geral:* ${formatarMoeda(resumo.total)}\n\n`;
-      msg += `Aguardamos sua confirmação!`;
+
+      msg += `\n${linha}\n*RESUMO*\n`;
+      if (pronta) msg += `Pronta entrega: ${qtd(pronta)} - ${formatarMoeda(Math.round((centavos(resumo.totalProva) + centavos(resumo.totalCompra))) / 100)}\n`;
+      if (resumo.encomendas.length) {
+        msg += `Sob encomenda: ${qtd(resumo.encomendas.length)} - ${formatarMoeda(resumo.totalEncomendas)}\n`;
+        msg += `*Sinal a pagar agora (50%):* ${formatarMoeda(resumo.sinal)}\n`;
+        msg += `*Restante das encomendas na entrega:* ${formatarMoeda((centavos(resumo.totalEncomendas) - centavos(resumo.sinal)) / 100)}\n`;
+      }
+      msg += `*Total geral:* ${formatarMoeda(resumo.total)}\n\n`;
+      msg += `Aguardo a confirmação. Obrigado(a)!`;
       return msg;
     }
 

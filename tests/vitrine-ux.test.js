@@ -170,13 +170,14 @@ describe('vitrine: card limpo', () => {
   it('encomenda mostra o preço total e um selo só com o sinal', () => {
     const card = vitrine([hexagonal]).cards[0].innerHTML;
     assert.match(card, /font-bold text-gray-900">R\$ 135,00</);
-    assert.match(card, /data-selo-sinal[^>]*>Sinal: R\$ 67,50</);
+    assert.match(card, /data-selo-sinal[^>]*>Sinal 50%: R\$ 67,50</);
+    assert.match(card, /data-selo-encomenda[^>]*>SOB ENCOMENDA</);
     assert.doesNotMatch(card, /50% sinal \+ 50% na entrega|sinal de R\$/);
   });
 
   it('pronta entrega não tem selo de sinal', () => {
     const card = vitrine([{ ...hexagonal, disponibilidade: 'PRONTA_ENTREGA' }]).cards[0].innerHTML;
-    assert.doesNotMatch(card, /data-selo-sinal|Sinal:/);
+    assert.doesNotMatch(card, /data-selo-sinal|data-selo-encomenda|Sinal/);
   });
 });
 
