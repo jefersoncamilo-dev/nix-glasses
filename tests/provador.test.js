@@ -282,11 +282,13 @@ describe('Provador: troca de modelo, maleta e fotos', () => {
   function provadorCtx(extra = {}) {
     const el = () => ({ innerHTML: '', textContent: '', hidden: null, classList: { toggle(c, v) { this.dono.hidden = v; } }, setAttribute() {} });
     const fazer = () => { const e = el(); e.classList.dono = e; return e; };
-    return carregar(['escapeHtml', 'fotosDoProduto', 'renderizarCarrosselProvador', 'textoTamanhoProvador', 'renderizarFotosProvador'], {
+    return carregar(['escapeHtml', 'fotosDoProduto', 'ehSobEncomenda', 'passaFiltroStatus', 'modelosProvador', 'renderizarFiltrosProvador', 'renderizarCarrosselProvador', 'textoTamanhoProvador', 'renderizarFotosProvador', 'aplicarFiltroProvador'], {
       produtos: produtosTeste,
       provador: { produtoId: 2, fotos: [] },
       carrosselProvador: fazer(),
       carrosselProvadorBox: fazer(),
+      filtrosProvador: fazer(),
+      rotulos: { formato: 'Formato da lente', formatos: 'Todos os formatos' },
       fotosProvador: fazer(),
       listaFotosProvador: fazer(),
       ...extra,
@@ -308,6 +310,61 @@ describe('Provador: troca de modelo, maleta e fotos', () => {
     const ctx = provadorCtx({ produtos: [produtosTeste[1], produtosTeste[2]] });
     ctx.renderizarCarrosselProvador();
     assert.equal(ctx.carrosselProvadorBox.hidden, true);
+  });
+
+  describe('filtros dentro do provador', () => {
+    const catalogo = [
+      { id: 1, nome: 'Rex Aviador', formato: 'Aviador', fotos: ['/a'], status: 'DISPONIVEL', disponibilidade: 'PRONTA_ENTREGA' },
+      { id: 2, nome: 'Ptera Gatinho', formato: 'Gatinho', fotos: ['/b'], status: 'DISPONIVEL', disponibilidade: 'SOB_ENCOMENDA' },
+      { id: 3, nome: 'Stego Oval', formato: 'Oval', fotos: ['/c'], status: 'DISPONIVEL', disponibilidade: 'PRONTA_ENTREGA' },
+      { id: 4, nome: 'Bronto Aviador', formato: 'Aviador', fotos: ['/d'], status: 'DISPONIVEL', disponibilidade: 'SOB_ENCOMENDA' },
+      { id: 5, nome: 'Sem foto', formato: 'Quadrado', fotos: [], status: 'DISPONIVEL', disponibilidade: 'PRONTA_ENTREGA' },
+    ];
+    const ids = (html) => [...html.matchAll(/trocarOculosProvador\((\d+)\)/g)].map(m => Number(m[1]));
+
+    it('filtra por disponibilidade e formato, só com modelos com foto', () => {
+      const ctx = provadorCtx({ produtos: catalogo });
+      assert.deepEqual(ctx.modelosProvador(catalogo, {}).map(p => p.id), [1, 2, 3, 4]);
+      assert.deepEqual(ctx.modelosProvador(catalogo, { status: 'DISPONIVEL' }).map(p => p.id), [1, 3]);
+      assert.deepEqual(ctx.modelosProvador(catalogo, { status: 'SOB_ENCOMENDA' }).map(p => p.id), [2, 4]);
+      assert.deepEqual(ctx.modelosProvador(catalogo, { formato: 'Aviador' }).map(p => p.id), [1, 4]);
+      assert.deepEqual(ctx.modelosProvador(catalogo, { status: 'SOB_ENCOMENDA', formato: 'Aviador' }).map(p => p.id), [4]);
+    });
+
+    it('mostra os chips (formatos só dos modelos com foto) e o carrossel filtrado', () => {
+      const ctx = provadorCtx({ produtos: catalogo, provador: { produtoId: 1, fotos: [], filtro: { status: '', formato: 'Aviador' } } });
+      ctx.renderizarCarrosselProvador();
+      const chips = ctx.filtrosProvador.innerHTML;
+      assert.match(chips, /data-provador-status="" aria-pressed="true"[^>]*>Todos</);
+      assert.match(chips, /data-provador-status="SOB_ENCOMENDA" aria-pressed="false"[^>]*>Encomenda</);
+      assert.deepEqual([...chips.matchAll(/data-provador-formato="([^"]*)"/g)].map(m => m[1]), ['', 'Aviador', 'Gatinho', 'Oval']);
+      assert.match(chips, /data-provador-formato="Aviador" aria-pressed="true"/);
+      assert.deepEqual(ids(ctx.carrosselProvador.innerHTML), [1, 4]);
+    });
+
+    it('sem modelos dos dois tipos não mostra a disponibilidade; filtro vazio avisa', () => {
+      const so = catalogo.filter(p => p.disponibilidade === 'PRONTA_ENTREGA');
+      const ctx = provadorCtx({ produtos: so, provador: { produtoId: 1, fotos: [], filtro: { formato: 'Gatinho' } } });
+      ctx.renderizarCarrosselProvador();
+      assert.doesNotMatch(ctx.filtrosProvador.innerHTML, /data-provador-status/);
+      assert.match(ctx.carrosselProvador.innerHTML, /Nenhum modelo com esse filtro/);
+    });
+
+    it('tocar num filtro que tira o óculos do rosto já põe o primeiro modelo filtrado', () => {
+      const trocas = [];
+      const ctx = provadorCtx({ produtos: catalogo, provador: { produtoId: 1, fotos: [], filtro: { status: '', formato: '' } }, trocarOculosProvador: (id) => trocas.push(id) });
+      ctx.aplicarFiltroProvador('formato', 'Aviador');
+      assert.deepEqual(trocas, []); // o Rex Aviador continua no rosto
+      ctx.aplicarFiltroProvador('status', 'SOB_ENCOMENDA');
+      assert.deepEqual(trocas, [4]);
+      assert.deepEqual({ ...ctx.provador.filtro }, { status: 'SOB_ENCOMENDA', formato: 'Aviador' });
+    });
+
+    it('abre com os filtros que já estavam escolhidos na vitrine', () => {
+      const html = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
+      assert.match(html, /provador\.filtro = \{ status: filtroStatus\.value \|\| '', formato: filtroFormato\.value \|\| '' \}/);
+      assert.match(html, /<div id="filtrosProvador"/);
+    });
   });
 
   it('texto do tamanho diz quando é real (cadastro) ou estimado', () => {

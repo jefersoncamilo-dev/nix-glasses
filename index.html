@@ -480,6 +480,8 @@
       <!-- Outros modelos: troca o óculos sem fechar a câmera -->
       <div id="carrosselProvadorBox" class="hidden pt-3">
         <p class="px-4 text-xs mb-2" style="color:var(--nix-muted)">Provar outro modelo</p>
+        <!-- Filtros do provador: os mesmos da vitrine (disponibilidade e formato), sem sair da câmera -->
+        <div id="filtrosProvador" class="px-4 mb-2 flex flex-col gap-2"></div>
         <div id="carrosselProvador" class="miniaturas flex gap-2 px-4 overflow-x-auto"></div>
       </div>
       <p class="px-4 py-4 text-xs" style="color:var(--nix-muted)">Prévia aproximada. A imagem da câmera é processada só no seu aparelho e não é enviada para lugar nenhum.</p>
@@ -1182,6 +1184,7 @@
     const ajusteAlturaProvador = document.getElementById('ajusteAlturaProvador');
     const carrosselProvador = document.getElementById('carrosselProvador');
     const carrosselProvadorBox = document.getElementById('carrosselProvadorBox');
+    const filtrosProvador = document.getElementById('filtrosProvador');
     const maletaProvador = document.getElementById('maletaProvador');
     const tamanhoProvador = document.getElementById('tamanhoProvador');
     const fotosProvador = document.getElementById('fotosProvador');
@@ -1189,7 +1192,7 @@
     const MAX_FOTOS_PROVADOR = 4;
 
     // sessao muda a cada abrir/fechar: o que terminar de carregar depois de fechado é descartado
-    const provador = { aberto: false, sessao: 0, stream: null, landmarker: null, oculos: null, pose: null, raf: 0, ultimoTempo: -1, ajuste: { escala: 1, deslocamentoY: 0, larguraMm: 0 }, produtoId: null, troca: 0, fotos: [] };
+    const provador = { aberto: false, sessao: 0, stream: null, landmarker: null, oculos: null, pose: null, raf: 0, ultimoTempo: -1, ajuste: { escala: 1, deslocamentoY: 0, larguraMm: 0 }, produtoId: null, troca: 0, fotos: [], filtro: { status: '', formato: '' } };
     // Fotos de óculos já preparadas (fundo removido), por URL: trocar de modelo fica instantâneo
     const cacheOculosProvador = new Map();
     let faceLandmarkerPromessa = null;
@@ -1377,6 +1380,8 @@
 
       const sessao = ++provador.sessao;
       provador.aberto = true;
+      // O provador abre com os filtros que a cliente já escolheu na vitrine
+      provador.filtro = { status: filtroStatus.value || '', formato: filtroFormato.value || '' };
       provador.pose = null;
       provador.oculos = null;
       provador.ultimoTempo = -1;
@@ -1460,10 +1465,45 @@
         : 'Tamanho estimado pela largura do seu rosto.';
     }
 
-    // Miniaturas dos modelos com foto; o que está no rosto fica marcado
+    // Modelos do carrossel do provador: só os com foto, filtrados como na vitrine
+    // (Pronta Entrega / Sob Encomenda e formato)
+    function modelosProvador(lista, filtro) {
+      filtro = filtro || {};
+      return lista.filter(p => fotosDoProduto(p).length
+        && passaFiltroStatus(p, filtro.status || '')
+        && (!filtro.formato || p.formato === filtro.formato));
+    }
+
+    // Chips de filtro do provador. Disponibilidade só aparece quando há modelos dos dois
+    // tipos; formato só com dois formatos ou mais (como na vitrine).
+    function renderizarFiltrosProvador(comFoto, filtro) {
+      filtro = filtro || {};
+      const temEncomenda = comFoto.some(ehSobEncomenda);
+      const temPronta = comFoto.some(p => !ehSobEncomenda(p));
+      const formatos = [...new Set(comFoto.map(p => p.formato).filter(Boolean))].sort((a, b) => String(a).localeCompare(String(b), 'pt-BR'));
+      const chip = (attr, valor, texto, ativo) => `<button type="button" ${attr}="${escapeHtml(valor)}" aria-pressed="${ativo}" class="chip-formato">${escapeHtml(texto)}</button>`;
+      const linhas = [];
+      if (temEncomenda && temPronta) {
+        const opcoes = [['', 'Todos'], ['DISPONIVEL', 'Pronta Entrega'], ['SOB_ENCOMENDA', 'Encomenda']];
+        linhas.push(`<div class="chips-formato" role="group" aria-label="Disponibilidade">${opcoes.map(([v, t]) => chip('data-provador-status', v, t, v === (filtro.status || ''))).join('')}</div>`);
+      }
+      if (formatos.length > 1) {
+        linhas.push(`<div class="chips-formato" role="group" aria-label="${escapeHtml(rotulos.formato)}">${['', ...formatos].map(f => chip('data-provador-formato', f, f || rotulos.formatos, f === (filtro.formato || ''))).join('')}</div>`);
+      }
+      filtrosProvador.innerHTML = linhas.join('');
+    }
+
+    // Miniaturas dos modelos com foto (filtrados); o que está no rosto fica marcado
     function renderizarCarrosselProvador() {
-      const lista = produtos.filter(p => fotosDoProduto(p).length);
-      carrosselProvadorBox.classList.toggle('hidden', lista.length < 2);
+      const filtro = provador.filtro || {};
+      const comFoto = produtos.filter(p => fotosDoProduto(p).length);
+      carrosselProvadorBox.classList.toggle('hidden', comFoto.length < 2);
+      renderizarFiltrosProvador(comFoto, filtro);
+      const lista = modelosProvador(produtos, filtro);
+      if (!lista.length) {
+        carrosselProvador.innerHTML = '<p class="text-xs py-4" style="color:var(--nix-muted)">Nenhum modelo com esse filtro.</p>';
+        return;
+      }
       carrosselProvador.innerHTML = lista.map((p) => {
         const atual = p.id === provador.produtoId;
         return `<button type="button" onclick="trocarOculosProvador(${Number(p.id)})" class="flex-shrink-0 w-16 h-16 rounded-lg overflow-hidden border-2 bg-white ${atual ? 'border-orange-500' : 'border-transparent opacity-70 hover:opacity-100'}" aria-label="Provar ${escapeHtml(p.nome)}"${atual ? ' aria-current="true"' : ''}>
@@ -1487,6 +1527,21 @@
       }
     }
     window.trocarOculosProvador = trocarOculosProvador;
+
+    // Toque num chip do provador: filtra o carrossel e, se o óculos no rosto ficou fora
+    // do filtro, já põe o primeiro modelo filtrado (a câmera continua ligada)
+    function aplicarFiltroProvador(campo, valor) {
+      provador.filtro = { ...(provador.filtro || {}), [campo]: valor };
+      renderizarCarrosselProvador();
+      const lista = modelosProvador(produtos, provador.filtro);
+      if (lista.length && !lista.some(p => p.id === provador.produtoId)) trocarOculosProvador(lista[0].id);
+    }
+    filtrosProvador.addEventListener('click', (e) => {
+      const chip = e.target.closest('[data-provador-status], [data-provador-formato]');
+      if (!chip) return;
+      if (chip.hasAttribute('data-provador-status')) aplicarFiltroProvador('status', chip.dataset.provadorStatus);
+      else aplicarFiltroProvador('formato', chip.dataset.provadorFormato);
+    });
 
     function atualizarMaletaProvador() {
       const produto = produtos.find(p => p.id === provador.produtoId);
