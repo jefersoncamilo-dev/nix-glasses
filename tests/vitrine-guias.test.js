@@ -112,9 +112,9 @@ describe('vitrine: atalhos e pílulas de filtro', () => {
     assert.match(html, /<select id="filtroGenero" class="hidden /);
     assert.doesNotMatch(html, /filtroGenero\.classList\.toggle|function preencherFiltroGenero/);
     assert.match(html, /\.chips-formato \{[^}]*overflow-x: auto/);
-    // botão "TODOS" e, no celular, todos os modelos à vista (chips menores que quebram linha)
+    // botão "TODOS" e, no celular, os modelos numa linha só (chips compactos que dividem a largura)
     assert.match(html, /oculos: \{[^}]*formatos: 'TODOS'/);
-    assert.match(html, /@media \(max-width: 639px\) \{\s*#filtrosRolagem \{ overflow: visible;[\s\S]*?#chipsFormato \{ flex-wrap: wrap;/);
+    assert.match(html, /@media \(max-width: 639px\) \{[\s\S]*?#chipsFormato \{ flex-wrap: nowrap;[\s\S]*?font-size: 0\.625rem/);
 
     const chips = { innerHTML: '', setAttribute() {}, classList: { toggle: (c, v) => { chips.escondido = v; } } };
     const filtroFormato = { value: '' };

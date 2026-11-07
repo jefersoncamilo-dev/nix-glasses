@@ -138,11 +138,14 @@
     /* Celular: os modelos ficam todos à vista, sem rolar para o lado. Chips menores
        que quebram em mais de uma linha quando não cabem numa só. */
     @media (max-width: 639px) {
-      #filtrosRolagem { overflow: visible; -webkit-mask-image: none; mask-image: none; }
+      #filtrosRolagem { -webkit-mask-image: none; mask-image: none; }
       #filtrosRolagem::after { display: none; }
-      #chipsFormato { flex-wrap: wrap; flex: 1 1 auto; gap: 0.3rem; }
-      #filtrosRolagem .chip-formato, #filtroPilulas .chip-formato { min-height: 28px; padding: 0 0.55rem; font-size: 0.6875rem; }
-      #filtroPilulas .chips-formato { gap: 0.3rem; }
+      /* Os modelos ficam numa linha só: botões bem compactos que dividem a largura
+         da tela. Se um dia houver modelos demais para caber, a linha rola para o lado. */
+      #chipsFormato { flex-wrap: nowrap; flex: 1 0 auto; gap: 0.25rem; }
+      #filtrosRolagem .chip-formato, #filtroPilulas .chip-formato { min-height: 26px; padding: 0 0.42rem; font-size: 0.625rem; letter-spacing: -0.01em; }
+      #chipsFormato .chip-formato { flex: 1 0 auto; justify-content: center; padding: 0 0.3rem; }
+      #filtroPilulas .chips-formato { gap: 0.25rem; }
     }
     /* Celular: sem tamanho/gênero para escolher, a linha dos seletores some */
     @media (max-width: 639px) { .linha-selecao:not(:has(select:not(.hidden))) { display: none; } }
