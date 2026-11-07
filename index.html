@@ -135,6 +135,15 @@
        respeita o recuo, senão a primeira pílula gruda na borda */
     #filtrosRolagem, #filtroPilulas .chips-formato { scroll-padding-left: 1rem; }
     @media (min-width: 640px) { #filtrosRolagem, #filtroPilulas .chips-formato { scroll-padding-left: 0; } }
+    /* Celular: os modelos ficam todos à vista, sem rolar para o lado. Chips menores
+       que quebram em mais de uma linha quando não cabem numa só. */
+    @media (max-width: 639px) {
+      #filtrosRolagem { overflow: visible; -webkit-mask-image: none; mask-image: none; }
+      #filtrosRolagem::after { display: none; }
+      #chipsFormato { flex-wrap: wrap; flex: 1 1 auto; gap: 0.3rem; }
+      #filtrosRolagem .chip-formato, #filtroPilulas .chip-formato { min-height: 28px; padding: 0 0.55rem; font-size: 0.6875rem; }
+      #filtroPilulas .chips-formato { gap: 0.3rem; }
+    }
     /* Celular: sem tamanho/gênero para escolher, a linha dos seletores some */
     @media (max-width: 639px) { .linha-selecao:not(:has(select:not(.hidden))) { display: none; } }
     .chip-formato:not([aria-pressed="true"]):hover { border-color: rgba(255,255,255,0.32); color: #fff; }
@@ -568,9 +577,9 @@
     // Troca os rótulos dos campos e, nas roupas, junta os tamanhos de um modelo num card.
     const NICHO = globalThis.LOJA?.nicho || (globalThis.LOJA?.oculos === false ? 'geral' : 'oculos');
     const ROTULOS_NICHO = {
-      oculos: { formato: 'Formato da lente', formatos: 'Todos os formatos', material: 'Material', tipo: 'Tipo' },
-      roupas: { formato: 'Categoria', formatos: 'Todas as categorias', material: 'Tecido / composição', tipo: 'Modelagem' },
-      geral: { formato: 'Categoria', formatos: 'Todas as categorias', material: 'Material', tipo: 'Tipo' },
+      oculos: { formato: 'Formato da lente', formatos: 'TODOS', material: 'Material', tipo: 'Tipo' },
+      roupas: { formato: 'Categoria', formatos: 'TODAS', material: 'Tecido / composição', tipo: 'Modelagem' },
+      geral: { formato: 'Categoria', formatos: 'TODAS', material: 'Material', tipo: 'Tipo' },
     };
     const rotulos = ROTULOS_NICHO[NICHO] || ROTULOS_NICHO.geral;
 
@@ -678,7 +687,7 @@
     }
 
     // Chips de formato (óculos) ou categoria (roupas/geral): uma pílula por formato
-    // cadastrado nos produtos, em ordem alfabética, depois de "Todos os formatos".
+    // cadastrado nos produtos, em ordem alfabética, depois de "TODOS".
     // O escolhido fica em #filtroFormato (campo escondido), que o catálogo lê.
     function preencherFiltroFormato() {
       const formatos = [...new Set(produtos.map(p => p.formato).filter(Boolean))].sort((a, b) => String(a).localeCompare(String(b), 'pt-BR'));
@@ -693,7 +702,7 @@
     }
 
     // Um toque no chip filtra o catálogo e marca o chip escolhido
-    // Voltar para "Todos os formatos" também volta a disponibilidade para "Todos"
+    // Voltar para "TODOS" também volta a disponibilidade para "Todos"
     // (as pílulas Pronta Entrega / Sob Encomenda só aparecem dentro de um modelo).
     function aplicarFiltroFormato(formato) {
       filtroFormato.value = formato;
