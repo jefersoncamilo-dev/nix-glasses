@@ -169,6 +169,13 @@
 
       <!-- Aba Cadastro em Lote -->
       <div id="tab-lote" class="tab-content hidden">
+        <!-- Duas opções na mesma tela: cadastrar produtos novos ou editar os que já estão em estoque -->
+        <div id="loteModos" class="inline-flex mb-4 p-1 bg-gray-100 rounded-lg" role="tablist" aria-label="Cadastro em lote">
+          <button type="button" data-modo-lote="cadastro" role="tab" aria-selected="true" class="modo-lote px-4 py-2 rounded-md text-sm font-medium">Cadastrar novos</button>
+          <button type="button" data-modo-lote="edicao" role="tab" aria-selected="false" class="modo-lote px-4 py-2 rounded-md text-sm font-medium">Editar em estoque</button>
+        </div>
+
+        <div id="loteModoCadastro">
         <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
           <div>
             <h3 class="text-lg font-semibold text-gray-900">Cadastro em Lote</h3>
@@ -235,6 +242,37 @@
             <button type="button" data-abrir-fotos-sku class="shrink-0 px-3 py-1.5 bg-orange-500 hover:bg-orange-600 text-white rounded-lg text-xs font-medium">Enviar fotos de todos por SKU</button>
           </div>
           <ul id="loteCriadosLista" class="divide-y divide-gray-100"></ul>
+        </div>
+        </div>
+
+        <!-- Editar em estoque: a mesma tabela do cadastro, já preenchida com os produtos
+             cadastrados. Altere direto nas células; só as linhas alteradas são salvas. -->
+        <div id="loteModoEdicao" class="hidden">
+          <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
+            <div>
+              <h3 class="text-lg font-semibold text-gray-900">Editar em estoque</h3>
+              <p class="text-sm text-gray-500">Os produtos já cadastrados, um por linha. Altere direto na tabela: as linhas alteradas ficam amarelas e só elas são salvas. Fotos e histórico de compras continuam na edição de cada produto.</p>
+            </div>
+            <div class="flex flex-col sm:flex-row gap-2">
+              <button id="btnEdicaoDesfazer" class="bg-gray-100 hover:bg-gray-200 text-gray-700 px-4 py-2 rounded-lg font-medium transition-colors">Desfazer alterações</button>
+              <button id="btnEdicaoSalvar" class="bg-orange-500 hover:bg-orange-600 text-white px-6 py-2 rounded-lg font-medium transition-colors">Salvar alterações</button>
+            </div>
+          </div>
+          <div class="flex flex-col sm:flex-row gap-2 mb-4">
+            <input type="search" id="edicaoBusca" class="w-full sm:w-80 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500" placeholder="Buscar por nome, SKU, fornecedor ou cor...">
+            <label class="inline-flex items-center gap-2 text-sm text-gray-700"><input type="checkbox" id="edicaoSoAlterados" class="rounded border-gray-300"> Só os alterados</label>
+          </div>
+          <div class="bg-white rounded-xl border border-gray-200 overflow-hidden">
+            <div class="overflow-x-auto">
+              <table class="w-full min-w-[1750px] text-sm">
+                <thead class="bg-gray-50 border-b border-gray-200">
+                  <tr id="edicaoCabecalho"></tr>
+                </thead>
+                <tbody id="tabelaEdicao" class="divide-y divide-gray-200"></tbody>
+              </table>
+            </div>
+          </div>
+          <p id="edicaoResumo" class="text-sm text-gray-500 mt-2"></p>
         </div>
       </div>
 
@@ -1575,6 +1613,199 @@
         </li>`).join('');
       document.getElementById('loteCriados').classList.toggle('hidden', !produtos.length);
     }
+
+    // ---------- Editar em estoque ----------
+    // Mesma tabela do cadastro em lote, preenchida com os produtos já cadastrados.
+    // Sem os campos de compra (quantidade, pedido, data) e sem o status: no lugar
+    // dele vai o Estoque (peças na loja), e o status sai do estoque.
+    const CAMPOS_SO_CADASTRO = ['status', 'quantidade', 'pedido_fornecedor', 'data_compra'];
+    const COLUNAS_EDICAO = COLUNAS_LOTE.filter(c => !CAMPOS_SO_CADASTRO.includes(c.campo))
+      .flatMap(c => c.campo === 'disponibilidade' ? [c, { campo: 'estoque', titulo: 'Estoque', largura: 'w-20' }] : [c]);
+    let linhasEdicao = [];
+    let originaisEdicao = new Map();
+    let errosEdicao = {};
+    const tabelaEdicao = document.getElementById('tabelaEdicao');
+
+    function precoParaTexto(v) {
+      const n = Number(v);
+      return v === null || v === undefined || v === '' || !Number.isFinite(n) ? '' : n.toFixed(2).replace('.', ',');
+    }
+
+    // Produto do banco -> linha da tabela (tudo em texto, como o usuário digita)
+    function linhaDoProduto(p) {
+      const l = { id: Number(p.id) };
+      COLUNAS_EDICAO.forEach(c => { l[c.campo] = String(p[c.campo] ?? ''); });
+      l.preco_custo = precoParaTexto(p.preco_custo);
+      l.preco_venda = precoParaTexto(p.preco_venda);
+      CAMPOS_MEDIDA.forEach(c => { l[c] = formatarMedida(p[c]); });
+      l.disponibilidade = p.disponibilidade === 'SOB_ENCOMENDA' ? 'SOB_ENCOMENDA' : 'PRONTA_ENTREGA';
+      l.genero = ['MASCULINO', 'FEMININO', 'UNISSEX'].includes(p.genero) ? p.genero : '';
+      l.estoque = String(Number(p.estoque) || 0);
+      return l;
+    }
+
+    function linhaEdicaoAlterada(l, original) {
+      return !!original && COLUNAS_EDICAO.some(c => String(l[c.campo] ?? '').trim() !== String(original[c.campo] ?? '').trim());
+    }
+
+    // Erros de uma linha da edição: as regras do cadastro em lote + estoque
+    function validarLinhaEdicao(l) {
+      const erros = { ...validarLote([{ ...l, quantidade: '', data_compra: '' }])[0] };
+      if (!/^\d{1,6}$/.test(String(l.estoque ?? '').trim())) erros.estoque = 'Estoque inválido (número inteiro a partir de 0)';
+      return erros;
+    }
+
+    // Linha alterada -> o que vai para o servidor (preços e medidas já em número)
+    function produtoDaEdicao(l) {
+      const p = { id: l.id };
+      COLUNAS_EDICAO.forEach(c => { p[c.campo] = String(l[c.campo] ?? '').trim(); });
+      CAMPOS_MEDIDA.forEach(c => { p[c] = lerMedida(l[c]); });
+      p.preco_custo = lerPreco(l.preco_custo);
+      p.preco_venda = lerPreco(l.preco_venda);
+      p.estoque = Number(p.estoque);
+      return p;
+    }
+
+    function textoBuscaEdicao(l) {
+      return ['nome', 'codigo_sku', 'fornecedor', 'codigo_fornecedor', 'nome_fornecedor', 'cor_armacao', 'formato', 'estilo', 'nome_curto']
+        .map(c => l[c]).join(' ').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+    }
+
+    function linhasVisiveisEdicao(linhas, originais, busca, soAlteradas) {
+      const termos = String(busca || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().split(/\s+/).filter(Boolean);
+      return linhas.filter(l => {
+        if (soAlteradas && !linhaEdicaoAlterada(l, originais.get(l.id))) return false;
+        const texto = textoBuscaEdicao(l);
+        return termos.every(t => texto.includes(t));
+      });
+    }
+
+    function resumoEdicao() {
+      const alteradas = linhasEdicao.filter(l => linhaEdicaoAlterada(l, originaisEdicao.get(l.id))).length;
+      document.getElementById('edicaoResumo').textContent = `${linhasEdicao.length} produto(s) cadastrado(s)${alteradas ? `, ${alteradas} alterado(s) ainda não salvo(s)` : ''}. Máximo de ${MAX_LOTE} alterações por vez.`;
+    }
+
+    function renderizarEdicao() {
+      const visiveis = linhasVisiveisEdicao(linhasEdicao, originaisEdicao, document.getElementById('edicaoBusca').value, document.getElementById('edicaoSoAlterados').checked);
+      tabelaEdicao.innerHTML = visiveis.length ? visiveis.map(l => {
+        const erros = errosEdicao[l.id] || {};
+        const alterada = linhaEdicaoAlterada(l, originaisEdicao.get(l.id));
+        const celulas = COLUNAS_EDICAO.map(col => {
+          const erro = erros[col.campo];
+          const borda = erro ? 'border-red-500 bg-red-50' : 'border-gray-300';
+          const attrs = `data-id="${l.id}" data-campo="${col.campo}" class="edicao-campo ${col.largura} px-2 py-1.5 border ${borda} rounded focus:outline-none focus:ring-2 focus:ring-orange-500" title="${escapeHtml(erro || '')}"`;
+          const campo = col.opcoes
+            ? `<select ${attrs}>${col.opcoes.map(([v, t]) => `<option value="${v}"${l[col.campo] === v ? ' selected' : ''}>${t}</option>`).join('')}</select>`
+            : `<input type="${col.campo === 'link_fornecedor' ? 'url' : 'text'}" ${attrs} value="${escapeHtml(l[col.campo])}"${col.campo.startsWith('preco') || CAMPOS_MEDIDA.includes(col.campo) ? ' inputmode="decimal"' : col.campo === 'estoque' ? ' inputmode="numeric"' : ''}>`;
+          return `<td class="px-2 py-2 align-top">${campo}</td>`;
+        }).join('');
+        const mensagens = Object.values(erros);
+        return `
+        <tr data-linha-edicao="${l.id}" class="${alterada ? 'bg-amber-50' : ''}">
+          <td class="px-3 py-2 align-top whitespace-nowrap"><button type="button" onclick="editarProduto(${l.id})" class="text-xs text-orange-600 hover:underline" title="Abrir o produto (fotos, histórico)">Abrir</button></td>
+          ${celulas}
+        </tr>${mensagens.length ? `
+        <tr class="edicao-erro"><td></td><td colspan="${COLUNAS_EDICAO.length}" class="px-2 pb-2 text-xs text-red-600">${mensagens.map(escapeHtml).join(' • ')}</td></tr>` : ''}`;
+      }).join('') : `<tr><td colspan="${COLUNAS_EDICAO.length + 1}" class="px-4 py-8 text-center text-gray-500">${linhasEdicao.length ? 'Nenhum produto com essa busca' : 'Nenhum produto cadastrado'}</td></tr>`;
+      resumoEdicao();
+    }
+
+    // Recarrega a tabela a partir dos produtos do banco (descarta o que não foi salvo)
+    function recarregarEdicao() {
+      linhasEdicao = todosProdutos.map(linhaDoProduto);
+      originaisEdicao = new Map(linhasEdicao.map(l => [l.id, { ...l }]));
+      errosEdicao = {};
+      renderizarEdicao();
+    }
+
+    async function iniciarEdicao() {
+      if (!document.getElementById('edicaoCabecalho').innerHTML) {
+        document.getElementById('edicaoCabecalho').innerHTML = '<th class="px-3 py-3"></th>'
+          + COLUNAS_EDICAO.map(c => `<th class="px-2 py-3 text-left text-xs font-semibold text-gray-500 uppercase whitespace-nowrap">${tituloColunaLote(c)}</th>`).join('');
+      }
+      if (!todosProdutos.length) await carregarProdutos();
+      // Mantém o que já foi alterado e não salvo; senão pega os dados mais novos
+      if (!linhasEdicao.some(l => linhaEdicaoAlterada(l, originaisEdicao.get(l.id)))) recarregarEdicao();
+      else renderizarEdicao();
+    }
+
+    function trocarModoLote(modo) {
+      document.querySelectorAll('[data-modo-lote]').forEach(b => {
+        const ativo = b.dataset.modoLote === modo;
+        b.setAttribute('aria-selected', String(ativo));
+        b.classList.toggle('bg-white', ativo);
+        b.classList.toggle('shadow', ativo);
+        b.classList.toggle('text-gray-900', ativo);
+        b.classList.toggle('text-gray-500', !ativo);
+      });
+      document.getElementById('loteModoCadastro').classList.toggle('hidden', modo !== 'cadastro');
+      document.getElementById('loteModoEdicao').classList.toggle('hidden', modo !== 'edicao');
+      if (modo === 'edicao') iniciarEdicao();
+    }
+
+    document.querySelectorAll('[data-modo-lote]').forEach(b => b.addEventListener('click', () => trocarModoLote(b.dataset.modoLote)));
+    trocarModoLote('cadastro');
+    tabelaEdicao.addEventListener('input', (e) => {
+      const el = e.target.closest('.edicao-campo');
+      if (!el) return;
+      const l = linhasEdicao.find(x => x.id === Number(el.dataset.id));
+      if (!l) return;
+      l[el.dataset.campo] = el.value;
+      if (errosEdicao[l.id]?.[el.dataset.campo]) {
+        delete errosEdicao[l.id][el.dataset.campo];
+        el.classList.remove('border-red-500', 'bg-red-50');
+        el.classList.add('border-gray-300');
+      }
+      el.closest('tr').classList.toggle('bg-amber-50', linhaEdicaoAlterada(l, originaisEdicao.get(l.id)));
+      resumoEdicao();
+    });
+    document.getElementById('edicaoBusca').addEventListener('input', renderizarEdicao);
+    document.getElementById('edicaoSoAlterados').addEventListener('change', renderizarEdicao);
+    document.getElementById('btnEdicaoDesfazer').addEventListener('click', () => {
+      if (linhasEdicao.some(l => linhaEdicaoAlterada(l, originaisEdicao.get(l.id))) && !confirm('Desfazer todas as alterações que ainda não foram salvas?')) return;
+      recarregarEdicao();
+    });
+    document.getElementById('btnEdicaoSalvar').addEventListener('click', async () => {
+      const btn = document.getElementById('btnEdicaoSalvar');
+      const alteradas = linhasEdicao.filter(l => linhaEdicaoAlterada(l, originaisEdicao.get(l.id)));
+      if (!alteradas.length) return mostrarToast('Nenhuma alteração para salvar', 'error');
+      if (alteradas.length > MAX_LOTE) return mostrarToast(`Máximo de ${MAX_LOTE} produtos alterados por vez`, 'error');
+      errosEdicao = {};
+      alteradas.forEach(l => {
+        const erros = validarLinhaEdicao(l);
+        if (Object.keys(erros).length) errosEdicao[l.id] = erros;
+      });
+      if (Object.keys(errosEdicao).length) {
+        renderizarEdicao();
+        return mostrarToast('Corrija as linhas marcadas em vermelho', 'error');
+      }
+      btn.disabled = true;
+      try {
+        const res = await fetchAdmin('/api/admin/produtos/lote', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ produtos: alteradas.map(produtoDaEdicao) }),
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          // Erros do servidor vêm pelo índice dentro de `produtos`: volta para a linha da tabela
+          (data.erros || []).forEach(e => {
+            const id = alteradas[e.linha]?.id;
+            if (id) errosEdicao[id] = { ...(errosEdicao[id] || {}), [e.campo]: e.mensagem };
+          });
+          renderizarEdicao();
+          throw new Error(data.error || 'Erro ao salvar');
+        }
+        mostrarToast(`${data.produtos.length} produto(s) atualizado(s)`);
+        await carregarProdutos();
+        recarregarEdicao();
+      } catch (err) {
+        console.error(err);
+        mostrarToast(err.message, 'error');
+      } finally {
+        btn.disabled = false;
+      }
+    });
 
     // Carregar produtos
     async function carregarProdutos() {

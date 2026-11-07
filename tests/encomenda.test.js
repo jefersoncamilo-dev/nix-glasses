@@ -164,10 +164,10 @@ describe('vitrine: produtos Sob Encomenda', () => {
     assert.equal(ctx.calcularSinal(120), 60);
   });
 
-  it('selos discretos: Pronta (livre) ou Encomenda (azul), e os dois vão para a maleta', () => {
+  it('selos discretos: Disponível (livre) ou Encomenda (azul), e os dois vão para a maleta', () => {
     const { ctx, cards } = vitrine([pronta, encomenda]);
     assert.doesNotMatch(cards[0], /DISPONÍVEL|SOB ENCOMENDA|data-selo-encomenda/);
-    assert.match(cards[0], /data-selo-pronta[^>]*>[\s\S]*?Pronta<\/span>/);
+    assert.match(cards[0], /data-selo-pronta[^>]*>[\s\S]*?Disponível<\/span>/);
     assert.equal(ctx.etiquetaProduto(pronta).texto, 'DISPONÍVEL');
     assert.doesNotMatch(cards[0], /50% sinal/);
     assert.match(cards[0], /toggleMaleta\(1\)/);

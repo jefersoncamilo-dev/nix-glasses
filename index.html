@@ -133,8 +133,8 @@
     .chips-formato::after { content: ''; flex: none; width: 16px; }
     /* A fileira do catálogo encosta nas bordas da tela no celular: o "imã" da rolagem
        respeita o recuo, senão a primeira pílula gruda na borda */
-    #filtrosRolagem { scroll-padding-left: 1rem; }
-    @media (min-width: 640px) { #filtrosRolagem { scroll-padding-left: 0; } }
+    #filtrosRolagem, #filtroPilulas .chips-formato { scroll-padding-left: 1rem; }
+    @media (min-width: 640px) { #filtrosRolagem, #filtroPilulas .chips-formato { scroll-padding-left: 0; } }
     /* Celular: sem tamanho/gênero para escolher, a linha dos seletores some */
     @media (max-width: 639px) { .linha-selecao:not(:has(select:not(.hidden))) { display: none; } }
     .chip-formato:not([aria-pressed="true"]):hover { border-color: rgba(255,255,255,0.32); color: #fff; }
@@ -225,11 +225,11 @@
   <!-- Catálogo (fundo escuro, como o resto da marca) -->
   <section id="catalogo" class="pb-24 lg:pb-24 scroll-mt-14 sm:scroll-mt-16" style="background:var(--nix-bg)">
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-      <!-- Filtros: ficam presos abaixo do topo enquanto a cliente rola os modelos -->
       <!-- Filtros: ficam presos abaixo do topo enquanto a cliente rola os modelos.
-           Coleção / Pronta Entrega / Sob Encomenda e os formatos dividem uma única fileira
-           de pílulas com rolagem lateral (economiza altura no celular). Estes filtros só
-           existem aqui: o topo não repete os atalhos. -->
+           A tela inicial mostra só os modelos (formatos), numa fileira de chips com
+           rolagem lateral. Pronta Entrega / Sob Encomenda aparecem numa segunda fileira
+           depois que a cliente escolhe um modelo, e filtram dentro dele. Estes filtros
+           só existem aqui: o topo não repete os atalhos. -->
       <div id="barraFiltros" class="sticky top-14 sm:top-16 z-30 -mx-4 sm:-mx-6 lg:-mx-8 px-4 sm:px-6 lg:px-8 pt-2.5 pb-2.5 sm:pt-6 sm:pb-4 mb-2 sm:mb-4 border-b flex flex-col gap-2 sm:gap-4" style="background:rgba(22,22,22,0.94);border-color:var(--nix-border);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px)">
        <div class="linha-selecao flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <h2 class="hidden sm:block text-2xl sm:text-3xl font-bold text-white text-left">Nossa Coleção</h2>
@@ -246,14 +246,17 @@
         </div>
        </div>
         <div id="filtrosRolagem" class="chips-formato -mx-4 px-4 sm:mx-0 sm:px-0">
-          <div id="filtroPilulas" class="flex flex-none gap-2" role="group" aria-label="Mostrar">
-            <button type="button" data-filtro="" aria-pressed="true" class="chip-formato filtro-pilula">Coleção <span data-contagem="" class="ml-1 opacity-60"></span></button>
-            <button type="button" data-filtro="DISPONIVEL" aria-pressed="false" class="chip-formato filtro-pilula">Pronta Entrega <span data-contagem="DISPONIVEL" class="ml-1 opacity-60"></span></button>
-            <button type="button" data-filtro="SOB_ENCOMENDA" aria-pressed="false" class="chip-formato filtro-pilula">Sob Encomenda <span data-contagem="SOB_ENCOMENDA" class="ml-1 opacity-60"></span></button>
-          </div>
-          <!-- Chips de formato: na mesma fileira, depois de um divisor; um toque filtra
-               (preenchidos com os formatos cadastrados, só com dois formatos ou mais) -->
-          <div id="chipsFormato" class="chips-grupo hidden flex flex-none gap-2 pl-2 border-l" style="border-color:rgba(255,255,255,0.14)" role="group" aria-label="Formato"></div>
+          <!-- Chips de modelo (formato): um toque filtra (preenchidos com os formatos
+               cadastrados, só com dois formatos ou mais) -->
+          <div id="chipsFormato" class="chips-grupo hidden flex flex-none gap-2" role="group" aria-label="Formato"></div>
+        </div>
+        <!-- Disponibilidade dentro do modelo escolhido (escondida na tela inicial) -->
+        <div id="filtroPilulas" class="hidden" role="group" aria-label="Mostrar">
+         <div class="chips-formato -mx-4 px-4 sm:mx-0 sm:px-0">
+          <button type="button" data-filtro="" aria-pressed="true" class="chip-formato filtro-pilula">Todos <span data-contagem="" class="ml-1 opacity-60"></span></button>
+          <button type="button" data-filtro="DISPONIVEL" aria-pressed="false" class="chip-formato filtro-pilula">Pronta Entrega <span data-contagem="DISPONIVEL" class="ml-1 opacity-60"></span></button>
+          <button type="button" data-filtro="SOB_ENCOMENDA" aria-pressed="false" class="chip-formato filtro-pilula">Sob Encomenda <span data-contagem="SOB_ENCOMENDA" class="ml-1 opacity-60"></span></button>
+         </div>
         </div>
       </div>
       <!-- Orientação: uma linha que muda com o filtro (some quando não há o que dizer) -->
@@ -666,7 +669,6 @@
         }
         preencherFiltroFormato();
         preencherFiltroTamanho();
-        preencherFiltroGenero();
         atualizarContagemFiltros();
         renderizarCatalogo();
       } catch (error) {
@@ -691,10 +693,15 @@
     }
 
     // Um toque no chip filtra o catálogo e marca o chip escolhido
+    // Voltar para "Todos os formatos" também volta a disponibilidade para "Todos"
+    // (as pílulas Pronta Entrega / Sob Encomenda só aparecem dentro de um modelo).
     function aplicarFiltroFormato(formato) {
       filtroFormato.value = formato;
+      if (!formato) marcarFiltroStatus('');
       chipsFormato.querySelectorAll('[data-formato]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.formato === formato)));
+      atualizarContagemFiltros();
       renderizarCatalogo();
+      atualizarGuias();
     }
 
     // Ordem dos tamanhos: letras (PP ao EGG), depois a numeração (34, 36...), depois o resto
@@ -753,22 +760,8 @@
       return sufixo && nome.endsWith(sufixo) ? nome.slice(0, -sufixo.length) : nome;
     }
 
-    const NOMES_GENERO = { MASCULINO: 'Masculino', FEMININO: 'Feminino', UNISSEX: 'Unissex' };
-
-    // Filtro de gênero: só os gêneros cadastrados. Escolher Masculino ou Feminino
-    // também mostra os Unissex (servem para os dois).
-    function preencherFiltroGenero() {
-      const generos = Object.keys(NOMES_GENERO).filter(g => produtos.some(p => p.genero === g));
-      filtroGenero.innerHTML = '<option value="">Todos os gêneros</option>';
-      generos.forEach(g => {
-        const opt = document.createElement('option');
-        opt.value = g;
-        opt.textContent = NOMES_GENERO[g];
-        filtroGenero.appendChild(opt);
-      });
-      filtroGenero.classList.toggle('hidden', generos.length < 2);
-    }
-
+    // Gênero: o filtro saiu da tela inicial da vitrine (o <select> fica escondido,
+    // sempre em "Todos"). Escolher Masculino ou Feminino também mostraria os Unissex.
     function passaFiltroGenero(p, genero) {
       return !genero || p.genero === genero || (p.genero === 'UNISSEX' && genero !== 'UNISSEX');
     }
@@ -825,17 +818,33 @@
         : 'Toque em <strong>+ Maleta</strong> nos modelos que quer provar em casa.';
     }
 
-    // Troca o filtro de disponibilidade (pílulas do catálogo)
-    function aplicarFiltroStatus(filtro) {
+    function marcarFiltroStatus(filtro) {
       filtroStatus.value = filtro;
       document.querySelectorAll('#filtroPilulas [data-filtro]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.filtro === filtro)));
+    }
+
+    // Troca o filtro de disponibilidade (pílulas do modelo escolhido)
+    function aplicarFiltroStatus(filtro) {
+      marcarFiltroStatus(filtro);
       renderizarCatalogo();
       atualizarGuias();
     }
 
+    // As pílulas Pronta Entrega / Sob Encomenda não ficam na tela inicial: aparecem
+    // depois que a cliente escolhe um modelo, e a contagem é só desse modelo. Loja
+    // com um formato só (sem chips de modelo) mostra as pílulas direto.
+    function pilulasVisiveis(formatoEscolhido, temChipsModelo, totalProdutos) {
+      return totalProdutos > 0 && (Boolean(formatoEscolhido) || !temChipsModelo);
+    }
+
     function atualizarContagemFiltros() {
-      const contagem = contagemFiltros(produtos);
-      document.querySelectorAll('#filtroPilulas [data-contagem]').forEach(el => { el.textContent = produtos.length ? `(${contagem[el.dataset.contagem]})` : ''; });
+      const formato = filtroFormato.value;
+      const doModelo = formato ? produtos.filter(p => p.formato === formato) : produtos;
+      const contagem = contagemFiltros(doModelo);
+      document.querySelectorAll('#filtroPilulas [data-contagem]').forEach(el => { el.textContent = doModelo.length ? `(${contagem[el.dataset.contagem]})` : ''; });
+      const visiveis = pilulasVisiveis(formato, !chipsFormato.classList.contains('hidden'), produtos.length);
+      document.getElementById('filtroPilulas').classList.toggle('hidden', !visiveis);
+      if (!visiveis && filtroStatus.value) marcarFiltroStatus('');
     }
 
     function atualizarGuias() {
@@ -982,7 +991,7 @@
               ${fotos.map((_, i) => `<span data-dot class="w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full ${i === indice ? 'bg-white' : 'bg-white/50'} shadow"></span>`).join('')}
             </div>` : ''}
             ${encomenda ? `<span data-selo-encomenda class="selo-card absolute top-1.5 left-1.5 sm:top-2.5 sm:left-2.5 bg-blue-600/95 text-white pointer-events-none" title="Sob encomenda: 50% de sinal para reservar e 50% na entrega">Encomenda</span>` : ''}
-            ${prontaEntrega ? `<span data-selo-pronta class="selo-card absolute top-1.5 left-1.5 sm:top-2.5 sm:left-2.5 text-white pointer-events-none" style="background:rgba(16,16,16,0.72)" title="Pronta entrega: vai na maleta para provar em casa"><span class="w-1.5 h-1.5 rounded-full bg-emerald-400" aria-hidden="true"></span>Pronta</span>` : ''}
+            ${prontaEntrega ? `<span data-selo-pronta class="selo-card absolute top-1.5 left-1.5 sm:top-2.5 sm:left-2.5 text-white pointer-events-none" style="background:rgba(16,16,16,0.72)" title="Disponível: pronta entrega, vai na maleta para provar em casa"><span class="w-1.5 h-1.5 rounded-full bg-emerald-400" aria-hidden="true"></span>Disponível</span>` : ''}
             ${mostraEtiqueta ? `<div class="absolute top-1.5 right-1.5 sm:top-3 sm:right-3">
               <span class="px-1.5 sm:px-2 py-0.5 sm:py-1 text-[9px] sm:text-xs font-medium rounded-full ${etiqueta.classe}">${escapeHtml(etiqueta.texto)}</span>
             </div>` : ''}
@@ -2216,7 +2225,6 @@
     };
     window.addEventListener('scroll', agendarBarraMaleta, { passive: true });
     window.addEventListener('resize', agendarBarraMaleta);
-    filtroGenero.addEventListener('change', renderizarCatalogo);
     filtroTamanho.addEventListener('change', renderizarCatalogo);
   </script>
 </body>

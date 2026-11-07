@@ -100,12 +100,17 @@ describe('vitrine: atalhos e pílulas de filtro', () => {
   it('os formatos viram chips (sem o <select>): ordem alfabética, "Todos" primeiro e só com dois formatos ou mais', () => {
     assert.doesNotMatch(html, /<select id="filtroFormato"/);
     assert.match(html, /<input type="hidden" id="filtroFormato" value="">/);
-    // pílulas Coleção / Pronta Entrega / Sob Encomenda e chips de formato dividem
-    // uma única fileira com rolagem lateral
-    const fileira = html.match(/<div id="filtrosRolagem" class="chips-formato[^"]*">[\s\S]*?<div id="chipsFormato" class="chips-grupo hidden[^"]*"[^>]*role="group"/);
-    assert.ok(fileira, 'pílulas e formatos deveriam estar na mesma fileira');
-    assert.ok(fileira[0].indexOf('id="filtroPilulas"') > 0);
-    for (const f of ['', 'DISPONIVEL', 'SOB_ENCOMENDA']) assert.match(fileira[0], new RegExp(`data-filtro="${f}" aria-pressed="(true|false)" class="chip-formato filtro-pilula"`));
+    // tela inicial: só os chips de modelo (formato). Gênero e Pronta Entrega /
+    // Sob Encomenda não aparecem antes de escolher um modelo.
+    const fileira = html.match(/<div id="filtrosRolagem" class="chips-formato[^"]*">[\s\S]*?<\/div>\s*<\/div>/);
+    assert.ok(fileira, 'faltou a fileira dos modelos');
+    assert.match(fileira[0], /<div id="chipsFormato" class="chips-grupo hidden[^"]*"[^>]*role="group"/);
+    assert.doesNotMatch(fileira[0], /data-filtro=|filtroGenero/);
+    const pilulas = html.match(/<div id="filtroPilulas" class="hidden"[\s\S]*?<\/div>\s*<\/div>/);
+    assert.ok(pilulas, 'as pílulas de disponibilidade deveriam começar escondidas');
+    for (const f of ['', 'DISPONIVEL', 'SOB_ENCOMENDA']) assert.match(pilulas[0], new RegExp(`data-filtro="${f}" aria-pressed="(true|false)" class="chip-formato filtro-pilula"`));
+    assert.match(html, /<select id="filtroGenero" class="hidden /);
+    assert.doesNotMatch(html, /filtroGenero\.classList\.toggle|function preencherFiltroGenero/);
     assert.match(html, /\.chips-formato \{[^}]*overflow-x: auto/);
 
     const chips = { innerHTML: '', setAttribute() {}, classList: { toggle: (c, v) => { chips.escondido = v; } } };
@@ -132,16 +137,37 @@ describe('vitrine: atalhos e pílulas de filtro', () => {
     assert.match(chips.innerHTML, /data-formato="" aria-pressed="true"/);
   });
 
-  it('um toque no chip filtra e marca só o chip escolhido', () => {
+  it('um toque no chip filtra e marca só o chip escolhido; "Todos" volta a disponibilidade para Todos', () => {
     const botoes = ['', 'Aviador', 'Oval'].map(f => ({ dataset: { formato: f }, atributos: {}, setAttribute(k, v) { this.atributos[k] = v; } }));
-    let renderizou = 0;
+    const chamadas = [];
     const filtroFormato = { value: '' };
-    const c = vm.createContext({ chipsFormato: { querySelectorAll: () => botoes }, filtroFormato, renderizarCatalogo: () => renderizou++ });
+    const c = vm.createContext({
+      chipsFormato: { querySelectorAll: () => botoes }, filtroFormato,
+      marcarFiltroStatus: (f) => chamadas.push(`status:${f}`),
+      atualizarContagemFiltros: () => chamadas.push('contagem'),
+      renderizarCatalogo: () => chamadas.push('render'),
+      atualizarGuias: () => chamadas.push('guias'),
+    });
     vm.runInContext(`${extrairFuncao('aplicarFiltroFormato')}; this.f = aplicarFiltroFormato;`, c);
     c.f('Oval');
     assert.equal(filtroFormato.value, 'Oval');
     assert.deepEqual(botoes.map(b => b.atributos['aria-pressed']), ['false', 'false', 'true']);
-    assert.equal(renderizou, 1);
+    assert.deepEqual(chamadas, ['contagem', 'render', 'guias']);
+    chamadas.length = 0;
+    c.f('');
+    assert.deepEqual(chamadas, ['status:', 'contagem', 'render', 'guias']);
+  });
+
+  it('Pronta Entrega / Sob Encomenda só aparecem depois de escolher um modelo', () => {
+    const c = vm.createContext({});
+    vm.runInContext(`${extrairFuncao('pilulasVisiveis')}; this.f = pilulasVisiveis;`, c);
+    assert.equal(c.f('', true, 10), false); // tela inicial
+    assert.equal(c.f('Aviador', true, 10), true); // modelo escolhido
+    assert.equal(c.f('', false, 10), true); // loja com um formato só: sem chips de modelo
+    assert.equal(c.f('', false, 0), false); // catálogo vazio
+    // a contagem das pílulas é só do modelo escolhido
+    const fn = extrairFuncao('atualizarContagemFiltros');
+    assert.match(fn, /formato \? produtos\.filter\(p => p\.formato === formato\)/);
   });
 
   it('barra flutuante da maleta: contador + "Ver Maleta"; aparece com o 1º modelo ou ao rolar no celular', () => {
