@@ -133,8 +133,8 @@
     .chips-formato::after { content: ''; flex: none; width: 16px; }
     /* A fileira do catálogo encosta nas bordas da tela no celular: o "imã" da rolagem
        respeita o recuo, senão a primeira pílula gruda na borda */
-    #filtrosRolagem { scroll-padding-left: 1rem; }
-    @media (min-width: 640px) { #filtrosRolagem { scroll-padding-left: 0; } }
+    #filtrosRolagem, #filtroPilulas .chips-formato { scroll-padding-left: 1rem; }
+    @media (min-width: 640px) { #filtrosRolagem, #filtroPilulas .chips-formato { scroll-padding-left: 0; } }
     /* Celular: sem tamanho/gênero para escolher, a linha dos seletores some */
     @media (max-width: 639px) { .linha-selecao:not(:has(select:not(.hidden))) { display: none; } }
     .chip-formato:not([aria-pressed="true"]):hover { border-color: rgba(255,255,255,0.32); color: #fff; }
