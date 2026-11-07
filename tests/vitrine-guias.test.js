@@ -35,9 +35,22 @@ describe('vitrine: atalhos e pílulas de filtro', () => {
     const banner = html.match(/<div id="bannerProvador"[\s\S]*?<button type="button" id="abrirProvadorTopo" class="btn btn-primario[^"]*">[\s\S]*?<\/button>/);
     assert.ok(banner, 'faltou o banner do provador com o botão principal');
     assert.match(banner[0], /Provador Virtual/);
-    // banner compacto: uma linha (ícone, texto e botão lado a lado), sem empilhar no celular
+    // no celular o card é compacto: uma linha (visor, texto e botão lado a lado); só a
+    // partir do tablet (md:) ele vira o card vertical do novo design
     assert.match(banner[0], /<div id="bannerProvador" class="[^"]*\bflex items-center\b/);
-    assert.doesNotMatch(banner[0], /flex-col|btn-lg/);
+    assert.doesNotMatch(banner[0], /(^|[\s"])flex-col\b|btn-lg/);
+    assert.match(banner[0], /<div id="bannerProvador" class="[^"]*\bmd:flex-col\b/);
+    // visor de escaneamento: grade, quatro cantoneiras, linha laser e o selo de Realidade Aumentada
+    assert.match(banner[0], /provador-visor/);
+    assert.match(banner[0], /provador-grade/);
+    assert.equal((banner[0].match(/provador-canto provador-canto-\d/g) || []).length, 4);
+    assert.match(banner[0], /provador-laser/);
+    assert.match(banner[0], /Realidade Aumentada/);
+    assert.match(banner[0], /<span>Experimentar<span class="hidden md:inline"> Agora<\/span><\/span>/);
+    // o card inteiro abre o provador, sem disparar duas vezes pelo botão
+    assert.match(html, /getElementById\('bannerProvador'\)\.addEventListener\('click', e => \{ if \(!e\.target\.closest\('#abrirProvadorTopo'\)\) abrirProvadorTopo\(\); \}\)/);
+    // a linha laser para quando a pessoa pede menos movimento
+    assert.match(html, /prefers-reduced-motion: reduce\) \{ \.provador-laser \{ animation: none/);
     // o hero não tem mais blocos de texto/tutorial antes do catálogo
     const hero = html.match(/<section id="hero"[\s\S]*?<\/section>/)[0];
     assert.ok(hero.includes('id="bannerProvador"'));
@@ -216,5 +229,25 @@ describe('vitrine: atalhos e pílulas de filtro', () => {
   it('as animações de orientação param com prefers-reduced-motion', () => {
     const bloco = html.match(/@media \(prefers-reduced-motion: reduce\) \{\s*\.guia-cutuca[^}]*\}/);
     assert.ok(bloco, 'faltou desligar as animações de guia');
+  });
+
+  it('pop-up do Provador Virtual: só no celular, loja de óculos, a cada entrada no site e com modelo para provar', () => {
+    const ctxPopup = vm.createContext({});
+    vm.runInContext(`${extrairFuncao('devePopupProvador')}\nthis.devePopupProvador = devePopupProvador;`, ctxPopup);
+    const deve = ctxPopup.devePopupProvador;
+    assert.equal(deve(390, undefined, true), true);
+    assert.equal(deve(390, true, true), true);
+    assert.equal(deve(768, true, true), false, 'no computador/tablet não abre');
+    assert.equal(deve(390, false, true), false, 'loja que não é de óculos não tem provador');
+    assert.equal(deve(390, true, false), false, 'sem modelo com foto não há o que provar');
+    // a janela tem o card grande, o X, o "Agora não" e o botão que abre a câmera
+    const popup = html.match(/<div id="popupProvador"[\s\S]*?id="agoraNaoPopupProvador"[^>]*>/);
+    assert.ok(popup, 'faltou o pop-up do provador');
+    for (const parte of ['role="dialog"', 'aria-modal="true"', 'id="fecharPopupProvador"', 'provador-visor', 'provador-laser', 'Realidade Aumentada', 'Experimentar Agora']) assert.ok(popup[0].includes(parte), parte);
+    assert.match(html, /getElementById\('experimentarPopupProvador'\)\.addEventListener\('click', \(\) => \{\s*fecharPopupProvador\(\);\s*abrirProvadorTopo\(\);/);
+    // aparece em toda entrada (sem guardar "já visto"), fecha pelo Voltar e é agendado depois de carregar os óculos
+    assert.doesNotMatch(html, /CHAVE_POPUP_PROVADOR|popupProvadorJaVisto/);
+    assert.match(html, /popupProvador: \(\) => fecharPopupProvador\(\)/);
+    assert.match(html, /renderizarCatalogo\(\);\s*agendarPopupProvador\(\);/);
   });
 });
