@@ -102,6 +102,16 @@
     @keyframes provadorLaser { 0%, 100% { top: 10%; } 50% { top: 88%; } }
     .provador-oculos { z-index: 1; filter: drop-shadow(0 0 8px rgba(255,255,255,0.4)); transition: transform 0.3s ease; }
     .banner-provador:hover .provador-oculos { transform: scale(1.1); }
+    /* Pop-up do celular: o visor grande usa as cantoneiras e a grade do card vertical */
+    .provador-visor-grande .provador-grade { background-size: 10px 10px; }
+    .provador-visor-grande .provador-canto { width: 0.875rem; height: 0.875rem; }
+    .provador-visor-grande .provador-canto-1, .provador-visor-grande .provador-canto-2 { top: 0.75rem; }
+    .provador-visor-grande .provador-canto-3, .provador-visor-grande .provador-canto-4 { bottom: 0.75rem; }
+    .provador-visor-grande .provador-canto-1, .provador-visor-grande .provador-canto-3 { left: 0.75rem; }
+    .provador-visor-grande .provador-canto-2, .provador-visor-grande .provador-canto-4 { right: 0.75rem; }
+    .popup-provador { animation: popupProvador 0.3s cubic-bezier(0.22, 1, 0.36, 1); }
+    @keyframes popupProvador { from { opacity: 0; transform: translateY(16px) scale(0.96); } to { opacity: 1; transform: none; } }
+    @media (prefers-reduced-motion: reduce) { .popup-provador { animation: none; } }
     @media (prefers-reduced-motion: reduce) { .provador-laser { animation: none; top: 50%; } .provador-ponto { animation: none; } .banner-provador, .provador-oculos { transition: none; } .banner-provador:hover, .banner-provador:hover .provador-oculos { transform: none; } }
     /* Encomenda: grafite com brilho prateado na borda */
     .btn-encomenda { background: linear-gradient(180deg, #3a3a3a 0%, #1c1c1c 100%); color: #f5f5f5; border-color: #8f8f8f; box-shadow: 0 1px 2px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.15); }
@@ -432,6 +442,34 @@
     </div>
   </div>
 
+  <!-- Pop-up do Provador Virtual (só no celular): o card grande aparece toda vez que a pessoa
+       entra no site, logo depois de os óculos carregarem, e o botão abre a câmera direto no provador.
+       Fecha pelo X, pelo "Agora não", pelo fundo, pelo Esc ou pelo Voltar do celular. -->
+  <div id="popupProvador" class="fixed inset-0 modal-overlay bg-black/70 hidden z-50 flex items-center justify-center p-5" role="dialog" aria-modal="true" aria-labelledby="popupProvadorTitulo">
+    <div class="banner-provador popup-provador relative overflow-hidden w-full max-w-xs rounded-3xl border text-center px-6 pt-8 pb-4 flex flex-col items-center">
+      <span class="provador-brilho provador-brilho-a" aria-hidden="true"></span>
+      <span class="provador-brilho provador-brilho-b" aria-hidden="true"></span>
+      <button type="button" id="fecharPopupProvador" class="absolute top-2 right-2 z-10 flex items-center justify-center w-11 h-11 rounded-full text-neutral-300 hover:bg-white/10 hover:text-white" aria-label="Fechar">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+      </button>
+      <span class="provador-selo inline-flex mb-5" aria-hidden="true"><span class="provador-ponto"></span>Realidade Aumentada</span>
+      <span class="provador-visor provador-visor-grande relative flex items-center justify-center w-40 h-40 rounded-3xl mb-5" aria-hidden="true">
+        <span class="provador-grade"></span>
+        <span class="provador-canto provador-canto-1"></span><span class="provador-canto provador-canto-2"></span>
+        <span class="provador-canto provador-canto-3"></span><span class="provador-canto provador-canto-4"></span>
+        <span class="provador-laser"></span>
+        <svg class="provador-oculos relative w-24 h-24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><circle cx="6" cy="15" r="4"/><circle cx="18" cy="15" r="4"/><path d="M14 15a2 2 0 00-2-2 2 2 0 00-2 2M2.5 13L5 7c.7-1.3 1.4-2 3-2M21.5 13L19 7c-.7-1.3-1.5-2-3-2"/></svg>
+      </span>
+      <h2 id="popupProvadorTitulo" class="relative text-2xl font-extrabold tracking-tight text-white leading-tight">Provador Virtual</h2>
+      <p class="relative mt-1.5 mb-6 text-sm leading-snug" style="color:var(--nix-muted)">Veja os óculos no seu rosto em tempo real, usando a câmera do celular.</p>
+      <button type="button" id="experimentarPopupProvador" class="btn btn-primario relative w-full min-h-[52px] text-base rounded-2xl">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 8.5A1.5 1.5 0 014.5 7h2.3l1.4-2h7.6l1.4 2h2.3A1.5 1.5 0 0121 8.5v9a1.5 1.5 0 01-1.5 1.5h-15A1.5 1.5 0 013 17.5z"/><circle cx="12" cy="13" r="3.5"/></svg>
+        <span>Experimentar Agora</span>
+      </button>
+      <button type="button" id="agoraNaoPopupProvador" class="link-ajuda relative mt-2 min-h-[44px] px-3 text-sm">Agora não, ver os modelos</button>
+    </div>
+  </div>
+
   <!-- Como funciona a maleta: janela aberta pelo link "? Como funciona a maleta" do topo.
        No celular sobe de baixo (folha), no computador fica no centro. -->
   <div id="modalComoFunciona" class="fixed inset-0 modal-overlay bg-black/60 hidden z-50 flex items-end sm:items-center justify-center sm:p-4" role="dialog" aria-modal="true" aria-labelledby="comoFuncionaTitulo">
@@ -639,6 +677,7 @@
       maleta: () => fecharModalMaleta(),
       cliente: () => fecharCliente(),
       comoFunciona: () => fecharComoFunciona(),
+      popupProvador: () => fecharPopupProvador(),
     };
 
     function entrarModalHistorico(nome) {
@@ -720,6 +759,7 @@
         preencherFiltroTamanho();
         atualizarContagemFiltros();
         renderizarCatalogo();
+        agendarPopupProvador();
       } catch (error) {
         console.error('Erro ao carregar catálogo:', error);
         mostrarToast('Erro ao carregar catálogo', 'error');
@@ -2231,6 +2271,50 @@
     });
     modalComoFunciona.addEventListener('click', (e) => { if (e.target === modalComoFunciona) fecharComoFunciona(); });
     document.addEventListener('keydown', (e) => { if (e.key === 'Escape') fecharComoFunciona(); });
+
+    // Pop-up do Provador Virtual: só no celular e em loja de óculos, toda vez que a pessoa
+    // entra no site (uma vez por carregamento da página), se houver um modelo com foto para
+    // abrir na câmera. Espera um instante depois de os óculos aparecerem e não abre por
+    // cima de outra janela.
+    const popupProvador = document.getElementById('popupProvador');
+    let popupProvadorAgendado = false;
+
+    function devePopupProvador(largura, oculos, temModelo) {
+      return largura < 768 && oculos !== false && temModelo;
+    }
+
+    function agendarPopupProvador() {
+      if (popupProvadorAgendado) return;
+      const pode = devePopupProvador(window.innerWidth, globalThis.LOJA?.oculos, !!produtoParaProvadorTopo(produtos));
+      if (!pode) return;
+      popupProvadorAgendado = true;
+      setTimeout(abrirPopupProvador, 1200);
+    }
+
+    function abrirPopupProvador() {
+      // Outra janela já aberta (detalhes, maleta, provador...): não interrompe a cliente
+      if (historicoModais.pilha.length || provador.aberto) return;
+      popupProvador.classList.remove('hidden');
+      document.body.style.overflow = 'hidden';
+      entrarModalHistorico('popupProvador');
+      document.getElementById('experimentarPopupProvador').focus();
+    }
+
+    function fecharPopupProvador() {
+      if (popupProvador.classList.contains('hidden')) return;
+      popupProvador.classList.add('hidden');
+      document.body.style.overflow = '';
+      sairModalHistorico('popupProvador');
+    }
+
+    document.getElementById('fecharPopupProvador').addEventListener('click', fecharPopupProvador);
+    document.getElementById('agoraNaoPopupProvador').addEventListener('click', fecharPopupProvador);
+    document.getElementById('experimentarPopupProvador').addEventListener('click', () => {
+      fecharPopupProvador();
+      abrirProvadorTopo();
+    });
+    popupProvador.addEventListener('click', (e) => { if (e.target === popupProvador) fecharPopupProvador(); });
+    document.addEventListener('keydown', (e) => { if (e.key === 'Escape') fecharPopupProvador(); });
 
     // Inicialização
     document.addEventListener('DOMContentLoaded', () => {

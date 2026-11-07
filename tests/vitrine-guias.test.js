@@ -230,4 +230,24 @@ describe('vitrine: atalhos e pílulas de filtro', () => {
     const bloco = html.match(/@media \(prefers-reduced-motion: reduce\) \{\s*\.guia-cutuca[^}]*\}/);
     assert.ok(bloco, 'faltou desligar as animações de guia');
   });
+
+  it('pop-up do Provador Virtual: só no celular, loja de óculos, a cada entrada no site e com modelo para provar', () => {
+    const ctxPopup = vm.createContext({});
+    vm.runInContext(`${extrairFuncao('devePopupProvador')}\nthis.devePopupProvador = devePopupProvador;`, ctxPopup);
+    const deve = ctxPopup.devePopupProvador;
+    assert.equal(deve(390, undefined, true), true);
+    assert.equal(deve(390, true, true), true);
+    assert.equal(deve(768, true, true), false, 'no computador/tablet não abre');
+    assert.equal(deve(390, false, true), false, 'loja que não é de óculos não tem provador');
+    assert.equal(deve(390, true, false), false, 'sem modelo com foto não há o que provar');
+    // a janela tem o card grande, o X, o "Agora não" e o botão que abre a câmera
+    const popup = html.match(/<div id="popupProvador"[\s\S]*?id="agoraNaoPopupProvador"[^>]*>/);
+    assert.ok(popup, 'faltou o pop-up do provador');
+    for (const parte of ['role="dialog"', 'aria-modal="true"', 'id="fecharPopupProvador"', 'provador-visor', 'provador-laser', 'Realidade Aumentada', 'Experimentar Agora']) assert.ok(popup[0].includes(parte), parte);
+    assert.match(html, /getElementById\('experimentarPopupProvador'\)\.addEventListener\('click', \(\) => \{\s*fecharPopupProvador\(\);\s*abrirProvadorTopo\(\);/);
+    // aparece em toda entrada (sem guardar "já visto"), fecha pelo Voltar e é agendado depois de carregar os óculos
+    assert.doesNotMatch(html, /CHAVE_POPUP_PROVADOR|popupProvadorJaVisto/);
+    assert.match(html, /popupProvador: \(\) => fecharPopupProvador\(\)/);
+    assert.match(html, /renderizarCatalogo\(\);\s*agendarPopupProvador\(\);/);
+  });
 });
