@@ -1541,6 +1541,89 @@ async function startServer() {
     }
   }
 
+  // Editar em estoque (lote): grava de uma vez as linhas alteradas na aba
+  // "Editar em estoque" do painel. Cada linha traz o id do produto e o cadastro
+  // completo (mesmas regras do cadastro em lote) e, se veio, o estoque (peças na
+  // loja). O status sai do estoque, como na edição de um produto. Tudo ou nada:
+  // qualquer erro (preenchimento, SKU de outro produto, id que não existe) volta
+  // com a linha (índice a partir de 0) e o campo, e nada é gravado.
+  async function handleUpdateLote(req, res) {
+    const linhas = req.body && req.body.produtos;
+    if (!Array.isArray(linhas) || linhas.length === 0) {
+      return res.status(400).json({ error: 'Envie ao menos um produto' });
+    }
+    if (linhas.length > MAX_LOTE) {
+      return res.status(400).json({ error: `Máximo de ${MAX_LOTE} produtos por vez` });
+    }
+
+    const erros = [];
+    const skusVistos = new Map();
+    const idsVistos = new Set();
+    const produtos = linhas.map((linha, i) => {
+      const l = linha && typeof linha === 'object' ? linha : {};
+      const r = validarProdutoLote({ ...l, quantidade: undefined, pedido_fornecedor: undefined, data_compra: undefined, status: undefined });
+      r.erros.forEach((e) => erros.push({ linha: i, ...e }));
+      const id = Number(l.id);
+      if (!Number.isInteger(id) || id <= 0 || idsVistos.has(id)) erros.push({ linha: i, campo: 'codigo_sku', mensagem: 'Produto inválido ou repetido' });
+      idsVistos.add(id);
+      const estoque = lerQuantidade(l.estoque);
+      if (estoque === false) erros.push({ linha: i, campo: 'estoque', mensagem: 'Estoque inválido (número inteiro a partir de 0)' });
+      const sku = r.produto.codigo_sku.toLowerCase();
+      if (sku && skusVistos.has(sku)) erros.push({ linha: i, campo: 'codigo_sku', mensagem: `SKU repetido na linha ${skusVistos.get(sku) + 1}` });
+      else if (sku) skusVistos.set(sku, i);
+      return { ...r.produto, id, estoque };
+    });
+    if (erros.length) {
+      erros.sort((a, b) => a.linha - b.linha);
+      return res.status(400).json({ error: 'Corrija as linhas marcadas', erros });
+    }
+
+    let client;
+    try {
+      client = await req.db.connect();
+      await client.query('BEGIN');
+      const ids = produtos.map((p) => p.id);
+      const existentes = new Set((await client.query('SELECT id FROM produtos WHERE id = ANY($1) FOR UPDATE', [ids])).rows.map((r) => Number(r.id)));
+      // SKU que já é de outro produto (fora das linhas enviadas)
+      const outros = await client.query(
+        'SELECT lower(codigo_sku) AS sku FROM produtos WHERE lower(codigo_sku) = ANY($1) AND NOT (id = ANY($2))',
+        [produtos.map((p) => p.codigo_sku.toLowerCase()), ids]
+      );
+      const skusOutros = new Set(outros.rows.map((r) => r.sku));
+      produtos.forEach((p, i) => {
+        if (!existentes.has(p.id)) erros.push({ linha: i, campo: 'codigo_sku', mensagem: 'Produto não encontrado (pode ter sido apagado)' });
+        else if (skusOutros.has(p.codigo_sku.toLowerCase())) erros.push({ linha: i, campo: 'codigo_sku', mensagem: 'SKU já é de outro produto' });
+      });
+      if (erros.length) {
+        await client.query('ROLLBACK');
+        return res.status(400).json({ error: 'Corrija as linhas marcadas', erros });
+      }
+
+      for (const p of produtos) {
+        await client.query(
+          `UPDATE produtos SET nome = $2, codigo_sku = $3, preco_custo = $4, preco_venda = $5, disponibilidade = $6, formato = $7, estilo = $8, cor_armacao = $9,
+                  fornecedor = $10, codigo_fornecedor = $11, link_fornecedor = $12, nome_fornecedor = $13, diametro_cm = $14, ponte_cm = $15, largura_total_cm = $16,
+                  material = $17, tipo = $18, nome_curto = $19, genero = $20, tamanho = $21, grade = $22, updated_at = CURRENT_TIMESTAMP
+           WHERE id = $1`,
+          [p.id, p.nome, p.codigo_sku, p.preco_custo, p.preco_venda, p.disponibilidade, p.formato, p.estilo, p.cor_armacao,
+            p.fornecedor, p.codigo_fornecedor, p.link_fornecedor, p.nome_fornecedor, p.diametro_cm, p.ponte_cm, p.largura_total_cm,
+            p.material, p.tipo, p.nome_curto, p.genero, p.tamanho, p.grade]
+        );
+        if (p.estoque !== null) await client.query('UPDATE produtos SET estoque = $2 WHERE id = $1', [p.id, p.estoque]);
+      }
+      const atualizados = await recalcularStatus(client, ids);
+      await client.query('COMMIT');
+      res.json({ produtos: atualizados });
+    } catch (err) {
+      if (client) await client.query('ROLLBACK').catch(() => {});
+      console.error(err);
+      if (err.code === '23505') return res.status(400).json({ error: 'Dois produtos ficariam com o mesmo SKU' });
+      res.status(500).json({ error: 'Erro ao salvar as alterações' });
+    } finally {
+      if (client) client.release();
+    }
+  }
+
   // ---------- Histórico de reposição (compras do fornecedor) ----------
 
   function idProduto(v) {
@@ -3081,6 +3164,7 @@ async function startServer() {
   // ---------- Rotas admin (sempre exigem token; sem ADMIN_USER/ADMIN_PASS_HASH respondem 503) ----------
   app.get('/api/admin/produtos', requireAdmin, handleListAdmin);
   app.post('/api/admin/produtos/lote', requireAdmin, handleCreateLote);
+  app.put('/api/admin/produtos/lote', requireAdmin, handleUpdateLote);
   app.post('/api/admin/importar-url', requireAdmin, handleImportarUrl);
   app.post('/api/admin/importar-imagem', requireAdmin, handleImportarImagem);
   app.get('/api/admin/produtos/:id/compras', requireAdmin, handleListCompras);
