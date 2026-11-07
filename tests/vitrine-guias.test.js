@@ -35,9 +35,22 @@ describe('vitrine: atalhos e pílulas de filtro', () => {
     const banner = html.match(/<div id="bannerProvador"[\s\S]*?<button type="button" id="abrirProvadorTopo" class="btn btn-primario[^"]*">[\s\S]*?<\/button>/);
     assert.ok(banner, 'faltou o banner do provador com o botão principal');
     assert.match(banner[0], /Provador Virtual/);
-    // banner compacto: uma linha (ícone, texto e botão lado a lado), sem empilhar no celular
+    // no celular o card é compacto: uma linha (visor, texto e botão lado a lado); só a
+    // partir do tablet (md:) ele vira o card vertical do novo design
     assert.match(banner[0], /<div id="bannerProvador" class="[^"]*\bflex items-center\b/);
-    assert.doesNotMatch(banner[0], /flex-col|btn-lg/);
+    assert.doesNotMatch(banner[0], /(^|[\s"])flex-col\b|btn-lg/);
+    assert.match(banner[0], /<div id="bannerProvador" class="[^"]*\bmd:flex-col\b/);
+    // visor de escaneamento: grade, quatro cantoneiras, linha laser e o selo de Realidade Aumentada
+    assert.match(banner[0], /provador-visor/);
+    assert.match(banner[0], /provador-grade/);
+    assert.equal((banner[0].match(/provador-canto provador-canto-\d/g) || []).length, 4);
+    assert.match(banner[0], /provador-laser/);
+    assert.match(banner[0], /Realidade Aumentada/);
+    assert.match(banner[0], /<span>Experimentar<span class="hidden md:inline"> Agora<\/span><\/span>/);
+    // o card inteiro abre o provador, sem disparar duas vezes pelo botão
+    assert.match(html, /getElementById\('bannerProvador'\)\.addEventListener\('click', e => \{ if \(!e\.target\.closest\('#abrirProvadorTopo'\)\) abrirProvadorTopo\(\); \}\)/);
+    // a linha laser para quando a pessoa pede menos movimento
+    assert.match(html, /prefers-reduced-motion: reduce\) \{ \.provador-laser \{ animation: none/);
     // o hero não tem mais blocos de texto/tutorial antes do catálogo
     const hero = html.match(/<section id="hero"[\s\S]*?<\/section>/)[0];
     assert.ok(hero.includes('id="bannerProvador"'));

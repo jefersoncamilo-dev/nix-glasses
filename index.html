@@ -76,7 +76,33 @@
     .link-ajuda { color: var(--nix-muted); text-decoration: underline; text-decoration-color: rgba(163,163,163,0.4); text-underline-offset: 3px; touch-action: manipulation; }
     .link-ajuda:hover { color: #fff; }
     .link-ajuda:focus-visible { outline: 2px solid #8f8f8f; outline-offset: 2px; border-radius: 6px; }
-    .banner-provador-icone { background: linear-gradient(180deg, #f5f5f5 0%, #c9c9c9 45%, #9a9a9a 55%, #d7d7d7 100%); color: #161616; box-shadow: 0 6px 16px rgba(0,0,0,0.35); }
+    /* Card do Provador Virtual: visor de escaneamento (grade, cantoneiras e linha laser neon) */
+    .banner-provador { border-color: rgba(129,140,248,0.3); transition: border-color 0.3s ease, box-shadow 0.3s ease, transform 0.3s ease; }
+    .banner-provador:hover { border-color: rgba(129,140,248,0.7); box-shadow: 0 20px 50px rgba(0,0,0,0.45), 0 0 40px rgba(99,102,241,0.3), inset 0 1px 0 rgba(255,255,255,0.08); }
+    @media (min-width: 768px) { .banner-provador:hover { transform: translateY(-4px); } }
+    .provador-brilho { position: absolute; width: 8rem; height: 8rem; border-radius: 9999px; filter: blur(32px); pointer-events: none; transition: opacity 0.5s ease; opacity: 0.6; }
+    .banner-provador:hover .provador-brilho { opacity: 1; }
+    .provador-brilho-a { top: -4rem; right: -4rem; background: rgba(99,102,241,0.3); }
+    .provador-brilho-b { bottom: -4rem; left: -4rem; background: rgba(34,211,238,0.22); }
+    .provador-selo { position: relative; align-items: center; gap: 0.5rem; padding: 0.375rem 0.875rem; border-radius: 9999px; background: rgba(99,102,241,0.12); border: 1px solid rgba(99,102,241,0.35); color: #a5b4fc; font-size: 0.7rem; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; }
+    .provador-ponto { flex: none; width: 0.5rem; height: 0.5rem; border-radius: 9999px; background: #22d3ee; box-shadow: 0 0 8px #22d3ee; animation: provadorPonto 2s ease-in-out infinite; }
+    @keyframes provadorPonto { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
+    .provador-visor { overflow: hidden; background: rgba(2,6,23,0.85); border: 2px solid rgba(99,102,241,0.45); box-shadow: inset 0 2px 10px rgba(0,0,0,0.6); color: #fff; transition: border-color 0.3s ease, box-shadow 0.3s ease; }
+    .banner-provador:hover .provador-visor { border-color: #818cf8; box-shadow: inset 0 2px 10px rgba(0,0,0,0.6), 0 0 25px rgba(99,102,241,0.3); }
+    .provador-grade { position: absolute; inset: 0; background-image: radial-gradient(#6366f1 1.2px, transparent 1.2px); background-size: 8px 8px; opacity: 0.3; }
+    @media (min-width: 768px) { .provador-grade { background-size: 10px 10px; } }
+    .provador-canto { position: absolute; width: 0.5rem; height: 0.5rem; border: 0 solid #818cf8; }
+    @media (min-width: 768px) { .provador-canto { width: 0.875rem; height: 0.875rem; } }
+    .provador-canto-1 { top: 15%; left: 15%; border-top-width: 2px; border-left-width: 2px; border-top-left-radius: 4px; }
+    .provador-canto-2 { top: 15%; right: 15%; border-top-width: 2px; border-right-width: 2px; border-top-right-radius: 4px; }
+    .provador-canto-3 { bottom: 15%; left: 15%; border-bottom-width: 2px; border-left-width: 2px; border-bottom-left-radius: 4px; }
+    .provador-canto-4 { bottom: 15%; right: 15%; border-bottom-width: 2px; border-right-width: 2px; border-bottom-right-radius: 4px; }
+    @media (min-width: 768px) { .provador-canto-1, .provador-canto-2 { top: 0.75rem; } .provador-canto-3, .provador-canto-4 { bottom: 0.75rem; } .provador-canto-1, .provador-canto-3 { left: 0.75rem; } .provador-canto-2, .provador-canto-4 { right: 0.75rem; } }
+    .provador-laser { position: absolute; left: 0; right: 0; top: 10%; height: 2px; background: linear-gradient(90deg, transparent, #22d3ee, transparent); box-shadow: 0 0 12px #22d3ee; z-index: 2; animation: provadorLaser 2.5s linear infinite; }
+    @keyframes provadorLaser { 0%, 100% { top: 10%; } 50% { top: 88%; } }
+    .provador-oculos { z-index: 1; filter: drop-shadow(0 0 8px rgba(255,255,255,0.4)); transition: transform 0.3s ease; }
+    .banner-provador:hover .provador-oculos { transform: scale(1.1); }
+    @media (prefers-reduced-motion: reduce) { .provador-laser { animation: none; top: 50%; } .provador-ponto { animation: none; } .banner-provador, .provador-oculos { transition: none; } .banner-provador:hover, .banner-provador:hover .provador-oculos { transform: none; } }
     /* Encomenda: grafite com brilho prateado na borda */
     .btn-encomenda { background: linear-gradient(180deg, #3a3a3a 0%, #1c1c1c 100%); color: #f5f5f5; border-color: #8f8f8f; box-shadow: 0 1px 2px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.15); }
     .btn-encomenda:hover:not(:disabled) { filter: brightness(1.25); }
@@ -209,21 +235,32 @@
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
       <h1 data-loja="chamada" class="font-brand text-2xl sm:text-4xl lg:text-5xl font-bold tracking-wide mb-1.5 sm:mb-3 chrome-text">Óculos que definem seu estilo</h1>
       <p data-loja="descricao" class="text-xs sm:text-base max-w-2xl mx-auto mb-4 sm:mb-6 line-clamp-2" style="color:var(--nix-muted)">Design exclusivo, qualidade premium e proteção UV400. Escolha os modelos e prove em casa.</p>
-      <!-- Provador Virtual compacto: uma linha com ícone, texto curto e o botão à direita.
-           O botão abre a câmera com um modelo da vitrine e a cliente troca de óculos pelo
-           carrossel do provador. Os filtros de disponibilidade ficam só no catálogo (pílulas),
-           sem repetir aqui. Lojas que não são de óculos veem só o atalho para a coleção. -->
-      <div id="bannerProvador" class="banner-provador relative overflow-hidden max-w-xl mx-auto rounded-2xl border text-left p-3 sm:p-4 flex items-center gap-3 sm:gap-4" style="border-color:rgba(255,255,255,0.14)">
-        <span class="banner-provador-icone flex-none flex items-center justify-center w-10 h-10 sm:w-12 sm:h-12 rounded-xl" aria-hidden="true">
-          <svg class="w-6 h-6 sm:w-7 sm:h-7" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="M4 8V6a2 2 0 012-2h2M16 4h2a2 2 0 012 2v2M20 16v2a2 2 0 01-2 2h-2M8 20H6a2 2 0 01-2-2v-2"/><circle cx="9" cy="11.5" r="2.2"/><circle cx="15" cy="11.5" r="2.2"/><path d="M11.2 11.3h1.6M6.8 11h-1M17.2 11h1"/></svg>
+      <!-- Provador Virtual: card com visor de escaneamento (grade, cantoneiras e linha laser
+           neon), ícone de óculos e o botão "Experimentar Agora". No celular fica compacto, numa
+           linha só (visor pequeno, texto e botão), para não empurrar os óculos para baixo; a
+           partir do tablet vira o card vertical. O card inteiro abre a câmera com um modelo da
+           vitrine e a cliente troca de óculos pelo carrossel do provador. Os filtros ficam só
+           no catálogo (pílulas). Lojas que não são de óculos veem só o atalho para a coleção. -->
+      <div id="bannerProvador" class="banner-provador group relative overflow-hidden max-w-xl md:max-w-sm mx-auto rounded-2xl md:rounded-3xl border text-left md:text-center p-3 sm:p-4 md:p-6 flex items-center gap-3 sm:gap-4 md:flex-col md:gap-0 cursor-pointer select-none">
+        <span class="provador-brilho provador-brilho-a" aria-hidden="true"></span>
+        <span class="provador-brilho provador-brilho-b" aria-hidden="true"></span>
+        <!-- Selo "Realidade Aumentada": só no card vertical (no celular não cabe na linha) -->
+        <span class="provador-selo hidden md:inline-flex mb-5" aria-hidden="true"><span class="provador-ponto"></span>Realidade Aumentada</span>
+        <!-- Visor de escaneamento com o óculos no centro -->
+        <span class="provador-visor relative flex-none flex items-center justify-center w-12 h-12 sm:w-14 sm:h-14 md:w-36 md:h-36 rounded-xl md:rounded-3xl md:mb-5" aria-hidden="true">
+          <span class="provador-grade"></span>
+          <span class="provador-canto provador-canto-1"></span><span class="provador-canto provador-canto-2"></span>
+          <span class="provador-canto provador-canto-3"></span><span class="provador-canto provador-canto-4"></span>
+          <span class="provador-laser"></span>
+          <svg class="provador-oculos relative w-7 h-7 sm:w-8 sm:h-8 md:w-20 md:h-20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><circle cx="6" cy="15" r="4"/><circle cx="18" cy="15" r="4"/><path d="M14 15a2 2 0 00-2-2 2 2 0 00-2 2M2.5 13L5 7c.7-1.3 1.4-2 3-2M21.5 13L19 7c-.7-1.3-1.5-2-3-2"/></svg>
         </span>
-        <div class="flex-1 min-w-0">
-          <h2 class="text-sm sm:text-base font-semibold text-white leading-tight">Provador Virtual</h2>
-          <p class="mt-0.5 text-[11px] sm:text-sm leading-snug" style="color:var(--nix-muted)">Veja no seu rosto em tempo real</p>
+        <div class="relative flex-1 min-w-0 md:flex-none md:mb-5">
+          <h2 class="text-sm sm:text-base md:text-2xl font-semibold md:font-extrabold text-white leading-tight md:tracking-tight">Provador Virtual</h2>
+          <p class="mt-0.5 md:mt-1.5 text-[11px] sm:text-sm leading-snug" style="color:var(--nix-muted)">Veja no seu rosto em tempo real</p>
         </div>
-        <button type="button" id="abrirProvadorTopo" class="btn btn-primario flex-none px-4">
-          <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 8.5A1.5 1.5 0 014.5 7h2.3l1.4-2h7.6l1.4 2h2.3A1.5 1.5 0 0121 8.5v9a1.5 1.5 0 01-1.5 1.5h-15A1.5 1.5 0 013 17.5z"/><circle cx="12" cy="13" r="3.5"/></svg>
-          Experimentar
+        <button type="button" id="abrirProvadorTopo" class="btn btn-primario relative flex-none px-4 md:w-full md:min-h-[52px] md:text-base md:rounded-2xl">
+          <svg class="w-4 h-4 md:w-5 md:h-5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 8.5A1.5 1.5 0 014.5 7h2.3l1.4-2h7.6l1.4 2h2.3A1.5 1.5 0 0121 8.5v9a1.5 1.5 0 01-1.5 1.5h-15A1.5 1.5 0 013 17.5z"/><circle cx="12" cy="13" r="3.5"/></svg>
+          <span>Experimentar<span class="hidden md:inline"> Agora</span></span>
         </button>
       </div>
       <a href="#catalogo" id="heroColecao" class="hidden btn btn-primario">Ver coleção</a>
@@ -2208,6 +2245,8 @@
     document.querySelectorAll('#filtroPilulas [data-filtro]').forEach(b => b.addEventListener('click', () => aplicarFiltroStatus(b.dataset.filtro)));
     // Atalhos do topo: o link rola até o catálogo e o filtro já vem escolhido
     document.getElementById('abrirProvadorTopo').addEventListener('click', abrirProvadorTopo);
+    // O card inteiro do Provador Virtual convida o clique (o botão continua sendo o alvo do teclado)
+    document.getElementById('bannerProvador').addEventListener('click', e => { if (!e.target.closest('#abrirProvadorTopo')) abrirProvadorTopo(); });
     // Loja que não é de óculos: sem provador, o topo leva direto à coleção
     if (globalThis.LOJA?.oculos === false) {
       document.getElementById('bannerProvador').classList.add('hidden');
