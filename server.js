@@ -10,6 +10,7 @@ const { lerEmpresas, empresaDoHost, normalizarHost, identidadeBanco, hostInterno
 const { CAMPOS_TEXTO, lerNicho, limparTextoLoja, montarLoja, renderizarPagina } = require('./loja');
 const master = require('./master');
 const { importarProduto, baixarImagem, ErroImportacao } = require('./importar-produto');
+const usuariosAdmin = require('./usuarios-admin');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -335,9 +336,9 @@ function verifyPassword(pass, stored) {
   }
 }
 
-function assinarToken(secret, username, expiresInHours) {
+function assinarToken(secret, username, expiresInHours, extra = {}) {
   const now = Math.floor(Date.now() / 1000);
-  const payload = { u: username, iat: now, exp: now + expiresInHours * 3600 };
+  const payload = { ...extra, u: username, iat: now, exp: now + expiresInHours * 3600 };
   const body = b64urlEncode(payload);
   const sig = crypto.createHmac('sha256', secret).update(body).digest('hex');
   return `${body}.${sig}`;
@@ -355,15 +356,19 @@ function conferirToken(secret, token) {
   return payload;
 }
 
-function signToken(empresa, username, expiresInHours = 12) {
-  return assinarToken(getAdminTokenSecret(empresa), username, expiresInHours);
+// extra: { uid, s } nos tokens dos usuários cadastrados (sem uid = dono da loja).
+function signToken(empresa, username, expiresInHours = 12, extra = {}) {
+  return assinarToken(getAdminTokenSecret(empresa), username, expiresInHours, extra);
 }
 
 function verifyToken(empresa, token) {
   return conferirToken(getAdminTokenSecret(empresa), token);
 }
 
-function requireAdmin(req, res, next) {
+// Token sem uid é do dono (login da loja ou entrada pelo painel master): acesso total.
+// Token com uid é de um usuário de Configurações > Usuários: a cada pedido o servidor
+// relê o usuário (desativado, excluído ou com senha nova = sessão derrubada) e as áreas.
+async function requireAdmin(req, res, next) {
   // Sem ADMIN_USER/ADMIN_PASS_HASH configurados, o admin fica FECHADO (nunca aberto por padrão).
   if (!isAdminAuthEnabled(req.empresa)) {
     return res.status(503).json({ error: 'Admin não configurado (defina ADMIN_USER e ADMIN_PASS_HASH)' });
@@ -371,34 +376,100 @@ function requireAdmin(req, res, next) {
   const h = req.headers.authorization || '';
   const token = h.startsWith('Bearer ') ? h.slice(7) : null;
   if (!token) return res.status(401).json({ error: 'Não autorizado' });
+  let payload;
   try {
-    req.admin = verifyToken(req.empresa, token);
-    return next();
+    payload = verifyToken(req.empresa, token);
   } catch (e) {
     return res.status(401).json({ error: 'Sessão expirada. Faça login novamente.' });
   }
+  if (payload.uid === undefined) {
+    req.admin = { ...payload, dono: true, nome: '', permissoes: usuariosAdmin.AREAS.map((a) => a.chave) };
+    return next();
+  }
+  try {
+    const { rows } = await req.db.query(
+      'SELECT id, nome, login, permissoes, ativo, sessao FROM admin_usuarios WHERE id = $1',
+      [Number(payload.uid)]
+    );
+    const u = rows[0];
+    if (!u || !u.ativo || u.sessao !== payload.s) {
+      return res.status(401).json({ error: 'Sessão expirada. Faça login novamente.' });
+    }
+    req.admin = { ...payload, u: u.login, dono: false, nome: u.nome, permissoes: usuariosAdmin.lerPermissoes(u.permissoes) };
+    return next();
+  } catch (err) {
+    console.error('Erro ao conferir o usuário do admin:', err);
+    return res.status(500).json({ error: 'Erro ao conferir o acesso' });
+  }
+}
+
+// Rotas admin: login + pelo menos uma das áreas (sem áreas = só o dono).
+function exigirArea(...areas) {
+  return [
+    requireAdmin,
+    (req, res, next) => {
+      if (req.admin.dono || areas.some((a) => req.admin.permissoes.includes(a))) return next();
+      return res.status(403).json({ error: areas.length ? 'Seu usuário não tem acesso a esta área' : 'Só o dono da loja pode fazer isso' });
+    },
+  ];
+}
+const soDono = exigirArea();
+
+function handleAdminAtual(req, res) {
+  res.json({
+    user: req.admin.u,
+    nome: req.admin.nome || '',
+    dono: req.admin.dono,
+    permissoes: req.admin.permissoes,
+    areas: usuariosAdmin.AREAS,
+  });
 }
 
 async function handleLogin(req, res) {
   const { user, username, password, pass } = req.body || {};
-  const loginUser = user || username || '';
-  const loginPass = password || pass || '';
+  const loginUser = String(user || username || '');
+  const loginPass = String(password || pass || '');
 
   if (!isAdminAuthEnabled(req.empresa)) {
     return res.status(500).json({ error: 'Login admin não configurado (defina ADMIN_USER e ADMIN_PASS_HASH)' });
   }
   const cfg = getAuthConfig(req.empresa);
   const userOk =
-    String(loginUser).length === String(cfg.user).length &&
-    crypto.timingSafeEqual(Buffer.from(String(loginUser)), Buffer.from(String(cfg.user)));
-  const passOk = verifyPassword(loginPass, cfg.passHash);
-
-  if (!userOk || !passOk) {
-    // Resposta genérica para não vazar qual campo errou
-    return res.status(401).json({ error: 'Usuário ou senha inválidos' });
+    loginUser.length === String(cfg.user).length &&
+    crypto.timingSafeEqual(Buffer.from(loginUser), Buffer.from(String(cfg.user)));
+  if (userOk) {
+    if (!verifyPassword(loginPass, cfg.passHash)) {
+      // Resposta genérica para não vazar qual campo errou
+      return res.status(401).json({ error: 'Usuário ou senha inválidos' });
+    }
+    const token = signToken(req.empresa, cfg.user);
+    return res.json({ token, expiresIn: '12h', user: cfg.user, dono: true });
   }
-  const token = signToken(req.empresa, cfg.user);
-  res.json({ token, expiresIn: '12h', user: cfg.user });
+
+  // Usuários cadastrados em Configurações > Usuários (login sem diferença de maiúsculas)
+  const login = usuariosAdmin.normalizarLogin(loginUser);
+  const chaveTentativas = `admin:${req.empresa.slug}:${login}`;
+  if (loginBloqueado(chaveTentativas)) {
+    return res.status(429).json({ error: 'Muitas tentativas. Aguarde alguns minutos e tente de novo.' });
+  }
+  try {
+    const { rows } = login
+      ? await req.db.query('SELECT id, nome, login, senha_hash, ativo, sessao FROM admin_usuarios WHERE login = $1', [login])
+      : { rows: [] };
+    const u = rows[0];
+    const ok = await conferirSenhaCliente(loginPass.slice(0, SENHA_MAX), u ? u.senha_hash : HASH_FALSO);
+    if (!u || !ok || !u.ativo) {
+      registrarFalhaLogin(chaveTentativas);
+      return res.status(401).json({ error: u && ok ? 'Usuário desativado. Fale com o dono da loja.' : 'Usuário ou senha inválidos' });
+    }
+    tentativasLogin.delete(chaveTentativas);
+    await req.db.query('UPDATE admin_usuarios SET ultimo_acesso = CURRENT_TIMESTAMP WHERE id = $1', [u.id]);
+    const token = signToken(req.empresa, u.login, 12, { uid: u.id, s: u.sessao });
+    res.json({ token, expiresIn: '12h', user: u.login, nome: u.nome, dono: false });
+  } catch (err) {
+    console.error('Erro no login do admin:', err);
+    res.status(500).json({ error: 'Erro ao entrar' });
+  }
 }
 
 // ---------- Login do painel master ----------
@@ -2825,7 +2896,7 @@ async function startServer() {
         if (acessorios === true) await client.query('DELETE FROM acessorios');
       }
       await client.query('COMMIT');
-      console.log(`[${req.empresa.slug}] dados zerados (escopo ${escopo}) por ${req.admin && req.admin.user}`);
+      console.log(`[${req.empresa.slug}] dados zerados (escopo ${escopo}) por ${req.admin && req.admin.u}`);
       res.json({ apagados: antes, agora: await contarDadosDeTeste(req.db) });
     } catch (err) {
       if (client) await client.query('ROLLBACK').catch(() => {});
@@ -3289,6 +3360,7 @@ async function startServer() {
 
   // ---------- Login admin (público; demais /api/admin exigem Bearer) ----------
   app.post('/api/admin/login', handleLogin);
+  app.get('/api/admin/me', requireAdmin, handleAdminAtual);
   app.get('/api/admin/status', (req, res) => {
     res.json({ authEnabled: isAdminAuthEnabled(req.empresa) });
   });
@@ -3306,60 +3378,70 @@ async function startServer() {
   app.post('/api/case/checkout', handleMaletaCheckout);
 
   // ---------- Rotas admin (sempre exigem token; sem ADMIN_USER/ADMIN_PASS_HASH respondem 503) ----------
-  app.get('/api/admin/produtos', requireAdmin, handleListAdmin);
-  app.post('/api/admin/produtos/lote', requireAdmin, handleCreateLote);
-  app.put('/api/admin/produtos/lote', requireAdmin, handleUpdateLote);
-  app.post('/api/admin/produtos/excluir/conferir', requireAdmin, handleConferirExclusao);
-  app.post('/api/admin/produtos/excluir', requireAdmin, handleExcluirProdutos);
-  app.post('/api/admin/importar-url', requireAdmin, handleImportarUrl);
-  app.post('/api/admin/importar-imagem', requireAdmin, handleImportarImagem);
-  app.get('/api/admin/produtos/:id/compras', requireAdmin, handleListCompras);
-  app.post('/api/admin/produtos/:id/compras', requireAdmin, handleCreateCompra);
-  app.get('/api/admin/fornecedores/reposicao', requireAdmin, handleResumoFornecedores);
-  app.post('/api/produtos', requireAdmin, uploadImagem, handleCreateProduto);
-  app.put('/api/produtos/:id', requireAdmin, uploadImagem, handleUpdateProduto);
-  app.post('/api/admin/acerto', requireAdmin, handleAcerto);
-  app.get('/api/admin/acertos', requireAdmin, handleListAcertos);
-  app.post('/api/config/whatsapp', requireAdmin, handlePostWhatsapp);
-  app.post('/api/admin/whatsapp', requireAdmin, handlePostWhatsapp);
-  app.get('/api/admin/metrics', requireAdmin, handleMetrics);
-  app.get('/api/admin/loja', requireAdmin, handleGetLoja);
-  app.put('/api/admin/loja', requireAdmin, handleUpdateLoja);
-  app.post('/api/admin/loja/logo', requireAdmin, uploadImagem, handleUpdateLogo);
-  app.delete('/api/admin/loja/logo', requireAdmin, handleDeleteLogo);
-  app.get('/api/admin/zerar', requireAdmin, handleContagemZerar);
-  app.post('/api/admin/zerar', requireAdmin, handleZerarDados);
-  app.get('/api/admin/clientes', requireAdmin, handleListClientes);
-  app.get('/api/admin/pedidos', requireAdmin, handleListPedidos);
-  app.get('/api/admin/clientes/:id/perfil', requireAdmin, handlePerfilCliente);
-  app.get('/api/admin/relatorios/maletas', requireAdmin, handleRelatorioMaletas);
-  app.post('/api/admin/pedidos/:id/enviar-maleta', requireAdmin, handleEnviarMaleta);
-  app.patch('/api/admin/pedidos/:id/status', requireAdmin, handleStatusPedido);
-  app.put('/api/admin/pedidos/:id/fechamento', requireAdmin, handleFechamentoPedido);
-  app.post('/api/admin/pedidos/:id/encomendar', requireAdmin, handleEncomendarItem);
-  app.get('/api/admin/encomendas', requireAdmin, handleListEncomendas);
-  app.post('/api/admin/encomendas', requireAdmin, handleCreateEncomenda);
-  app.put('/api/admin/encomendas/:id', requireAdmin, handleUpdateEncomenda);
-  app.get('/api/admin/acessorios', requireAdmin, handleListAcessorios);
-  app.post('/api/admin/acessorios', requireAdmin, handleCreateAcessorio);
-  app.put('/api/admin/acessorios/:id', requireAdmin, handleUpdateAcessorio);
+  app.get('/api/admin/produtos', exigirArea('produtos', 'acerto', 'pedidos'), handleListAdmin);
+  app.post('/api/admin/produtos/lote', exigirArea('produtos'), handleCreateLote);
+  app.put('/api/admin/produtos/lote', exigirArea('produtos'), handleUpdateLote);
+  app.post('/api/admin/produtos/excluir/conferir', exigirArea('produtos'), handleConferirExclusao);
+  app.post('/api/admin/produtos/excluir', exigirArea('produtos'), handleExcluirProdutos);
+  app.post('/api/admin/importar-url', exigirArea('produtos'), handleImportarUrl);
+  app.post('/api/admin/importar-imagem', exigirArea('produtos'), handleImportarImagem);
+  app.get('/api/admin/produtos/:id/compras', exigirArea('produtos'), handleListCompras);
+  app.post('/api/admin/produtos/:id/compras', exigirArea('produtos'), handleCreateCompra);
+  app.get('/api/admin/fornecedores/reposicao', exigirArea('metricas', 'produtos'), handleResumoFornecedores);
+  app.post('/api/produtos', exigirArea('produtos'), uploadImagem, handleCreateProduto);
+  app.put('/api/produtos/:id', exigirArea('produtos'), uploadImagem, handleUpdateProduto);
+  app.post('/api/admin/acerto', exigirArea('acerto'), handleAcerto);
+  app.get('/api/admin/acertos', exigirArea('acerto', 'metricas'), handleListAcertos);
+  app.post('/api/config/whatsapp', exigirArea('config'), handlePostWhatsapp);
+  app.post('/api/admin/whatsapp', exigirArea('config'), handlePostWhatsapp);
+  app.get('/api/admin/metrics', exigirArea('metricas'), handleMetrics);
+  app.get('/api/admin/loja', exigirArea('config'), handleGetLoja);
+  app.put('/api/admin/loja', exigirArea('config'), handleUpdateLoja);
+  app.post('/api/admin/loja/logo', exigirArea('config'), uploadImagem, handleUpdateLogo);
+  app.delete('/api/admin/loja/logo', exigirArea('config'), handleDeleteLogo);
+  app.get('/api/admin/zerar', soDono, handleContagemZerar);
+  app.post('/api/admin/zerar', soDono, handleZerarDados);
+  app.get('/api/admin/clientes', exigirArea('clientes'), handleListClientes);
+  app.get('/api/admin/pedidos', exigirArea('pedidos', 'acerto', 'clientes'), handleListPedidos);
+  app.get('/api/admin/clientes/:id/perfil', exigirArea('clientes'), handlePerfilCliente);
+  app.get('/api/admin/relatorios/maletas', exigirArea('metricas'), handleRelatorioMaletas);
+  app.post('/api/admin/pedidos/:id/enviar-maleta', exigirArea('pedidos'), handleEnviarMaleta);
+  app.patch('/api/admin/pedidos/:id/status', exigirArea('pedidos'), handleStatusPedido);
+  app.put('/api/admin/pedidos/:id/fechamento', exigirArea('pedidos'), handleFechamentoPedido);
+  app.post('/api/admin/pedidos/:id/encomendar', exigirArea('pedidos'), handleEncomendarItem);
+  app.get('/api/admin/encomendas', exigirArea('encomendas', 'pedidos'), handleListEncomendas);
+  app.post('/api/admin/encomendas', exigirArea('encomendas'), handleCreateEncomenda);
+  app.put('/api/admin/encomendas/:id', exigirArea('encomendas'), handleUpdateEncomenda);
+  app.get('/api/admin/acessorios', exigirArea('acessorios', 'pedidos'), handleListAcessorios);
+  app.post('/api/admin/acessorios', exigirArea('acessorios'), handleCreateAcessorio);
+  app.put('/api/admin/acessorios/:id', exigirArea('acessorios'), handleUpdateAcessorio);
+
+  // Usuários do painel e as áreas de cada um: só o dono da loja cadastra
+  const usuariosHandlers = usuariosAdmin.criarHandlers({
+    hashSenha: hashSenhaCliente,
+    loginDono: (req) => getAuthConfig(req.empresa).user,
+  });
+  app.get('/api/admin/usuarios', soDono, usuariosHandlers.listar);
+  app.post('/api/admin/usuarios', soDono, usuariosHandlers.criar);
+  app.put('/api/admin/usuarios/:id', soDono, usuariosHandlers.atualizar);
+  app.delete('/api/admin/usuarios/:id', soDono, usuariosHandlers.excluir);
 
   // ---------- Aliases EN (compatibilidade front-end em inglês) ----------
   app.get('/api/products', handleListPublicos);
-  app.get('/api/admin/products', requireAdmin, handleListAdmin);
-  app.post('/api/products', requireAdmin, uploadImagem, handleCreateProduto);
-  app.post('/api/admin/products', requireAdmin, uploadImagem, handleCreateProduto);
-  app.put('/api/products/:id', requireAdmin, uploadImagem, handleUpdateProduto);
-  app.put('/api/admin/products/:id', requireAdmin, uploadImagem, handleUpdateProduto);
+  app.get('/api/admin/products', exigirArea('produtos', 'acerto', 'pedidos'), handleListAdmin);
+  app.post('/api/products', exigirArea('produtos'), uploadImagem, handleCreateProduto);
+  app.post('/api/admin/products', exigirArea('produtos'), uploadImagem, handleCreateProduto);
+  app.put('/api/products/:id', exigirArea('produtos'), uploadImagem, handleUpdateProduto);
+  app.put('/api/admin/products/:id', exigirArea('produtos'), uploadImagem, handleUpdateProduto);
 
   // admin/acerto.html usa /api/admin/products/conditional
-  app.get('/api/admin/products/conditional', requireAdmin, handleListConditional);
-  app.get('/api/admin/produtos/condicional', requireAdmin, handleListConditional);
-  app.get('/api/produtos/condicional', requireAdmin, handleListConditional);
+  app.get('/api/admin/products/conditional', exigirArea('acerto'), handleListConditional);
+  app.get('/api/admin/produtos/condicional', exigirArea('acerto'), handleListConditional);
+  app.get('/api/produtos/condicional', exigirArea('acerto'), handleListConditional);
 
   // Métricas / popularidade
-  app.get('/api/admin/popularity', requireAdmin, handleMetrics);
-  app.get('/api/admin/popularidade', requireAdmin, handleMetrics);
+  app.get('/api/admin/popularity', exigirArea('metricas'), handleMetrics);
+  app.get('/api/admin/popularidade', exigirArea('metricas'), handleMetrics);
 
   app.listen(PORT, '0.0.0.0', () => {
     console.log(`Servidor rodando na porta ${PORT}`);

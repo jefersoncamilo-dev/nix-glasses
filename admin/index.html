@@ -96,7 +96,7 @@
         <button id="openSidebar" class="lg:hidden p-2 -ml-2 text-gray-500 hover:text-gray-700" aria-label="Abrir menu"><svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/></svg></button>
         <h2 id="pageTitle" class="text-base sm:text-xl font-semibold text-gray-900 truncate">Produtos</h2>
         <div class="flex items-center space-x-4">
-          <span class="text-sm text-gray-500 hidden sm:block">Admin <span data-loja="nome">Nix Glasses</span></span>
+          <span class="text-sm text-gray-500 hidden sm:block"><span id="nomeUsuarioAdmin">Admin</span> <span data-loja="nome">Nix Glasses</span></span>
           <button id="btnSair" class="text-sm text-gray-500 hover:text-red-600 font-medium">Sair</button>
         </div>
       </div>
@@ -560,9 +560,15 @@
 
       <!-- Aba Configurações -->
       <div id="tab-config" class="tab-content hidden">
-        <div class="flex items-center justify-between mb-6">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6">
           <h3 class="text-lg font-semibold text-gray-900">Configurações</h3>
+          <!-- Abas de Configurações: Usuários só aparece para o dono da loja -->
+          <div id="abasConfig" class="inline-flex rounded-lg bg-gray-100 p-1 self-start">
+            <button type="button" data-aba-config="geral" class="aba-config px-4 py-1.5 rounded-md text-sm font-medium bg-white shadow text-gray-900">Geral</button>
+            <button type="button" data-aba-config="usuarios" class="aba-config so-dono hidden px-4 py-1.5 rounded-md text-sm font-medium text-gray-600 hover:text-gray-900">Usuários</button>
+          </div>
         </div>
+        <div id="configGeral">
         <div class="bg-white rounded-xl border border-gray-200 p-6 max-w-md">
           <div class="mb-6">
             <label class="block text-sm font-medium text-gray-700 mb-2">Número do WhatsApp (para pedidos)</label>
@@ -638,8 +644,8 @@
           <button id="btnSalvarLoja" class="mt-6 bg-orange-500 hover:bg-orange-600 text-white px-6 py-2 rounded-lg font-medium transition-colors">Salvar dados da loja</button>
         </div>
 
-        <!-- Zerar dados de teste: só o banco da empresa logada, com confirmação digitada -->
-        <div class="bg-white rounded-xl border border-red-200 p-6 max-w-xl mt-6">
+        <!-- Zerar dados de teste: só o banco da empresa logada, com confirmação digitada. Só o dono. -->
+        <div id="cardZerar" class="so-dono hidden bg-white rounded-xl border border-red-200 p-6 max-w-xl mt-6">
           <h4 class="text-base font-semibold text-red-700 mb-1">Zerar dados de teste</h4>
           <p class="text-sm text-gray-600 mb-4">Apaga os dados desta loja para começar com os produtos reais. <strong>Não tem como desfazer.</strong> Antes, faça um backup do banco (no Neon: crie uma branch a partir da main). Nome, textos, logo, WhatsApp e login do admin continuam.</p>
           <p id="zerarContagem" class="text-sm text-gray-700 mb-4">Carregando o que existe hoje...</p>
@@ -660,6 +666,59 @@
           <label for="zerarConfirmacao" class="block text-sm font-medium text-gray-700 mb-1">Para confirmar, digite ZERAR</label>
           <input type="text" id="zerarConfirmacao" autocomplete="off" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 mb-4">
           <button id="btnZerarDados" disabled class="bg-red-600 hover:bg-red-700 disabled:opacity-40 disabled:cursor-not-allowed text-white px-6 py-2 rounded-lg font-medium transition-colors">Zerar dados</button>
+        </div>
+        </div>
+
+        <!-- Usuários do painel: quem entra no admin e em quais telas -->
+        <div id="configUsuarios" class="hidden">
+          <div class="bg-white rounded-xl border border-gray-200 p-6 max-w-3xl">
+            <div class="flex flex-col sm:flex-row sm:items-start justify-between gap-3 mb-4">
+              <div>
+                <h4 class="text-base font-semibold text-gray-900 mb-1">Usuários do painel</h4>
+                <p class="text-sm text-gray-500">Cada pessoa entra com o próprio login e só vê as telas marcadas. Você, como dono da loja, continua com acesso a tudo.</p>
+              </div>
+              <button type="button" id="btnNovoUsuario" class="shrink-0 bg-orange-500 hover:bg-orange-600 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors">+ Novo usuário</button>
+            </div>
+            <div id="listaUsuarios" class="divide-y divide-gray-100 border border-gray-100 rounded-lg"></div>
+          </div>
+
+          <form id="formUsuario" class="hidden bg-white rounded-xl border border-orange-200 p-6 max-w-3xl mt-6" autocomplete="off">
+            <h4 id="tituloFormUsuario" class="text-base font-semibold text-gray-900 mb-4">Novo usuário</h4>
+            <input type="hidden" id="usuarioId">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label for="usuarioNome" class="block text-sm font-medium text-gray-700 mb-1">Nome</label>
+                <input type="text" id="usuarioNome" maxlength="100" required class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500" placeholder="Ex: Maria (vendas)">
+              </div>
+              <div>
+                <label for="usuarioLogin" class="block text-sm font-medium text-gray-700 mb-1">Login</label>
+                <input type="text" id="usuarioLogin" maxlength="60" required autocapitalize="none" spellcheck="false" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500" placeholder="Ex: maria ou maria@email.com">
+                <p class="text-xs text-gray-500 mt-1">Sem espaço. Maiúsculas viram minúsculas.</p>
+              </div>
+              <div class="md:col-span-2">
+                <label for="usuarioSenha" id="rotuloUsuarioSenha" class="block text-sm font-medium text-gray-700 mb-1">Senha</label>
+                <input type="password" id="usuarioSenha" maxlength="200" autocomplete="new-password" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500" placeholder="Pelo menos 8 caracteres">
+                <p id="dicaUsuarioSenha" class="text-xs text-gray-500 mt-1">Passe a senha para a pessoa. Ela entra pela mesma tela de login do admin.</p>
+              </div>
+            </div>
+            <div class="mt-5">
+              <div class="flex items-center justify-between mb-2">
+                <span class="text-sm font-medium text-gray-700">Telas que pode acessar</span>
+                <button type="button" id="btnMarcarTodasAreas" class="text-xs underline text-orange-600 hover:text-orange-700">Marcar todas</button>
+              </div>
+              <div id="areasUsuario" class="grid grid-cols-1 sm:grid-cols-2 gap-2"></div>
+              <p class="text-xs text-gray-500 mt-2">Cadastrar usuários e zerar dados ficam só com o dono.</p>
+            </div>
+            <label class="flex items-center gap-3 mt-5">
+              <input type="checkbox" id="usuarioAtivo" checked class="h-4 w-4 accent-orange-500">
+              <span class="text-sm text-gray-700">Ativo (desmarque para bloquear o acesso sem apagar o usuário)</span>
+            </label>
+            <div class="flex flex-wrap items-center gap-3 mt-6">
+              <button type="submit" id="btnSalvarUsuario" class="bg-orange-500 hover:bg-orange-600 text-white px-6 py-2 rounded-lg font-medium transition-colors">Salvar usuário</button>
+              <button type="button" id="btnCancelarUsuario" class="bg-gray-100 hover:bg-gray-200 text-gray-700 px-6 py-2 rounded-lg font-medium transition-colors">Cancelar</button>
+              <button type="button" id="btnExcluirUsuario" class="hidden ml-auto text-sm text-red-600 hover:underline">Excluir usuário</button>
+            </div>
+          </form>
         </div>
       </div>
     </div>
@@ -1144,7 +1203,7 @@
         if (target === 'encomendas') carregarEncomendas();
         if (target === 'acessorios') carregarAcessorios();
         if (target === 'metricas') { carregarMetricas(); carregarResumoFornecedores(); carregarRelatorioMaletas(); }
-        if (target === 'config') { carregarWhatsApp(); carregarLoja(); carregarContagemZerar(); }
+        if (target === 'config') abrirConfig();
         sidebar.classList.remove('open');
         sidebarOverlay.classList.add('hidden');
       });
@@ -4464,6 +4523,213 @@
       }
     });
 
+    // ---------- Acesso: dono (tudo) ou usuário com telas liberadas ----------
+    // O servidor confere cada rota; aqui só escondemos o que a pessoa não pode abrir.
+    let acessoAdmin = { dono: true, permissoes: [], areas: [] };
+    const AREA_DA_ABA = { lote: 'produtos' };
+    function podeArea(area) {
+      return acessoAdmin.dono || acessoAdmin.permissoes.includes(area);
+    }
+    async function carregarAcessoAdmin() {
+      try {
+        const res = await fetchAdmin('/api/admin/me');
+        if (res.ok) acessoAdmin = await res.json();
+      } catch (err) {
+        console.error(err);
+      }
+      document.querySelectorAll('.so-dono').forEach(el => el.classList.toggle('hidden', !acessoAdmin.dono));
+      if (!acessoAdmin.dono) {
+        const nome = document.getElementById('nomeUsuarioAdmin');
+        nome.textContent = (acessoAdmin.nome || acessoAdmin.user || 'Admin') + ' ·';
+        nome.title = 'Login: ' + (acessoAdmin.user || '');
+      }
+      // Configurações aparece para quem cuida da loja (config) e para o dono (usuários, zerar)
+      const permitida = (aba) => aba === 'config' ? (acessoAdmin.dono || podeArea('config')) : podeArea(AREA_DA_ABA[aba] || aba);
+      let primeira = null;
+      tabs.forEach(tab => {
+        const ok = permitida(tab.dataset.tab);
+        tab.classList.toggle('hidden', !ok);
+        tab.classList.toggle('flex', ok);
+        if (ok && !primeira) primeira = tab;
+      });
+      document.getElementById('btnAbrirLote')?.classList.toggle('hidden', !podeArea('produtos'));
+      if (!podeArea('produtos')) {
+        if (primeira) primeira.click();
+        else {
+          tabContents.forEach(c => c.classList.add('hidden'));
+          document.getElementById('pageTitle').textContent = 'Sem acesso';
+          const aviso = document.createElement('div');
+          aviso.className = 'bg-white rounded-xl border border-gray-200 p-6 max-w-md text-sm text-gray-600';
+          aviso.textContent = 'Seu usuário ainda não tem nenhuma tela liberada. Peça ao dono da loja para marcar as telas em Configurações > Usuários.';
+          tabContents[0].parentElement.appendChild(aviso);
+        }
+      }
+    }
+
+    function trocarAbaConfig(aba) {
+      if (aba === 'usuarios' && !acessoAdmin.dono) aba = 'geral';
+      document.querySelectorAll('.aba-config').forEach(b => {
+        const ativa = b.dataset.abaConfig === aba;
+        b.classList.toggle('bg-white', ativa);
+        b.classList.toggle('shadow', ativa);
+        b.classList.toggle('text-gray-900', ativa);
+        b.classList.toggle('text-gray-600', !ativa);
+      });
+      document.getElementById('configGeral').classList.toggle('hidden', aba !== 'geral');
+      document.getElementById('configUsuarios').classList.toggle('hidden', aba !== 'usuarios');
+      if (aba === 'usuarios') carregarUsuarios();
+    }
+    document.querySelectorAll('.aba-config').forEach(b => b.addEventListener('click', () => trocarAbaConfig(b.dataset.abaConfig)));
+
+    function abrirConfig() {
+      // Dono sem a área config cadastrada não existe (dono pode tudo); usuário sem config não chega aqui
+      if (podeArea('config')) { carregarWhatsApp(); carregarLoja(); }
+      if (acessoAdmin.dono) carregarContagemZerar();
+      trocarAbaConfig('geral');
+    }
+
+    // ---------- Configurações > Usuários (só o dono) ----------
+    let usuariosAdmin = [];
+    let areasAdmin = [];
+
+    async function carregarUsuarios() {
+      const lista = document.getElementById('listaUsuarios');
+      lista.innerHTML = '<p class="p-4 text-sm text-gray-500">Carregando...</p>';
+      try {
+        const res = await fetchAdmin('/api/admin/usuarios');
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.error || 'Erro ao carregar os usuários');
+        usuariosAdmin = data.usuarios || [];
+        areasAdmin = data.areas || [];
+        renderizarUsuarios();
+      } catch (err) {
+        lista.innerHTML = '';
+        const p = document.createElement('p');
+        p.className = 'p-4 text-sm text-red-600';
+        p.textContent = err.message;
+        lista.appendChild(p);
+      }
+    }
+
+    function renderizarUsuarios() {
+      const lista = document.getElementById('listaUsuarios');
+      if (!usuariosAdmin.length) {
+        lista.innerHTML = '<p class="p-4 text-sm text-gray-500">Nenhum usuário ainda. Só você (dono) entra no painel.</p>';
+        return;
+      }
+      const nomeArea = new Map(areasAdmin.map(a => [a.chave, a.nome.replace(/ \(.*\)$/, '')]));
+      lista.innerHTML = usuariosAdmin.map(u => {
+        const telas = u.permissoes.length === areasAdmin.length ? 'Todas as telas'
+          : u.permissoes.length ? u.permissoes.map(p => nomeArea.get(p) || p).join(', ') : 'Nenhuma tela liberada';
+        const ultimo = u.ultimo_acesso ? 'Último acesso: ' + new Date(u.ultimo_acesso).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' }) : 'Ainda não entrou';
+        return `<div class="flex items-center gap-3 p-4">
+          <div class="min-w-0 flex-1">
+            <div class="flex items-center gap-2 flex-wrap">
+              <span class="font-medium text-gray-900">${escapeHtml(u.nome)}</span>
+              <span class="text-xs text-gray-500">${escapeHtml(u.login)}</span>
+              ${u.ativo ? '<span class="text-xs px-2 py-0.5 rounded-full bg-green-100 text-green-700">Ativo</span>' : '<span class="text-xs px-2 py-0.5 rounded-full bg-gray-200 text-gray-600">Bloqueado</span>'}
+            </div>
+            <p class="text-sm text-gray-600 mt-0.5">${escapeHtml(telas)}</p>
+            <p class="text-xs text-gray-400 mt-0.5">${escapeHtml(ultimo)}</p>
+          </div>
+          <button type="button" data-editar-usuario="${Number(u.id)}" class="shrink-0 bg-gray-100 hover:bg-gray-200 text-gray-700 px-3 py-1.5 rounded-lg text-sm font-medium">Editar</button>
+        </div>`;
+      }).join('');
+    }
+
+    document.getElementById('listaUsuarios').addEventListener('click', (e) => {
+      const btn = e.target.closest('[data-editar-usuario]');
+      if (btn) abrirFormUsuario(usuariosAdmin.find(u => Number(u.id) === Number(btn.dataset.editarUsuario)));
+    });
+
+    function abrirFormUsuario(u = null) {
+      const form = document.getElementById('formUsuario');
+      document.getElementById('tituloFormUsuario').textContent = u ? 'Editar usuário' : 'Novo usuário';
+      document.getElementById('usuarioId').value = u ? u.id : '';
+      document.getElementById('usuarioNome').value = u ? u.nome : '';
+      document.getElementById('usuarioLogin').value = u ? u.login : '';
+      document.getElementById('usuarioSenha').value = '';
+      document.getElementById('usuarioSenha').required = !u;
+      document.getElementById('rotuloUsuarioSenha').textContent = u ? 'Nova senha (deixe em branco para manter)' : 'Senha';
+      document.getElementById('usuarioAtivo').checked = u ? u.ativo : true;
+      document.getElementById('btnExcluirUsuario').classList.toggle('hidden', !u);
+      const marcadas = new Set(u ? u.permissoes : []);
+      document.getElementById('areasUsuario').innerHTML = areasAdmin.map(a => `
+        <label class="flex items-start gap-2 rounded-lg border border-gray-200 px-3 py-2 hover:bg-gray-50">
+          <input type="checkbox" name="areaUsuario" value="${escapeHtml(a.chave)}" ${marcadas.has(a.chave) ? 'checked' : ''} class="mt-0.5 h-4 w-4 accent-orange-500">
+          <span class="text-sm text-gray-700">${escapeHtml(a.nome)}</span>
+        </label>`).join('');
+      form.classList.remove('hidden');
+      form.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      document.getElementById('usuarioNome').focus({ preventScroll: true });
+    }
+    function fecharFormUsuario() {
+      document.getElementById('formUsuario').classList.add('hidden');
+    }
+
+    document.getElementById('btnNovoUsuario').addEventListener('click', () => abrirFormUsuario());
+    document.getElementById('btnCancelarUsuario').addEventListener('click', fecharFormUsuario);
+    document.getElementById('btnMarcarTodasAreas').addEventListener('click', () => {
+      const caixas = [...document.querySelectorAll('input[name="areaUsuario"]')];
+      const todas = caixas.every(c => c.checked);
+      caixas.forEach(c => { c.checked = !todas; });
+    });
+
+    document.getElementById('formUsuario').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const id = document.getElementById('usuarioId').value;
+      const senha = document.getElementById('usuarioSenha').value;
+      const corpo = {
+        nome: document.getElementById('usuarioNome').value,
+        login: document.getElementById('usuarioLogin').value,
+        permissoes: [...document.querySelectorAll('input[name="areaUsuario"]:checked')].map(c => c.value),
+        ativo: document.getElementById('usuarioAtivo').checked,
+      };
+      if (senha || !id) corpo.senha = senha;
+      const botao = document.getElementById('btnSalvarUsuario');
+      botao.disabled = true;
+      try {
+        const res = await fetchAdmin(id ? `/api/admin/usuarios/${Number(id)}` : '/api/admin/usuarios', {
+          method: id ? 'PUT' : 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(corpo)
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.error || 'Erro ao salvar o usuário');
+        mostrarToast(id ? 'Usuário atualizado' : 'Usuário cadastrado. Passe o login e a senha para a pessoa.');
+        fecharFormUsuario();
+        await carregarUsuarios();
+      } catch (err) {
+        mostrarToast(err.message, 'error');
+      } finally {
+        botao.disabled = false;
+      }
+    });
+
+    document.getElementById('btnExcluirUsuario').addEventListener('click', async () => {
+      const id = Number(document.getElementById('usuarioId').value);
+      const u = usuariosAdmin.find(x => Number(x.id) === id);
+      const botao = document.getElementById('btnExcluirUsuario');
+      // Confirmação em dois cliques (sem confirm() do navegador)
+      if (botao.dataset.confirmar !== String(id)) {
+        botao.dataset.confirmar = String(id);
+        botao.textContent = 'Clique de novo para excluir ' + (u ? u.nome : '');
+        setTimeout(() => { botao.dataset.confirmar = ''; botao.textContent = 'Excluir usuário'; }, 4000);
+        return;
+      }
+      botao.dataset.confirmar = '';
+      botao.textContent = 'Excluir usuário';
+      try {
+        const res = await fetchAdmin(`/api/admin/usuarios/${id}`, { method: 'DELETE' });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.error || 'Erro ao excluir o usuário');
+        mostrarToast('Usuário excluído');
+        fecharFormUsuario();
+        await carregarUsuarios();
+      } catch (err) {
+        mostrarToast(err.message, 'error');
+      }
+    });
 
     // ---------- Acerto de estoque: excluir produtos definitivamente ----------
     // Não confundir com o Acerto de Maleta (vendidos/devolvidos de uma cliente).
@@ -4657,9 +4923,10 @@
         window.location.href = './login.html?next=' + encodeURIComponent(window.location.pathname);
         return;
       }
-      carregarProdutos();
-      carregarPedidosGeral();
-      carregarEncomendas();
+      await carregarAcessoAdmin();
+      if (podeArea('produtos')) carregarProdutos();
+      if (podeArea('pedidos')) carregarPedidosGeral();
+      if (podeArea('encomendas') || podeArea('pedidos')) carregarEncomendas();
     });
   </script>
 </body>
