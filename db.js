@@ -1,4 +1,5 @@
 const { Pool } = require('pg');
+const usuariosAdmin = require('./usuarios-admin');
 require('dotenv').config();
 
 // Neon DB exige SSL. O driver `pg` não suporta `channel_binding=require` na
@@ -328,6 +329,9 @@ async function initTables(pool) {
       ALTER TABLE compras_fornecedor
       ADD COLUMN IF NOT EXISTS pedido_fornecedor VARCHAR(60) NOT NULL DEFAULT ''
     `);
+
+    // Usuários do painel admin com permissão por área (Configurações > Usuários)
+    await usuariosAdmin.criarTabela(client);
 
     await client.query(`
       CREATE TABLE IF NOT EXISTS configuracoes (

@@ -58,7 +58,7 @@
       const token = localStorage.getItem('nix_admin_token');
       if (!token) return;
       try {
-        const res = await fetch('/api/admin/produtos', { headers: { Authorization: 'Bearer ' + token } });
+        const res = await fetch('/api/admin/me', { headers: { Authorization: 'Bearer ' + token } });
         if (res.ok) window.location.href = './index.html';
         else localStorage.removeItem('nix_admin_token');
       } catch {}
