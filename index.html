@@ -867,6 +867,12 @@
       return p.imagem_url ? [p.imagem_url] : [];
     }
 
+    // Foto exclusiva do Provador Virtual (a foto 4 do cadastro). O visitante não a vê na
+    // vitrine; sem ela, o óculos não entra no provador (nada de usar a capa no lugar).
+    function fotoProvador(p) {
+      return p && typeof p.foto_provador === 'string' && p.foto_provador ? p.foto_provador : null;
+    }
+
     function indiceCircular(i, total) {
       return ((i % total) + total) % total;
     }
@@ -1270,7 +1276,7 @@
             <!-- Ações: "Adicionar à Maleta" é o botão principal (sólido); o provador fica logo abaixo, como apoio -->
             <div class="mt-auto flex flex-col gap-2">
               <button type="button" onclick="toggleMaleta(${id}); renderizarDetalhes()" aria-pressed="${jaNaMaleta}"${falteTamanho ? ' disabled' : ''} class="btn btn-lg btn-maleta w-full ${jaNaMaleta ? 'btn-na-maleta' : 'btn-destaque'}">${textoBotao}</button>
-              ${fotos.length && globalThis.LOJA?.oculos !== false ? `<button type="button" onclick="abrirProvador(${id})" class="btn btn-secundario w-full">Provar virtualmente</button>` : ''}
+              ${fotoProvador(produto) && globalThis.LOJA?.oculos !== false ? `<button type="button" onclick="abrirProvador(${id})" class="btn btn-secundario w-full">Provar virtualmente</button>` : ''}
             </div>
             ${especificacoes.length || produto.estilo ? `
             <details data-detalhes-tecnicos class="detalhes-tecnicos mt-4 rounded-xl border border-gray-200"${detalhes.tecnicosAbertos ? ' open' : ''} ontoggle="if (detalhes) detalhes.tecnicosAbertos = this.open">
@@ -1515,7 +1521,7 @@
 
     async function abrirProvador(produtoId) {
       const produto = produtos.find(p => p.id === produtoId);
-      const foto = produto ? fotosDoProduto(produto)[0] : null;
+      const foto = fotoProvador(produto);
       if (!foto) return;
 
       const sessao = ++provador.sessao;
@@ -1563,10 +1569,10 @@
     }
     window.abrirProvador = abrirProvador;
 
-    // Modelo que o botão do topo põe no rosto: o primeiro com foto, de preferência
+    // Modelo que o botão do topo põe no rosto: o primeiro com foto do provador (foto 4), de preferência
     // pronta entrega livre (dá para provar em casa). Sem nenhum, devolve null.
     function produtoParaProvadorTopo(lista) {
-      const comFoto = lista.filter(p => fotosDoProduto(p).length);
+      const comFoto = lista.filter(fotoProvador);
       return comFoto.find(p => passaFiltroStatus(p, 'DISPONIVEL')) || comFoto[0] || null;
     }
 
@@ -1605,11 +1611,11 @@
         : 'Tamanho estimado pela largura do seu rosto.';
     }
 
-    // Modelos do carrossel do provador: só os com foto, filtrados como na vitrine
+    // Modelos do carrossel do provador: só os com foto do provador, filtrados como na vitrine
     // (Pronta Entrega / Sob Encomenda e formato)
     function modelosProvador(lista, filtro) {
       filtro = filtro || {};
-      return lista.filter(p => fotosDoProduto(p).length
+      return lista.filter(p => fotoProvador(p)
         && passaFiltroStatus(p, filtro.status || '')
         && (!filtro.formato || p.formato === filtro.formato));
     }
@@ -1633,10 +1639,10 @@
       filtrosProvador.innerHTML = linhas.join('');
     }
 
-    // Miniaturas dos modelos com foto (filtrados); o que está no rosto fica marcado
+    // Miniaturas da foto do provador de cada modelo (filtrados); o que está no rosto fica marcado
     function renderizarCarrosselProvador() {
       const filtro = provador.filtro || {};
-      const comFoto = produtos.filter(p => fotosDoProduto(p).length);
+      const comFoto = produtos.filter(fotoProvador);
       carrosselProvadorBox.classList.toggle('hidden', comFoto.length < 2);
       renderizarFiltrosProvador(comFoto, filtro);
       const lista = modelosProvador(produtos, filtro);
@@ -1647,7 +1653,7 @@
       carrosselProvador.innerHTML = lista.map((p) => {
         const atual = p.id === provador.produtoId;
         return `<button type="button" onclick="trocarOculosProvador(${Number(p.id)})" class="flex-shrink-0 w-16 h-16 rounded-lg overflow-hidden border-2 bg-white ${atual ? 'border-orange-500' : 'border-transparent opacity-70 hover:opacity-100'}" aria-label="Provar ${escapeHtml(p.nome)}"${atual ? ' aria-current="true"' : ''}>
-          <img src="${escapeHtml(fotosDoProduto(p)[0])}" alt="" class="w-full h-full object-cover" onerror="imgFallback(this)">
+          <img src="${escapeHtml(fotoProvador(p))}" alt="" class="w-full h-full object-contain" onerror="imgFallback(this)">
         </button>`;
       }).join('');
     }
@@ -1655,7 +1661,7 @@
     // Troca o óculos sem desligar a câmera
     async function trocarOculosProvador(produtoId) {
       const produto = produtos.find(p => p.id === produtoId);
-      const foto = produto ? fotosDoProduto(produto)[0] : null;
+      const foto = fotoProvador(produto);
       if (!foto || !provador.aberto || produtoId === provador.produtoId) return;
       const troca = ++provador.troca;
       selecionarProdutoProvador(produto);

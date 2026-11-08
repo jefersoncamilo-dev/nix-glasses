@@ -221,10 +221,33 @@ function uploadImagem(req, res, next) {
   });
 }
 
-// Fotos atuais de um produto; linhas gravadas antes da coluna `fotos` só têm imagem_url.
+// Fotos atuais de um produto, por posição (null = posição vazia); linhas gravadas
+// antes da coluna `fotos` só têm imagem_url.
 function fotosDoProduto(row) {
   if (Array.isArray(row.fotos) && row.fotos.length) return row.fotos.slice(0, MAX_FOTOS);
   return row.imagem_url ? [row.imagem_url] : [];
+}
+
+// Fotos 1 a 3 são a galeria (a 1ª é a capa); a foto 4 tem posição fixa porque, na
+// loja de óculos, é a foto exclusiva do Provador Virtual. A galeria fica sem buracos
+// (tirar a foto 1 promove a seguinte a capa); só com foto 4 ela é completada com null.
+function organizarFotos(posicoes) {
+  const galeria = posicoes.slice(0, MAX_FOTOS - 1).filter(Boolean);
+  const quarta = posicoes[MAX_FOTOS - 1] || null;
+  if (!quarta) return galeria;
+  while (galeria.length < MAX_FOTOS - 1) galeria.push(null);
+  return [...galeria, quarta];
+}
+
+// O que a vitrine recebe: na loja de óculos, `fotos` só com as fotos 1 a 3 e a foto 4
+// à parte em `foto_provador` (o visitante nunca vê a foto 4). Nas outras lojas, as 4.
+function fotosPublicas(row, oculos) {
+  const posicoes = fotosDoProduto(row);
+  if (!oculos) return { fotos: posicoes.filter(Boolean), foto_provador: null };
+  return {
+    fotos: posicoes.slice(0, MAX_FOTOS - 1).filter(Boolean),
+    foto_provador: posicoes[MAX_FOTOS - 1] || null,
+  };
 }
 
 // fotos_manter (multipart, JSON): até 4 posições com a URL atual a manter ou null para remover.
@@ -1174,7 +1197,8 @@ async function startServer() {
          WHERE status IN ('DISPONIVEL', 'CONDICIONAL')
          ORDER BY created_at DESC`
       );
-      res.json(result.rows);
+      const { oculos } = await lojaDaEmpresa(req.empresa);
+      res.json(result.rows.map((row) => ({ ...row, ...fotosPublicas(row, oculos) })));
     } catch (err) {
       console.error(err);
       res.status(500).json({ error: 'Erro ao buscar produtos' });
@@ -1271,10 +1295,11 @@ async function startServer() {
     try {
       client = await req.db.connect();
       await client.query('BEGIN');
-      const fotos = [];
+      const posicoes = [];
       for (const file of req.fotosEnviadas || []) {
-        if (file) fotos.push(await salvarImagem(client, file));
+        posicoes.push(file ? await salvarImagem(client, file) : null);
       }
+      const fotos = organizarFotos(posicoes);
       const criados = [];
       for (const peca of pecas) {
         const e = peca.espec;
@@ -1387,12 +1412,13 @@ async function startServer() {
         const base = manter !== undefined
           ? manter.map((url) => (url && atuais.includes(url) ? url : null))
           : atuais;
-        const novas = [];
+        const posicoes = [];
         for (let i = 0; i < MAX_FOTOS; i++) {
-          if (enviadas[i]) novas.push(await salvarImagem(client, enviadas[i]));
-          else if (base[i] && !novas.includes(base[i])) novas.push(base[i]);
+          if (enviadas[i]) posicoes.push(await salvarImagem(client, enviadas[i]));
+          else posicoes.push(base[i] && !posicoes.includes(base[i]) ? base[i] : null);
         }
-        removidas = atuais.filter((url) => !novas.includes(url));
+        const novas = organizarFotos(posicoes);
+        removidas = atuais.filter((url) => url && !novas.includes(url));
         addField('fotos', novas);
         addField('imagem_url', novas[0] || null);
       }
@@ -1419,7 +1445,7 @@ async function startServer() {
            RETURNING antes.fotos`,
           [result.rows[0].fotos, result.rows[0].imagem_url, grade, result.rows[0].id]
         );
-        for (const r of irmaos.rows) removidas.push(...(r.fotos || []).filter((url) => !result.rows[0].fotos.includes(url)));
+        for (const r of irmaos.rows) removidas.push(...(r.fotos || []).filter((url) => url && !result.rows[0].fotos.includes(url)));
       }
 
       // Apaga as fotos que saíram, menos as que outro produto ainda usa

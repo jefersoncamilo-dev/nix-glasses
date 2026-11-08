@@ -64,10 +64,11 @@ describe('vitrine: atalhos e pílulas de filtro', () => {
 
   it('o botão do topo abre o provador com um modelo com foto, de preferência pronta entrega', () => {
     const c = vm.createContext({});
-    vm.runInContext(`${['fotosDoProduto', 'ehSobEncomenda', 'passaFiltroStatus', 'produtoParaProvadorTopo'].map(extrairFuncao).join('\n')}; this.f = produtoParaProvadorTopo;`, c);
-    const semFoto = { id: 1, status: 'DISPONIVEL', disponibilidade: 'PRONTA_ENTREGA' };
-    const encomenda = { id: 2, imagem_url: 'a.jpg', status: 'DISPONIVEL', disponibilidade: 'SOB_ENCOMENDA' };
-    const pronta = { id: 3, imagem_url: 'b.jpg', status: 'DISPONIVEL', disponibilidade: 'PRONTA_ENTREGA' };
+    vm.runInContext(`${['fotosDoProduto', 'fotoProvador', 'ehSobEncomenda', 'passaFiltroStatus', 'produtoParaProvadorTopo'].map(extrairFuncao).join('\n')}; this.f = produtoParaProvadorTopo;`, c);
+    // só capa (sem foto 4) não conta: o provador usa só a foto do provador
+    const semFoto = { id: 1, imagem_url: 'capa.jpg', status: 'DISPONIVEL', disponibilidade: 'PRONTA_ENTREGA' };
+    const encomenda = { id: 2, imagem_url: 'a.jpg', foto_provador: 'pa.png', status: 'DISPONIVEL', disponibilidade: 'SOB_ENCOMENDA' };
+    const pronta = { id: 3, imagem_url: 'b.jpg', foto_provador: 'pb.png', status: 'DISPONIVEL', disponibilidade: 'PRONTA_ENTREGA' };
     assert.equal(c.f([semFoto, encomenda, pronta]).id, 3);
     assert.equal(c.f([semFoto, encomenda]).id, 2);
     assert.equal(c.f([semFoto]), null);

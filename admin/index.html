@@ -784,8 +784,8 @@
         </div>
         <div>
           <label class="block text-sm font-medium text-gray-700 mb-1">Fotos (até 4)</label>
-          <p class="text-xs text-gray-500 mb-2">A foto 1 é a capa do produto na vitrine. Arraste várias fotos de uma vez para cá: elas ocupam as posições livres, em ordem.</p>
-          <p data-so-nicho="oculos" class="text-xs text-gray-500 mb-2">O Provador Virtual usa a foto 1: fica melhor com o óculos de frente, em PNG de fundo transparente e recortado rente à armação. Fundo branco liso também funciona (ele é removido na hora).</p>
+          <p class="text-xs text-gray-500 mb-2">A foto 1 é a capa do produto na vitrine: use a foto com a modelo ou a foto principal. Arraste várias fotos de uma vez para cá: elas ocupam as posições livres, em ordem.</p>
+          <p data-so-nicho="oculos" class="text-xs text-gray-500 mb-2">A foto 4 é só do Provador Virtual: quem visita o site vê as fotos 1 a 3, nunca a 4. Use o óculos de frente, em PNG de fundo transparente e recortado rente à armação (fundo branco liso também funciona, ele é removido na hora). Sem a foto 4, o óculos não aparece no provador. Arrastar várias fotos preenche só as fotos 1 a 3.</p>
           <div id="slotsFotos" class="grid grid-cols-2 sm:grid-cols-4 gap-3"></div>
           <input type="file" id="imagemCamera" accept="image/*" capture="environment" class="hidden">
         </div>
@@ -846,7 +846,7 @@
         <button type="button" data-fechar-modal="modalFotosSku" class="p-2 text-gray-500 hover:text-gray-700 rounded-lg hover:bg-gray-100" aria-label="Fechar"><svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg></button>
       </div>
       <div class="p-6 overflow-y-auto flex-1 space-y-4">
-        <p class="text-sm text-gray-600">Dê às fotos o nome do SKU do produto: <span class="font-mono">AV-1.jpg</span>, <span class="font-mono">AV-1_2.jpg</span>, <span class="font-mono">AV-1 (3).png</span>. Cada foto vai para o produto do SKU, nas posições livres (até 4 por produto), sem apagar as que já existem.</p>
+        <p class="text-sm text-gray-600">Dê às fotos o nome do SKU do produto: <span class="font-mono">AV-1.jpg</span>, <span class="font-mono">AV-1_2.jpg</span>, <span class="font-mono">AV-1 (3).png</span>. Cada foto vai para o produto do SKU, nas posições livres (até 4 por produto), sem apagar as que já existem.<span data-so-nicho="oculos"> Na loja de óculos elas ocupam só as fotos 1 a 3: a foto 4, do Provador Virtual, você escolhe editando o produto.</span></p>
         <label id="dropFotosSku" class="block border-2 border-dashed border-gray-300 rounded-xl p-8 text-center cursor-pointer hover:border-orange-400 hover:bg-orange-50 transition-colors">
           <span class="block text-gray-700 font-medium">Arraste as fotos aqui</span>
           <span class="block text-sm text-gray-500">ou clique para escolher (JPG, PNG, WEBP, HEIC)</span>
@@ -1920,7 +1920,7 @@
       tabelaProdutos.innerHTML = filtrados.map(p => `
         <tr class="hover:bg-gray-50">
           <td class="px-4 sm:px-6 py-4 relative">
-            ${Array.isArray(p.fotos) && p.fotos.length > 1 ? `<span class="absolute top-2 left-2 sm:left-4 z-10 bg-black/70 text-white text-[10px] font-medium px-1.5 rounded" title="${p.fotos.length} fotos">${p.fotos.length}</span>` : ''}
+            ${contarFotos(p) > 1 ? `<span class="absolute top-2 left-2 sm:left-4 z-10 bg-black/70 text-white text-[10px] font-medium px-1.5 rounded" title="${contarFotos(p)} fotos">${contarFotos(p)}</span>` : ''}
             ${p.imagem_url ? `<img src="${escapeHtml(p.imagem_url)}" alt="${escapeHtml(p.nome)}" class="w-12 h-12 sm:w-16 sm:h-16 object-cover rounded" onerror="imgFallback(this)">` : '<div class="w-12 h-12 sm:w-16 sm:h-16 bg-gray-100 rounded flex items-center justify-center"><svg class="w-6 h-6 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg></div>'}
           </td>
           <td class="px-4 sm:px-6 py-4">
@@ -1965,12 +1965,22 @@
     let slotsFotos = [];
     let slotCamera = 0;
 
+    // Posições que se preenchem sozinhas (arrastar várias fotos, fotos por SKU). Na loja
+    // de óculos a foto 4 é a do Provador Virtual: ela só entra escolhida na própria posição.
+    function posicoesAutomaticasFotos() {
+      return nichoPainel() === 'oculos' ? MAX_FOTOS - 1 : MAX_FOTOS;
+    }
+
+    function contarFotos(p) {
+      return Array.isArray(p.fotos) ? p.fotos.filter(Boolean).length : (p.imagem_url ? 1 : 0);
+    }
+
     function montarSlotsFotos() {
       slotsFotosEl.innerHTML = Array.from({ length: MAX_FOTOS }, (_, i) => `
         <div class="slot-foto" data-slot="${i}">
           <div class="relative aspect-square rounded-lg border-2 border-dashed border-gray-300 bg-gray-50 overflow-hidden flex items-center justify-center">
             <img class="slot-preview hidden absolute inset-0 w-full h-full object-cover" alt="Foto ${i + 1}">
-            <span class="slot-vazio text-xs text-gray-400">Foto ${i + 1}${i === 0 ? ' (capa)' : ''}</span>
+            <span class="slot-vazio text-xs text-gray-400 text-center px-1">Foto ${i + 1}${i === 0 ? ' (capa)' : ''}</span>
             <button type="button" class="slot-remover hidden absolute top-1 right-1 w-7 h-7 rounded-full bg-black/60 text-white text-sm leading-none" title="Remover foto" aria-label="Remover foto ${i + 1}">✕</button>
           </div>
           <div class="flex gap-1 mt-1">
@@ -2005,7 +2015,9 @@
         // src por propriedade (não innerHTML): a URL vem do banco
         if (src) img.src = src; else img.removeAttribute('src');
         img.classList.toggle('hidden', !src);
-        el.querySelector('.slot-vazio').classList.toggle('hidden', !!src);
+        const vazio = el.querySelector('.slot-vazio');
+        vazio.classList.toggle('hidden', !!src);
+        if (Number(el.dataset.slot) === MAX_FOTOS - 1) vazio.textContent = `Foto ${MAX_FOTOS}${nichoPainel() === 'oculos' ? ' (provador)' : ''}`;
         el.querySelector('.slot-remover').classList.toggle('hidden', !src);
       });
     }
@@ -2788,9 +2800,15 @@
       return { grupos, semProduto };
     }
 
-    // Fotos atuais (URLs) e quantas posições livres o produto ainda tem
+    // Fotos atuais (URLs por posição, null = vazia)
     function fotosAtuais(p) {
       return Array.isArray(p.fotos) && p.fotos.length ? p.fotos.slice(0, MAX_FOTOS) : (p.imagem_url ? [p.imagem_url] : []);
+    }
+
+    // Posições livres (índices) que as fotos por SKU podem ocupar, em ordem
+    function posicoesLivresFotos(p) {
+      const atuais = fotosAtuais(p);
+      return Array.from({ length: posicoesAutomaticasFotos() }, (_, i) => i).filter(i => !atuais[i]);
     }
 
     let arquivosSku = [];
@@ -2802,13 +2820,13 @@
       const nomes = arquivosSku.map(f => f.name);
       associacaoSku = associarFotosPorSku(nomes, todosProdutos);
       const linhas = associacaoSku.grupos.map(g => {
-        const livres = MAX_FOTOS - fotosAtuais(g.produto).length;
-        const vao = g.arquivos.slice(0, Math.max(0, livres));
+        const livres = posicoesLivresFotos(g.produto).length;
+        const vao = g.arquivos.slice(0, livres);
         const sobram = g.arquivos.length - vao.length;
         return `
           <li class="py-2">
             <p class="text-sm text-gray-900"><span class="font-medium">${escapeHtml(g.produto.codigo_sku)}</span> • ${escapeHtml(g.produto.nome)}</p>
-            <p class="text-xs text-gray-500">${vao.length} foto(s) nova(s): ${vao.map(i => escapeHtml(nomes[i])).join(', ') || '-'}${sobram ? ` <span class="text-amber-700">• ${sobram} sem espaço (já tem ${MAX_FOTOS - livres} de ${MAX_FOTOS})</span>` : ''}</p>
+            <p class="text-xs text-gray-500">${vao.length} foto(s) nova(s): ${vao.map(i => escapeHtml(nomes[i])).join(', ') || '-'}${sobram ? ` <span class="text-amber-700">• ${sobram} sem espaço (já tem ${posicoesAutomaticasFotos() - livres} de ${posicoesAutomaticasFotos()})</span>` : ''}</p>
           </li>`;
       }).join('');
       const sem = associacaoSku.semProduto.length
@@ -2817,7 +2835,7 @@
       previa.innerHTML = arquivosSku.length
         ? `${linhas ? `<ul class="divide-y divide-gray-100 border border-gray-200 rounded-lg px-3">${linhas}</ul>` : ''}${sem}`
         : '';
-      const total = associacaoSku.grupos.reduce((t, g) => t + Math.min(g.arquivos.length, Math.max(0, MAX_FOTOS - fotosAtuais(g.produto).length)), 0);
+      const total = associacaoSku.grupos.reduce((t, g) => t + Math.min(g.arquivos.length, posicoesLivresFotos(g.produto).length), 0);
       btn.disabled = !total;
       document.getElementById('progressoFotosSku').textContent = arquivosSku.length ? `${total} foto(s) para ${associacaoSku.grupos.length} produto(s)` : '';
     }
@@ -2852,13 +2870,14 @@
       const grupos = associacaoSku.grupos;
       for (const [n, g] of grupos.entries()) {
         const atuais = fotosAtuais(g.produto);
-        const vao = g.arquivos.slice(0, MAX_FOTOS - atuais.length);
+        const livres = posicoesLivresFotos(g.produto);
+        const vao = g.arquivos.slice(0, livres.length);
         if (!vao.length) continue;
         progresso.textContent = `Enviando ${n + 1} de ${grupos.length}: ${g.produto.codigo_sku}...`;
         try {
           const form = new FormData();
           const manter = Array.from({ length: MAX_FOTOS }, (_, i) => atuais[i] || null);
-          for (const [k, i] of vao.entries()) form.append(`foto${atuais.length + k + 1}`, await prepararImagem(arquivosSku[i]));
+          for (const [k, i] of vao.entries()) form.append(`foto${livres[k] + 1}`, await prepararImagem(arquivosSku[i]));
           form.append('fotos_manter', JSON.stringify(manter));
           const res = await fetchAdmin(`/api/produtos/${g.produto.id}`, { method: 'PUT', body: form });
           if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || 'erro');
@@ -2880,12 +2899,12 @@
     slotsFotosEl.addEventListener('drop', (e) => {
       const arquivos = [...e.dataTransfer.files].filter(f => /^image\//.test(f.type) || /\.(heic|heif)$/i.test(f.name));
       let colocadas = 0;
-      for (let i = 0; i < MAX_FOTOS && colocadas < arquivos.length; i++) {
+      for (let i = 0; i < posicoesAutomaticasFotos() && colocadas < arquivos.length; i++) {
         const slot = slotsFotos[i] || {};
         if (!slot.url && !slot.file) slotsFotos[i] = { url: null, file: arquivos[colocadas++] };
       }
       atualizarSlotsFotos();
-      if (colocadas < arquivos.length) mostrarToast(`${arquivos.length - colocadas} foto(s) não couberam (máximo ${MAX_FOTOS})`, 'error');
+      if (colocadas < arquivos.length) mostrarToast(`${arquivos.length - colocadas} foto(s) não couberam (máximo ${posicoesAutomaticasFotos()}${posicoesAutomaticasFotos() < MAX_FOTOS ? '; a foto 4, do provador, escolha na própria posição' : ''})`, 'error');
     });
 
     // Acerto

@@ -28,7 +28,7 @@ function carregar(funcoes, globais = {}) {
 const formatarMoeda = (v) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v).replace(/\u00a0/g, ' ');
 
 describe('vitrine: detalhes do produto', () => {
-  const FUNCOES = ['escapeHtml', 'fotosDoProduto', 'indiceCircular', 'ehSobEncomenda', 'calcularSinal',
+  const FUNCOES = ['escapeHtml', 'fotosDoProduto', 'fotoProvador', 'indiceCircular', 'ehSobEncomenda', 'calcularSinal',
     'etiquetaProduto', 'especificacoesProduto', 'renderizarDetalhes', 'ordemTamanho', 'agruparCards', 'nomeModelo', 'grupoDoProduto', 'botoesTamanho'];
 
   function detalhesDe(produto, detalhes = {}, itens = []) {
@@ -49,7 +49,7 @@ describe('vitrine: detalhes do produto', () => {
 
   const oculos = {
     id: 5, nome: 'Raptor Preto', codigo_sku: 'RP-1', preco_venda: '299.90', status: 'DISPONIVEL', disponibilidade: 'PRONTA_ENTREGA',
-    fotos: ['/imagens/aaa'], imagem_url: '/imagens/aaa', diametro_cm: '5.6', ponte_cm: '1.8', material: 'Acetato', estilo: 'Esportivo', genero: 'UNISSEX',
+    fotos: ['/imagens/aaa'], imagem_url: '/imagens/aaa', foto_provador: '/imagens/ppp', diametro_cm: '5.6', ponte_cm: '1.8', material: 'Acetato', estilo: 'Esportivo', genero: 'UNISSEX',
   };
 
   it('a ficha técnica fica numa sanfona "Mais Detalhes e Medidas Técnicas", fechada por padrão', () => {
