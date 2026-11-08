@@ -44,6 +44,12 @@
     /* O catálogo é escuro: os seletores (tamanho, gênero) acompanham */
     #catalogo select { color-scheme: dark; background-color: #1f1f1f; }
     .foto-nav { opacity: 0; transition: opacity 0.2s ease; }
+    /* Foto 2 por cima da capa no card: aparece com o mouse em cima (computador) ou se
+       alterna sozinha a cada 2 s (celular, classe no catálogo). A foto 4 nunca entra. */
+    .foto-alt { opacity: 0; transition: opacity 0.5s ease; pointer-events: none; }
+    @media (hover: hover) { .card-produto:hover .foto-alt { opacity: 1; } }
+    .fotos-alternadas .foto-alt { opacity: 1; }
+    @media (prefers-reduced-motion: reduce) { .foto-alt { transition: none; } }
     .glass-card:hover .foto-nav, .foto-nav:focus-visible { opacity: 1; }
     .miniaturas { scrollbar-width: thin; }
     /* Provador virtual: vídeo e canvas ocupam o mesmo quadro e são espelhados juntos (efeito espelho) */
@@ -1077,7 +1083,7 @@
           <div class="p-1.5 sm:p-3 pb-0 sm:pb-0">
           <div class="foto-moldura aspect-square relative overflow-hidden rounded-lg sm:rounded-xl">
             <button type="button" onclick="abrirDetalhes(${id})" class="block w-full h-full" aria-label="Ver fotos e detalhes de ${escapeHtml(produto.nome)}">
-              ${fotos.length ? `<img data-foto-card src="${escapeHtml(fotos[indice])}" alt="${escapeHtml(produto.nome)}" loading="lazy" class="w-full h-full object-cover" onerror="imgFallback(this)">` : '<div class="w-full h-full flex items-center justify-center text-gray-300"><svg class="w-8 h-8 sm:w-16 sm:h-16" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg></div>'}
+              ${fotos.length ? `<img data-foto-card src="${escapeHtml(fotos[indice])}" alt="${escapeHtml(produto.nome)}" loading="lazy" class="w-full h-full object-cover" onerror="imgFallback(this)">${fotos.length > 1 ? `<img data-foto-alt src="${escapeHtml(fotos[1])}" alt="" aria-hidden="true" loading="lazy" class="foto-alt absolute inset-0 w-full h-full object-cover${indice ? ' hidden' : ''}">` : ''}` : '<div class="w-full h-full flex items-center justify-center text-gray-300"><svg class="w-8 h-8 sm:w-16 sm:h-16" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg></div>'}
             </button>
             ${fotos.length > 1 ? `
             <button type="button" onclick="trocarFotoCard(${id}, -1)" class="foto-nav hidden sm:flex absolute left-2 top-1/2 -translate-y-1/2 w-8 h-8 items-center justify-center rounded-full bg-white/85 text-gray-800 shadow" aria-label="Foto anterior">&#8249;</button>
@@ -1121,6 +1127,8 @@
       if (!card) return;
       const img = card.querySelector('[data-foto-card]');
       if (img) img.src = fotos[indice];
+      // A foto 2 por cima (mouse/alternância) só vale enquanto o card está na capa
+      card.querySelector('[data-foto-alt]')?.classList?.toggle('hidden', indice !== 0);
       card.querySelectorAll('[data-dot]').forEach((dot, i) => {
         dot.classList.toggle('bg-white', i === indice);
         dot.classList.toggle('bg-white/50', i !== indice);
@@ -2335,6 +2343,14 @@
     document.querySelectorAll('#filtroPilulas [data-filtro]').forEach(b => b.addEventListener('click', () => aplicarFiltroStatus(b.dataset.filtro)));
     // Atalhos do topo: o link rola até o catálogo e o filtro já vem escolhido
     document.getElementById('abrirProvadorTopo').addEventListener('click', abrirProvadorTopo);
+
+    // Celular (sem mouse): a capa dos cards se alterna com a foto 2 a cada 2 segundos.
+    // No computador a foto 2 aparece com o mouse em cima (CSS .foto-alt).
+    const semMouse = window.matchMedia ? window.matchMedia('(hover: none)') : null;
+    setInterval(() => {
+      if (semMouse?.matches && !document.hidden) catalogoGrid.classList.toggle('fotos-alternadas');
+      else catalogoGrid.classList.remove('fotos-alternadas');
+    }, 2000);
     // O card inteiro do Provador Virtual convida o clique (o botão continua sendo o alvo do teclado)
     document.getElementById('bannerProvador').addEventListener('click', e => { if (!e.target.closest('#abrirProvadorTopo')) abrirProvadorTopo(); });
     // Loja que não é de óculos: sem provador, o topo leva direto à coleção

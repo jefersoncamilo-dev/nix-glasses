@@ -268,7 +268,17 @@ describe('vitrine: carrossel de fotos', () => {
   it('card de produto com uma foto (ou só imagem_url antiga) não tem setas', () => {
     const { cards } = vitrine([{ ...produto, fotos: undefined }]);
     assert.match(cards[0].innerHTML, new RegExp(`src="${fotos[0]}"`));
-    assert.doesNotMatch(cards[0].innerHTML, /trocarFotoCard|data-dot/);
+    assert.doesNotMatch(cards[0].innerHTML, /trocarFotoCard|data-dot|data-foto-alt/);
+  });
+
+  it('a foto 2 fica por cima da capa (mouse em cima / troca a cada 2 s); a foto 4 nunca entra', () => {
+    const { cards } = vitrine([{ ...produto, foto_provador: '/imagens/' + 'p'.repeat(32) }]);
+    const html = cards[0].innerHTML;
+    assert.match(html, new RegExp(`data-foto-alt src="${fotos[1]}"[^>]*class="foto-alt `));
+    assert.doesNotMatch(html, /pppp/);
+    const fonte = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
+    assert.match(fonte, /@media \(hover: hover\) \{ \.card-produto:hover \.foto-alt \{ opacity: 1; \} \}/);
+    assert.match(fonte, /semMouse\?\.matches && !document\.hidden\) catalogoGrid\.classList\.toggle\('fotos-alternadas'\)[\s\S]{0,120}\}, 2000\)/);
   });
 
   it('detalhes mostram a foto escolhida, miniaturas e contador, e as setas dão a volta', () => {
