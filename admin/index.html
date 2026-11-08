@@ -110,6 +110,7 @@
           <h3 class="text-lg font-semibold text-gray-900">Gerenciar Produtos</h3>
           <div class="flex flex-col sm:flex-row gap-2">
           <button type="button" data-abrir-fotos-sku class="w-full sm:w-auto justify-center bg-gray-100 hover:bg-gray-200 text-gray-700 px-4 py-2 rounded-lg font-medium transition-colors">Fotos por SKU</button>
+          <button id="btnAcertoEstoque" type="button" class="w-full sm:w-auto justify-center bg-white border border-red-300 hover:bg-red-50 text-red-700 px-4 py-2 rounded-lg font-medium transition-colors" title="Excluir produtos definitivamente, um ou vários">Acerto de estoque</button>
           <button id="btnAbrirLote" type="button" class="w-full sm:w-auto justify-center bg-gray-100 hover:bg-gray-200 text-gray-700 px-4 py-2 rounded-lg font-medium transition-colors">Cadastro em Lote</button>
           <button id="btnNovoProduto" class="w-full sm:w-auto justify-center bg-orange-500 hover:bg-orange-600 text-white px-4 py-2 rounded-lg font-medium transition-colors flex items-center">
             <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
@@ -140,12 +141,33 @@
           <input type="text" id="buscaAdmin" placeholder="Buscar por nome, SKU, fornecedor ou código..." class="w-full sm:flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 sm:min-w-[200px]">
         </div>
 
+        <!-- Acerto de estoque: marcar produtos e excluir de vez (não é o Acerto de Maleta) -->
+        <div id="barraAcertoEstoque" class="hidden bg-red-50 border border-red-200 rounded-xl p-4 mb-4">
+          <div class="flex flex-col lg:flex-row lg:items-center gap-3">
+            <div class="flex-1 min-w-0">
+              <p class="font-semibold text-red-800">Acerto de estoque: excluir produtos definitivamente</p>
+              <p class="text-sm text-red-700">Marque os produtos que saem do cadastro. Os filtros e a busca acima continuam valendo. Produto com peça em maleta ou em pedido aberto não pode ser excluído.</p>
+            </div>
+            <div class="flex flex-wrap items-center gap-2">
+              <span id="contagemAcertoEstoque" class="text-sm font-medium text-red-800">0 marcados</span>
+              <button id="btnMarcarFiltrados" type="button" class="bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 px-3 py-2 rounded-lg text-sm font-medium">Marcar os da lista</button>
+              <button id="btnDesmarcarTodos" type="button" class="bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 px-3 py-2 rounded-lg text-sm font-medium">Desmarcar</button>
+              <button id="btnExcluirMarcados" type="button" disabled class="bg-red-600 hover:bg-red-700 disabled:opacity-40 disabled:cursor-not-allowed text-white px-4 py-2 rounded-lg text-sm font-medium">Excluir definitivamente</button>
+              <button id="btnSairAcertoEstoque" type="button" class="text-sm text-gray-600 hover:text-gray-900 px-2 py-2 font-medium">Sair</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Botão que acompanha a rolagem enquanto há produtos marcados -->
+        <button id="btnExcluirFlutuante" type="button" class="hidden fixed bottom-4 right-4 z-40 bg-red-600 hover:bg-red-700 text-white px-5 py-3 rounded-full shadow-lg font-medium">Excluir definitivamente</button>
+
         <!-- Tabela -->
         <div class="bg-white rounded-xl border border-gray-200 overflow-hidden">
           <div class="overflow-x-auto -mx-0">
             <table class="w-full min-w-[860px]">
               <thead class="bg-gray-50 border-b border-gray-200">
                 <tr>
+                  <th class="col-acerto-estoque hidden pl-4 py-3 w-10"><input type="checkbox" id="marcarTodosAcerto" class="h-5 w-5 accent-red-600 align-middle" title="Marcar todos da lista" aria-label="Marcar todos da lista"></th>
                   <th class="px-4 sm:px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Imagem</th>
                   <th class="px-4 sm:px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Nome / SKU</th>
                   <th class="hidden md:table-cell px-4 sm:px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Formato / Estilo / Cor</th>
@@ -702,6 +724,33 @@
     </div>
   </main>
 
+  <!-- Modal Excluir definitivamente (Acerto de estoque e lixeira da linha) -->
+  <div id="modalExclusao" class="fixed inset-0 modal-overlay bg-black/50 hidden z-50 flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-labelledby="tituloExclusao">
+    <div class="bg-white rounded-2xl max-w-lg w-full max-h-[90vh] overflow-hidden flex flex-col">
+      <div class="flex items-center justify-between p-6 border-b border-gray-200">
+        <h3 id="tituloExclusao" class="text-xl font-bold text-red-700">Excluir definitivamente</h3>
+        <button id="fecharModalExclusao" type="button" class="p-2 text-gray-500 hover:text-gray-700 rounded-lg hover:bg-gray-100" aria-label="Fechar"><svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg></button>
+      </div>
+      <div class="p-6 overflow-y-auto flex-1">
+        <p id="resumoExclusao" class="text-sm text-gray-800 mb-3">Conferindo os produtos...</p>
+        <ul id="listaExclusao" class="divide-y divide-gray-100 border border-gray-200 rounded-lg mb-4 max-h-72 overflow-y-auto"></ul>
+        <div id="bloqueioExclusao" class="hidden bg-red-50 border border-red-200 rounded-lg p-3 mb-4 text-sm text-red-800">
+          <p id="textoBloqueioExclusao"></p>
+          <button id="btnTirarBloqueados" type="button" class="mt-2 bg-white border border-red-300 hover:bg-red-100 text-red-700 px-3 py-1.5 rounded-lg text-sm font-medium">Tirar esses da lista e continuar</button>
+        </div>
+        <div id="confirmaExclusao" class="hidden">
+          <p class="text-sm text-gray-600 mb-3">Some do painel e da vitrine, junto com as fotos e o histórico de compras. Pedidos e acertos antigos continuam. <strong>Não tem como desfazer.</strong></p>
+          <label for="campoConfirmaExclusao" class="block text-sm font-medium text-gray-700 mb-1">Para confirmar, digite EXCLUIR</label>
+          <input type="text" id="campoConfirmaExclusao" autocomplete="off" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500">
+        </div>
+      </div>
+      <div class="flex justify-end gap-2 p-4 border-t border-gray-200">
+        <button id="btnCancelarExclusao" type="button" class="bg-gray-100 hover:bg-gray-200 text-gray-700 px-4 py-2 rounded-lg font-medium">Cancelar</button>
+        <button id="btnConfirmarExclusao" type="button" disabled class="bg-red-600 hover:bg-red-700 disabled:opacity-40 disabled:cursor-not-allowed text-white px-4 py-2 rounded-lg font-medium">Excluir</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Modal Produto -->
   <div id="modalProduto" class="fixed inset-0 modal-overlay bg-black/50 hidden z-50 flex items-center justify-center p-4">
     <div class="bg-white rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-hidden flex flex-col">
@@ -1045,6 +1094,9 @@
   <script>
     // Estado
     let todosProdutos = [];
+    let produtosFiltrados = [];
+    let modoAcertoEstoque = false;
+    const marcadosAcerto = new Set();
     let produtoEditando = null;
 
     // Elementos
@@ -1969,6 +2021,8 @@
         return true;
       });
 
+      produtosFiltrados = filtrados;
+      atualizarBarraAcertoEstoque();
       if (filtrados.length === 0) {
         tabelaProdutos.innerHTML = '';
         emptyProdutos.classList.remove('hidden');
@@ -1977,7 +2031,8 @@
 
       emptyProdutos.classList.add('hidden');
       tabelaProdutos.innerHTML = filtrados.map(p => `
-        <tr class="hover:bg-gray-50">
+        <tr class="hover:bg-gray-50${modoAcertoEstoque && marcadosAcerto.has(Number(p.id)) ? ' bg-red-50' : ''}">
+          ${modoAcertoEstoque ? `<td class="pl-4 py-4 w-10"><input type="checkbox" data-acerto-estoque="${Number(p.id)}" class="h-5 w-5 accent-red-600" aria-label="Marcar ${escapeHtml(p.nome)}"${marcadosAcerto.has(Number(p.id)) ? ' checked' : ''}></td>` : ''}
           <td class="px-4 sm:px-6 py-4 relative">
             ${contarFotos(p) > 1 ? `<span class="absolute top-2 left-2 sm:left-4 z-10 bg-black/70 text-white text-[10px] font-medium px-1.5 rounded" title="${contarFotos(p)} fotos">${contarFotos(p)}</span>` : ''}
             ${p.imagem_url ? `<img src="${escapeHtml(p.imagem_url)}" alt="${escapeHtml(p.nome)}" class="w-12 h-12 sm:w-16 sm:h-16 object-cover rounded" onerror="imgFallback(this)">` : '<div class="w-12 h-12 sm:w-16 sm:h-16 bg-gray-100 rounded flex items-center justify-center"><svg class="w-6 h-6 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg></div>'}
@@ -2006,7 +2061,7 @@
               <button onclick="editarProduto(${Number(p.id)})" class="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors" title="Editar"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg></button>
               ${botaoLinkFornecedor(p.link_fornecedor)}
               <button onclick="abrirReposicao(${Number(p.id)})" class="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors" title="Registrar reposição / histórico de compras"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z"/></svg></button>
-              <button onclick="excluirProduto(${Number(p.id)})" class="p-2 text-red-500 hover:text-red-700 hover:bg-red-50 rounded-lg transition-colors" title="Excluir"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg></button>
+              <button onclick="excluirProduto(${Number(p.id)})" class="p-2 text-red-500 hover:text-red-700 hover:bg-red-50 rounded-lg transition-colors" title="Excluir definitivamente"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg></button>
             </div>
           </td>
         </tr>
@@ -2727,22 +2782,8 @@
       if (p) abrirModal(p);
     };
 
-    window.excluirProduto = async (id) => {
-      if (!confirm('Tem certeza que deseja excluir este produto?')) return;
-      try {
-        // Implementar DELETE se necessário, ou apenas marcar como ESGOTADO
-        const res = await fetchAdmin(`/api/produtos/${id}`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ status: 'ESGOTADO' })
-        });
-        if (!res.ok) throw new Error('Erro ao excluir');
-        mostrarToast('Produto marcado como esgotado');
-        carregarProdutos();
-      } catch (err) {
-        mostrarToast(err.message, 'error');
-      }
-    };
+    // Lixeira da linha: exclusão definitiva, com a mesma conferência do Acerto de estoque
+    window.excluirProduto = (id) => abrirExclusao([Number(id)]);
 
     // Modais simples: botão com data-fechar-modal ou clique fora fecham
     function abrirModalSimples(id) {
@@ -4687,6 +4728,191 @@
         await carregarUsuarios();
       } catch (err) {
         mostrarToast(err.message, 'error');
+      }
+    });
+
+    // ---------- Acerto de estoque: excluir produtos definitivamente ----------
+    // Não confundir com o Acerto de Maleta (vendidos/devolvidos de uma cliente).
+    const barraAcertoEstoque = document.getElementById('barraAcertoEstoque');
+    const btnExcluirMarcados = document.getElementById('btnExcluirMarcados');
+    const marcarTodosAcerto = document.getElementById('marcarTodosAcerto');
+
+    function atualizarBarraAcertoEstoque() {
+      if (!modoAcertoEstoque) return;
+      const existentes = new Set(todosProdutos.map(p => Number(p.id)));
+      for (const id of [...marcadosAcerto]) if (!existentes.has(id)) marcadosAcerto.delete(id);
+      const n = marcadosAcerto.size;
+      document.getElementById('contagemAcertoEstoque').textContent = n === 1 ? '1 marcado' : `${n} marcados`;
+      btnExcluirMarcados.disabled = n === 0;
+      btnExcluirMarcados.textContent = n ? `Excluir definitivamente (${n})` : 'Excluir definitivamente';
+      const flutuante = document.getElementById('btnExcluirFlutuante');
+      flutuante.classList.toggle('hidden', n === 0);
+      flutuante.textContent = `Excluir definitivamente (${n})`;
+      const ids = produtosFiltrados.map(p => Number(p.id));
+      const marcadosNaLista = ids.filter(id => marcadosAcerto.has(id)).length;
+      marcarTodosAcerto.checked = ids.length > 0 && marcadosNaLista === ids.length;
+      marcarTodosAcerto.indeterminate = marcadosNaLista > 0 && marcadosNaLista < ids.length;
+    }
+
+    function definirModoAcertoEstoque(ligado) {
+      modoAcertoEstoque = ligado;
+      if (!ligado) {
+        marcadosAcerto.clear();
+        document.getElementById('btnExcluirFlutuante').classList.add('hidden');
+      }
+      barraAcertoEstoque.classList.toggle('hidden', !ligado);
+      document.querySelectorAll('.col-acerto-estoque').forEach(el => el.classList.toggle('hidden', !ligado));
+      renderizarTabela();
+      if (ligado) barraAcertoEstoque.scrollIntoView({ block: 'nearest' });
+    }
+
+    document.getElementById('btnAcertoEstoque').addEventListener('click', () => definirModoAcertoEstoque(!modoAcertoEstoque));
+    document.getElementById('btnSairAcertoEstoque').addEventListener('click', () => definirModoAcertoEstoque(false));
+    document.getElementById('btnMarcarFiltrados').addEventListener('click', () => {
+      produtosFiltrados.forEach(p => marcadosAcerto.add(Number(p.id)));
+      renderizarTabela();
+    });
+    document.getElementById('btnDesmarcarTodos').addEventListener('click', () => {
+      marcadosAcerto.clear();
+      renderizarTabela();
+    });
+    marcarTodosAcerto.addEventListener('change', () => {
+      produtosFiltrados.forEach(p => marcarTodosAcerto.checked ? marcadosAcerto.add(Number(p.id)) : marcadosAcerto.delete(Number(p.id)));
+      renderizarTabela();
+    });
+    tabelaProdutos.addEventListener('change', (e) => {
+      const cb = e.target.closest('[data-acerto-estoque]');
+      if (!cb) return;
+      const id = Number(cb.dataset.acertoEstoque);
+      if (cb.checked) marcadosAcerto.add(id); else marcadosAcerto.delete(id);
+      cb.closest('tr').classList.toggle('bg-red-50', cb.checked);
+      atualizarBarraAcertoEstoque();
+    });
+    btnExcluirMarcados.addEventListener('click', () => abrirExclusao([...marcadosAcerto]));
+    document.getElementById('btnExcluirFlutuante').addEventListener('click', () => abrirExclusao([...marcadosAcerto]));
+
+    const modalExclusao = document.getElementById('modalExclusao');
+    const campoConfirmaExclusao = document.getElementById('campoConfirmaExclusao');
+    const btnConfirmarExclusao = document.getElementById('btnConfirmarExclusao');
+    let exclusao = { ids: [], conferidos: [], bloqueados: [], salvando: false };
+
+    function nomeProdutoExclusao(p) {
+      return `${p.nome}${p.tamanho ? ` (Tam. ${p.tamanho})` : ''}`;
+    }
+
+    function renderizarExclusao() {
+      const { conferidos, bloqueados } = exclusao;
+      const liberados = conferidos.length - bloqueados.length;
+      document.getElementById('listaExclusao').innerHTML = conferidos.map(p => `
+        <li class="px-3 py-2 text-sm ${p.bloqueios.length ? 'bg-red-50' : ''}">
+          <p class="font-medium text-gray-900">${escapeHtml(nomeProdutoExclusao(p))} <span class="text-gray-500 font-normal">• ${escapeHtml(p.codigo_sku)} • ${Number(p.estoque) || 0} em estoque</span></p>
+          ${p.bloqueios.map(b => `<p class="text-red-700">Não pode sair: ${escapeHtml(b)}</p>`).join('')}
+          ${p.avisos.map(a => `<p class="text-amber-700">Atenção: ${escapeHtml(a)}</p>`).join('')}
+        </li>`).join('');
+      document.getElementById('resumoExclusao').innerHTML = conferidos.length === 1
+        ? 'Este produto vai ser <strong>excluído de vez</strong>:'
+        : `Estes <strong>${conferidos.length} produtos</strong> vão ser <strong>excluídos de vez</strong>:`;
+      const temBloqueio = bloqueados.length > 0;
+      document.getElementById('bloqueioExclusao').classList.toggle('hidden', !temBloqueio);
+      document.getElementById('textoBloqueioExclusao').textContent = bloqueados.length === 1
+        ? '1 produto não pode ser excluído agora (marcado em vermelho).'
+        : `${bloqueados.length} produtos não podem ser excluídos agora (marcados em vermelho).`;
+      document.getElementById('btnTirarBloqueados').classList.toggle('hidden', liberados === 0);
+      document.getElementById('confirmaExclusao').classList.toggle('hidden', temBloqueio || !conferidos.length);
+      btnConfirmarExclusao.textContent = liberados === 1 ? 'Excluir 1 produto' : `Excluir ${liberados} produtos`;
+      atualizarBotaoExclusao();
+    }
+
+    function atualizarBotaoExclusao() {
+      btnConfirmarExclusao.disabled = exclusao.salvando || !exclusao.conferidos.length || exclusao.bloqueados.length > 0
+        || campoConfirmaExclusao.value.trim().toUpperCase() !== 'EXCLUIR';
+    }
+
+    async function conferirParaExcluir(ids) {
+      exclusao = { ids, conferidos: [], bloqueados: [], salvando: false };
+      document.getElementById('listaExclusao').innerHTML = '';
+      document.getElementById('resumoExclusao').textContent = 'Conferindo os produtos...';
+      document.getElementById('bloqueioExclusao').classList.add('hidden');
+      document.getElementById('confirmaExclusao').classList.add('hidden');
+      atualizarBotaoExclusao();
+      try {
+        const res = await fetchAdmin('/api/admin/produtos/excluir/conferir', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ids })
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.error || 'Erro ao conferir os produtos');
+        aplicarConferencia(data);
+      } catch (err) {
+        document.getElementById('resumoExclusao').textContent = err.message;
+      }
+    }
+
+    function aplicarConferencia(data) {
+      exclusao.conferidos = data.produtos || [];
+      exclusao.ids = exclusao.conferidos.map(p => Number(p.id));
+      exclusao.bloqueados = exclusao.conferidos.filter(p => p.bloqueios.length);
+      if (!exclusao.conferidos.length) {
+        document.getElementById('resumoExclusao').textContent = 'Esses produtos já não existem.';
+        atualizarBotaoExclusao();
+        return;
+      }
+      renderizarExclusao();
+    }
+
+    function abrirExclusao(ids) {
+      if (!ids.length) return;
+      campoConfirmaExclusao.value = '';
+      modalExclusao.classList.remove('hidden');
+      conferirParaExcluir(ids);
+    }
+
+    function fecharExclusao() {
+      if (exclusao.salvando) return;
+      modalExclusao.classList.add('hidden');
+    }
+
+    document.getElementById('fecharModalExclusao').addEventListener('click', fecharExclusao);
+    document.getElementById('btnCancelarExclusao').addEventListener('click', fecharExclusao);
+    modalExclusao.addEventListener('click', (e) => { if (e.target === modalExclusao) fecharExclusao(); });
+    campoConfirmaExclusao.addEventListener('input', atualizarBotaoExclusao);
+    document.getElementById('btnTirarBloqueados').addEventListener('click', () => {
+      const bloqueados = new Set(exclusao.bloqueados.map(p => Number(p.id)));
+      bloqueados.forEach(id => marcadosAcerto.delete(id));
+      exclusao.conferidos = exclusao.conferidos.filter(p => !bloqueados.has(Number(p.id)));
+      exclusao.ids = exclusao.conferidos.map(p => Number(p.id));
+      exclusao.bloqueados = [];
+      renderizarExclusao();
+      renderizarTabela();
+    });
+
+    btnConfirmarExclusao.addEventListener('click', async () => {
+      exclusao.salvando = true;
+      atualizarBotaoExclusao();
+      btnConfirmarExclusao.textContent = 'Excluindo...';
+      try {
+        const res = await fetchAdmin('/api/admin/produtos/excluir', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ids: exclusao.ids, confirmacao: campoConfirmaExclusao.value.trim().toUpperCase() })
+        });
+        const data = await res.json().catch(() => ({}));
+        if (res.status === 409 && data.produtos) {
+          // Algo mudou desde a conferência (ex.: peça foi para uma maleta): mostra de novo
+          exclusao.salvando = false;
+          aplicarConferencia(data);
+          mostrarToast(data.error, 'error');
+          return;
+        }
+        if (!res.ok) throw new Error(data.error || 'Erro ao excluir');
+        const n = (data.excluidos || []).length;
+        (data.excluidos || []).forEach(p => marcadosAcerto.delete(Number(p.id)));
+        exclusao.salvando = false;
+        modalExclusao.classList.add('hidden');
+        mostrarToast(n === 1 ? 'Produto excluído definitivamente' : `${n} produtos excluídos definitivamente`);
+        carregarProdutos();
+      } catch (err) {
+        exclusao.salvando = false;
+        mostrarToast(err.message, 'error');
+        renderizarExclusao();
       }
     });
 

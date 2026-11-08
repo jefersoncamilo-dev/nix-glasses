@@ -138,8 +138,14 @@ describe('painel (admin/index.html) escapa dados de produto', () => {
 
   it('na tabela de produtos', () => {
     const tabelaProdutos = elemento();
-    const ctx = carregar('admin/index.html', ['escapeHtml', 'linkSeguro', 'botaoLinkFornecedor', 'variacaoCusto', 'htmlVariacao', 'htmlUltimaCompra', 'contarFotos', 'renderizarTabela'], {
+    const ctx = carregar('admin/index.html', ['escapeHtml', 'linkSeguro', 'botaoLinkFornecedor', 'variacaoCusto', 'htmlVariacao', 'htmlUltimaCompra', 'contarFotos', 'atualizarBarraAcertoEstoque', 'renderizarTabela'], {
       URL,
+      // Acerto de estoque ligado: a caixinha de marcar leva o nome do produto
+      modoAcertoEstoque: true,
+      marcadosAcerto: new Set([7]),
+      btnExcluirMarcados: elemento(),
+      marcarTodosAcerto: elemento(),
+      document: { getElementById: elemento },
       formatarDia: v => String(v),
       todosProdutos: [
         produtoMalicioso({ status: PAYLOAD, fornecedor: PAYLOAD, codigo_fornecedor: PAYLOAD, link_fornecedor: PAYLOAD, ultima_compra: PAYLOAD }),

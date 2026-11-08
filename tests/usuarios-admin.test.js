@@ -83,6 +83,7 @@ describe('usuários do painel admin', () => {
     const bloqueadas = [
       ['POST', '/api/produtos', { nome: 'X', codigo_sku: 'X-1', preco_custo: 1, preco_venda: 2 }],
       ['PUT', '/api/admin/produtos/lote', { produtos: [] }],
+      ['POST', '/api/admin/produtos/excluir', { ids: [1], confirmacao: 'EXCLUIR' }],
       ['GET', '/api/admin/metrics'],
       ['GET', '/api/admin/loja'],
       ['POST', '/api/config/whatsapp', { whatsapp: '5511999999999' }],
