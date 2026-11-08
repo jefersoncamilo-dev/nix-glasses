@@ -2836,6 +2836,124 @@ async function startServer() {
     }
   }
 
+  // Acerto de estoque: excluir produtos de verdade (um ou vários), sem zerar a loja.
+  // Só da empresa logada (req.db). Antes de apagar, o servidor confere de novo cada
+  // produto: com peça em maleta ou num pedido aberto ele não sai, e aí nada é
+  // apagado. Encomendas abertas só avisam (o modelo e o SKU ficam copiados nelas).
+  // Leva junto as fotos e o histórico de compras do produto; pedidos e acertos antigos
+  // ficam como estão (os itens deles guardam nome e preço).
+  const CONFIRMACAO_EXCLUIR = 'EXCLUIR';
+  const MAX_EXCLUIR = 500;
+
+  function idsParaExcluir(body) {
+    const lista = body && body.ids;
+    if (!Array.isArray(lista) || !lista.length) return { erro: 'Escolha ao menos um produto' };
+    if (lista.length > MAX_EXCLUIR) return { erro: `No máximo ${MAX_EXCLUIR} produtos por vez` };
+    const ids = [...new Set(lista.map(Number))];
+    if (ids.some((id) => !Number.isInteger(id) || id <= 0)) return { erro: 'Produto inválido' };
+    return { ids };
+  }
+
+  async function conferirExclusao(db, ids, bloquear = false) {
+    const produtos = (await db.query(
+      `SELECT id, nome, codigo_sku, tamanho, estoque FROM produtos WHERE id = ANY($1) ORDER BY nome, id
+       ${bloquear ? 'FOR UPDATE' : ''}`, [ids]
+    )).rows;
+    const emMaleta = (await db.query(
+      `SELECT produto_id, COUNT(*)::int AS pecas, array_agg(DISTINCT pedido_id) FILTER (WHERE pedido_id IS NOT NULL) AS pedidos
+       FROM maleta_pecas WHERE produto_id = ANY($1) GROUP BY produto_id`, [ids]
+    )).rows;
+    const emPedido = (await db.query(
+      `SELECT (i->>'produto_id')::int AS produto_id, array_agg(DISTINCT pe.id ORDER BY pe.id) AS pedidos
+       FROM pedidos pe CROSS JOIN LATERAL jsonb_array_elements(pe.itens) i
+       WHERE pe.status IN ('NOVO', 'EM_ANDAMENTO') AND i->>'produto_id' = ANY($1::text[])
+       GROUP BY 1`, [ids.map(String)]
+    )).rows;
+    const emEncomenda = (await db.query(
+      `SELECT produto_id, array_agg(id ORDER BY id) AS encomendas FROM encomendas
+       WHERE produto_id = ANY($1) AND status NOT IN ('ENTREGUE', 'CANCELADA') GROUP BY produto_id`, [ids]
+    )).rows;
+    const porId = (rows) => new Map(rows.map((r) => [Number(r.produto_id), r]));
+    const maletas = porId(emMaleta);
+    const pedidos = porId(emPedido);
+    const encomendas = porId(emEncomenda);
+    const encontrados = new Set(produtos.map((p) => Number(p.id)));
+    return {
+      produtos: produtos.map((p) => {
+        const bloqueios = [];
+        const m = maletas.get(p.id);
+        if (m) {
+          const num = (m.pedidos || []).map((x) => `#${x}`).join(', ');
+          bloqueios.push(`${m.pecas} peça(s) em maleta com cliente${num ? ` (pedido ${num})` : ''}. Faça o acerto da maleta antes.`);
+        }
+        const pe = pedidos.get(p.id);
+        if (pe) bloqueios.push(`Está no pedido aberto ${pe.pedidos.map((x) => `#${x}`).join(', ')}. Entregue ou cancele o pedido antes.`);
+        const en = encomendas.get(p.id);
+        const avisos = en ? [`Tem encomenda aberta (${en.encomendas.map((x) => `#${x}`).join(', ')}). Ela continua, com o modelo e o SKU copiados.`] : [];
+        return { id: p.id, nome: p.nome, codigo_sku: p.codigo_sku, tamanho: p.tamanho, estoque: p.estoque, bloqueios, avisos };
+      }),
+      nao_encontrados: ids.filter((id) => !encontrados.has(id)),
+    };
+  }
+
+  async function handleConferirExclusao(req, res) {
+    const { ids, erro } = idsParaExcluir(req.body);
+    if (erro) return res.status(400).json({ error: erro });
+    try {
+      res.json(await conferirExclusao(req.db, ids));
+    } catch (err) {
+      console.error(err);
+      res.status(500).json({ error: 'Erro ao conferir os produtos' });
+    }
+  }
+
+  async function handleExcluirProdutos(req, res) {
+    const { ids, erro } = idsParaExcluir(req.body);
+    if (erro) return res.status(400).json({ error: erro });
+    if ((req.body || {}).confirmacao !== CONFIRMACAO_EXCLUIR) {
+      return res.status(400).json({ error: `Digite ${CONFIRMACAO_EXCLUIR} para confirmar` });
+    }
+    let client;
+    try {
+      client = await req.db.connect();
+      await client.query('BEGIN');
+      const conferencia = await conferirExclusao(client, ids, true);
+      const bloqueados = conferencia.produtos.filter((p) => p.bloqueios.length);
+      if (bloqueados.length || conferencia.nao_encontrados.length) {
+        await client.query('ROLLBACK');
+        return res.status(409).json({
+          error: bloqueados.length
+            ? `${bloqueados.length} produto(s) não podem ser excluídos agora. Nada foi apagado.`
+            : 'Algum produto já não existe (a lista mudou). Nada foi apagado.',
+          ...conferencia,
+        });
+      }
+      const logo = idDaImagem((await lojaDaEmpresa(req.empresa)).logo);
+      const apagados = (await client.query(
+        `DELETE FROM produtos WHERE id = ANY($1)
+         RETURNING id, nome, codigo_sku, (fotos || ARRAY[imagem_url]) AS urls`, [ids]
+      )).rows;
+      // Fotos que nenhum outro produto usa (a logo nunca sai)
+      const fotos = [...new Set(apagados.flatMap((p) => (p.urls || []).map(idDaImagem)).filter((id) => id && id !== logo))];
+      if (fotos.length) {
+        await client.query(
+          `DELETE FROM imagens i WHERE i.id = ANY($1)
+             AND NOT EXISTS (SELECT 1 FROM produtos p WHERE ('/imagens/' || i.id) = ANY(p.fotos || ARRAY[p.imagem_url]))`,
+          [fotos]
+        );
+      }
+      await client.query('COMMIT');
+      console.log(`[${req.empresa.slug}] acerto de estoque: ${apagados.length} produto(s) excluído(s) por ${req.admin && req.admin.user}: ${apagados.map((p) => p.codigo_sku).join(', ')}`);
+      res.json({ excluidos: apagados.map(({ id, nome, codigo_sku }) => ({ id, nome, codigo_sku })) });
+    } catch (err) {
+      if (client) await client.query('ROLLBACK').catch(() => {});
+      console.error(err);
+      res.status(500).json({ error: 'Erro ao excluir. Nada foi apagado.' });
+    } finally {
+      if (client) client.release();
+    }
+  }
+
   async function handleMetrics(req, res) {
     try {
       // Peças = estoque na loja + peças em maletas
@@ -3191,6 +3309,8 @@ async function startServer() {
   app.get('/api/admin/produtos', requireAdmin, handleListAdmin);
   app.post('/api/admin/produtos/lote', requireAdmin, handleCreateLote);
   app.put('/api/admin/produtos/lote', requireAdmin, handleUpdateLote);
+  app.post('/api/admin/produtos/excluir/conferir', requireAdmin, handleConferirExclusao);
+  app.post('/api/admin/produtos/excluir', requireAdmin, handleExcluirProdutos);
   app.post('/api/admin/importar-url', requireAdmin, handleImportarUrl);
   app.post('/api/admin/importar-imagem', requireAdmin, handleImportarImagem);
   app.get('/api/admin/produtos/:id/compras', requireAdmin, handleListCompras);
