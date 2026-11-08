@@ -193,7 +193,7 @@ describe('Provador: desenharOculos', () => {
 });
 
 describe('Provador: botão nos detalhes do produto', () => {
-  const FUNCOES = ['escapeHtml', 'fotosDoProduto', 'indiceCircular', 'ehSobEncomenda', 'calcularSinal',
+  const FUNCOES = ['escapeHtml', 'fotosDoProduto', 'fotoProvador', 'indiceCircular', 'ehSobEncomenda', 'calcularSinal',
     'etiquetaProduto', 'especificacoesProduto', 'renderizarDetalhes', 'ordemTamanho', 'agruparCards', 'nomeModelo', 'grupoDoProduto', 'botoesTamanho'];
 
   function detalhesDe(produto) {
@@ -213,14 +213,16 @@ describe('Provador: botão nos detalhes do produto', () => {
 
   const base = { id: 7, nome: 'Aviador', codigo_sku: 'AV-1', preco_venda: '199.90', status: 'disponivel' };
 
-  it('aparece quando o produto tem foto e abre o provador daquele produto', () => {
-    const html = detalhesDe({ ...base, fotos: ['/imagens/aaa'], imagem_url: '/imagens/aaa' });
+  it('aparece quando o produto tem a foto do provador (foto 4) e abre o provador daquele produto', () => {
+    const html = detalhesDe({ ...base, fotos: ['/imagens/aaa'], imagem_url: '/imagens/aaa', foto_provador: '/imagens/ppp' });
     assert.match(html, /onclick="abrirProvador\(7\)"[^>]*>Provar virtualmente</);
+    // a foto do provador nunca entra na galeria do visitante
+    assert.doesNotMatch(html, /\/imagens\/ppp/);
   });
 
-  it('não aparece em produto sem foto', () => {
-    const html = detalhesDe({ ...base, fotos: [], imagem_url: null });
-    assert.doesNotMatch(html, /Provar virtualmente/);
+  it('não aparece sem a foto 4, mesmo com foto de capa (sem usar a capa no lugar)', () => {
+    assert.doesNotMatch(detalhesDe({ ...base, fotos: ['/imagens/aaa'], imagem_url: '/imagens/aaa', foto_provador: null }), /Provar virtualmente/);
+    assert.doesNotMatch(detalhesDe({ ...base, fotos: [], imagem_url: null }), /Provar virtualmente/);
   });
 
   it('o título do provador entra por textContent (sem innerHTML com o nome do produto)', () => {
@@ -274,15 +276,15 @@ describe('Provador: tamanho real pela íris', () => {
 describe('Provador: troca de modelo, maleta e fotos', () => {
   const PAYLOAD = '"><img src=x onerror=alert(1)>';
   const produtosTeste = [
-    { id: 1, nome: `Aviador ${PAYLOAD}`, fotos: ['/imagens/a'], largura_total_cm: '14.2' },
-    { id: 2, nome: 'Redondo', fotos: ['/imagens/b'] },
-    { id: 3, nome: 'Sem foto', fotos: [] },
+    { id: 1, nome: `Aviador ${PAYLOAD}`, fotos: ['/imagens/capa-a'], foto_provador: '/imagens/a', largura_total_cm: '14.2' },
+    { id: 2, nome: 'Redondo', fotos: ['/imagens/capa-b'], foto_provador: '/imagens/b' },
+    { id: 3, nome: 'Sem foto do provador', fotos: ['/imagens/capa-c'], foto_provador: null },
   ];
 
   function provadorCtx(extra = {}) {
     const el = () => ({ innerHTML: '', textContent: '', hidden: null, classList: { toggle(c, v) { this.dono.hidden = v; } }, setAttribute() {} });
     const fazer = () => { const e = el(); e.classList.dono = e; return e; };
-    return carregar(['escapeHtml', 'fotosDoProduto', 'ehSobEncomenda', 'passaFiltroStatus', 'modelosProvador', 'renderizarFiltrosProvador', 'renderizarCarrosselProvador', 'textoTamanhoProvador', 'renderizarFotosProvador', 'aplicarFiltroProvador'], {
+    return carregar(['escapeHtml', 'fotosDoProduto', 'fotoProvador', 'ehSobEncomenda', 'passaFiltroStatus', 'modelosProvador', 'renderizarFiltrosProvador', 'renderizarCarrosselProvador', 'textoTamanhoProvador', 'renderizarFotosProvador', 'aplicarFiltroProvador'], {
       produtos: produtosTeste,
       provador: { produtoId: 2, fotos: [] },
       carrosselProvador: fazer(),
@@ -300,6 +302,9 @@ describe('Provador: troca de modelo, maleta e fotos', () => {
     ctx.renderizarCarrosselProvador();
     const html = ctx.carrosselProvador.innerHTML;
     assert.equal((html.match(/trocarOculosProvador\(/g) || []).length, 2);
+    // miniaturas com a foto do provador, não a capa
+    assert.match(html, /src="\/imagens\/a"/);
+    assert.doesNotMatch(html, /capa-/);
     assert.match(html, /trocarOculosProvador\(2\)[^>]*border-orange-500[^>]*aria-current="true"/);
     assert.doesNotMatch(html, /<img src=x/);
     assert.match(html, /&quot;&gt;&lt;img src=x/);
@@ -314,11 +319,11 @@ describe('Provador: troca de modelo, maleta e fotos', () => {
 
   describe('filtros dentro do provador', () => {
     const catalogo = [
-      { id: 1, nome: 'Rex Aviador', formato: 'Aviador', fotos: ['/a'], status: 'DISPONIVEL', disponibilidade: 'PRONTA_ENTREGA' },
-      { id: 2, nome: 'Ptera Gatinho', formato: 'Gatinho', fotos: ['/b'], status: 'DISPONIVEL', disponibilidade: 'SOB_ENCOMENDA' },
-      { id: 3, nome: 'Stego Oval', formato: 'Oval', fotos: ['/c'], status: 'DISPONIVEL', disponibilidade: 'PRONTA_ENTREGA' },
-      { id: 4, nome: 'Bronto Aviador', formato: 'Aviador', fotos: ['/d'], status: 'DISPONIVEL', disponibilidade: 'SOB_ENCOMENDA' },
-      { id: 5, nome: 'Sem foto', formato: 'Quadrado', fotos: [], status: 'DISPONIVEL', disponibilidade: 'PRONTA_ENTREGA' },
+      { id: 1, nome: 'Rex Aviador', formato: 'Aviador', fotos: ['/a'], foto_provador: '/a', status: 'DISPONIVEL', disponibilidade: 'PRONTA_ENTREGA' },
+      { id: 2, nome: 'Ptera Gatinho', formato: 'Gatinho', fotos: ['/b'], foto_provador: '/b', status: 'DISPONIVEL', disponibilidade: 'SOB_ENCOMENDA' },
+      { id: 3, nome: 'Stego Oval', formato: 'Oval', fotos: ['/c'], foto_provador: '/c', status: 'DISPONIVEL', disponibilidade: 'PRONTA_ENTREGA' },
+      { id: 4, nome: 'Bronto Aviador', formato: 'Aviador', fotos: ['/d'], foto_provador: '/d', status: 'DISPONIVEL', disponibilidade: 'SOB_ENCOMENDA' },
+      { id: 5, nome: 'Sem foto', formato: 'Quadrado', fotos: ['/e'], foto_provador: null, status: 'DISPONIVEL', disponibilidade: 'PRONTA_ENTREGA' },
     ];
     const ids = (html) => [...html.matchAll(/trocarOculosProvador\((\d+)\)/g)].map(m => Number(m[1]));
 

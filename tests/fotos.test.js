@@ -52,8 +52,57 @@ describe('API: até 4 fotos por produto', () => {
     assert.equal(body.imagem_url, body.fotos[0]);
     for (let i = 0; i < 4; i++) assert.deepEqual(await bytes(body.fotos[i]), png(i + 1));
 
+    // Loja de óculos: o visitante recebe só as fotos 1 a 3; a 4 vai à parte, para o provador
     const pub = await (await fetch(srv.url('/api/produtos'))).json();
-    assert.deepEqual(pub[0].fotos, body.fotos);
+    assert.deepEqual(pub[0].fotos, body.fotos.slice(0, 3));
+    assert.equal(pub[0].foto_provador, body.fotos[3]);
+  });
+
+  it('a foto 4 tem posição fixa: sozinha, não vira capa nem aparece na vitrine', async () => {
+    const { status, body } = await enviar('POST', '/api/produtos', formulario(base('SO4'), { foto4: png(4) }));
+    assert.equal(status, 201);
+    assert.equal(body.fotos.length, 4);
+    assert.deepEqual(body.fotos.slice(0, 3), [null, null, null]);
+    assert.deepEqual(await bytes(body.fotos[3]), png(4));
+    assert.equal(body.imagem_url, null);
+
+    const pub = await (await fetch(srv.url('/api/produtos'))).json();
+    assert.deepEqual(pub[0].fotos, []);
+    assert.equal(pub[0].foto_provador, body.fotos[3]);
+  });
+
+  it('sem foto 4, o produto não tem foto do provador', async () => {
+    await enviar('POST', '/api/produtos', formulario(base('SEM4'), { foto1: png(1), foto2: png(2) }));
+    const pub = await (await fetch(srv.url('/api/produtos'))).json();
+    assert.equal(pub[0].fotos.length, 2);
+    assert.equal(pub[0].foto_provador, null);
+  });
+
+  it('remover a foto 1 promove a seguinte a capa e a foto 4 continua na posição 4', async () => {
+    const { body: p } = await enviar('POST', '/api/produtos',
+      formulario(base('P4'), { foto1: png(1), foto2: png(2), foto4: png(4) }));
+    assert.deepEqual(p.fotos.slice(2, 3), [null]);
+    const r = await enviar('PUT', `/api/produtos/${p.id}`, formulario({ fotos_manter: [null, p.fotos[1], null, p.fotos[3]] }));
+    assert.equal(r.status, 200);
+    assert.deepEqual(r.body.fotos, [p.fotos[1], null, null, p.fotos[3]]);
+    assert.equal(r.body.imagem_url, p.fotos[1]);
+    assert.equal(await bytes(p.fotos[0]), 404);
+  });
+
+  it('fora da loja de óculos a foto 4 é uma foto comum da vitrine', async () => {
+    const { body } = await enviar('POST', '/api/produtos',
+      formulario(base('G4'), { foto1: png(1), foto4: png(4) }));
+    await h.pool.query(`INSERT INTO configuracoes (chave, valor) VALUES ('loja_nicho', 'geral')
+                        ON CONFLICT (chave) DO UPDATE SET valor = EXCLUDED.valor`);
+    const outro = await h.iniciarServidor();
+    try {
+      const pub = await (await fetch(outro.url('/api/produtos'))).json();
+      assert.deepEqual(pub[0].fotos, [body.fotos[0], body.fotos[3]]);
+      assert.equal(pub[0].foto_provador, null);
+    } finally {
+      await outro.parar();
+      await h.pool.query(`DELETE FROM configuracoes WHERE chave = 'loja_nicho'`);
+    }
   });
 
   it('pula posições vazias e aceita o campo antigo "imagem" como foto 1', async () => {
@@ -92,10 +141,11 @@ describe('API: até 4 fotos por produto', () => {
       formulario({ nome: 'Novo nome', fotos_manter: [f1, null, null, null] }, { foto2: png(22), foto4: png(4) }));
     assert.equal(r.status, 200);
     assert.equal(r.body.nome, 'Novo nome');
-    assert.equal(r.body.fotos.length, 3);
+    assert.equal(r.body.fotos.length, 4);
     assert.equal(r.body.fotos[0], f1);
     assert.deepEqual(await bytes(r.body.fotos[1]), png(22));
-    assert.deepEqual(await bytes(r.body.fotos[2]), png(4));
+    assert.equal(r.body.fotos[2], null);
+    assert.deepEqual(await bytes(r.body.fotos[3]), png(4));
     assert.equal(await bytes(f2), 404);
     assert.equal(await bytes(f3), 404);
   });
@@ -173,7 +223,7 @@ function extrairFuncao(html, nome) {
   }
 }
 
-const FUNCOES = ['ordemTamanho', 'agruparCards', 'nomeModelo', 'tamanhosCard', 'botaoGrupoCard', 'grupoDoProduto', 'botoesTamanho', 'escapeHtml', 'fotosDoProduto', 'indiceCircular', 'ehSobEncomenda', 'calcularSinal', 'passaFiltroStatus',
+const FUNCOES = ['ordemTamanho', 'agruparCards', 'nomeModelo', 'tamanhosCard', 'botaoGrupoCard', 'grupoDoProduto', 'botoesTamanho', 'escapeHtml', 'fotosDoProduto', 'fotoProvador', 'indiceCircular', 'ehSobEncomenda', 'calcularSinal', 'passaFiltroStatus',
   'etiquetaProduto', 'nomeCard', 'tagsCard', 'botaoMaletaCard', 'passaFiltroGenero', 'renderizarCatalogo', 'trocarFotoCard', 'especificacoesProduto', 'renderizarDetalhes', 'mostrarFotoDetalhes'];
 
 function vitrine(produtos) {
@@ -218,7 +268,17 @@ describe('vitrine: carrossel de fotos', () => {
   it('card de produto com uma foto (ou só imagem_url antiga) não tem setas', () => {
     const { cards } = vitrine([{ ...produto, fotos: undefined }]);
     assert.match(cards[0].innerHTML, new RegExp(`src="${fotos[0]}"`));
-    assert.doesNotMatch(cards[0].innerHTML, /trocarFotoCard|data-dot/);
+    assert.doesNotMatch(cards[0].innerHTML, /trocarFotoCard|data-dot|data-foto-alt/);
+  });
+
+  it('a foto 2 fica por cima da capa (mouse em cima / troca a cada 2 s); a foto 4 nunca entra', () => {
+    const { cards } = vitrine([{ ...produto, foto_provador: '/imagens/' + 'p'.repeat(32) }]);
+    const html = cards[0].innerHTML;
+    assert.match(html, new RegExp(`data-foto-alt src="${fotos[1]}"[^>]*class="foto-alt `));
+    assert.doesNotMatch(html, /pppp/);
+    const fonte = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
+    assert.match(fonte, /@media \(hover: hover\) \{ \.card-produto:hover \.foto-alt \{ opacity: 1; \} \}/);
+    assert.match(fonte, /semMouse\?\.matches && !document\.hidden\) catalogoGrid\.classList\.toggle\('fotos-alternadas'\)[\s\S]{0,120}\}, 2000\)/);
   });
 
   it('detalhes mostram a foto escolhida, miniaturas e contador, e as setas dão a volta', () => {
