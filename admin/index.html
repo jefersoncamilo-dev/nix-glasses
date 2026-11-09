@@ -789,6 +789,28 @@
           <button id="btnSalvarLoja" class="mt-6 bg-orange-500 hover:bg-orange-600 text-white px-6 py-2 rounded-lg font-medium transition-colors">Salvar dados da loja</button>
         </div>
 
+        <!-- Zerar um cadastro de cada vez (só o dono): cada linha mostra quantos existem
+             hoje; o botão abre o que sai, o que fica e os avisos, e pede ZERAR. -->
+        <div id="cardZerarCadastros" class="so-dono hidden bg-white rounded-xl border border-red-200 p-6 max-w-xl mt-6">
+          <h4 class="text-base font-semibold text-red-700 mb-1">Zerar um cadastro</h4>
+          <p class="text-sm text-gray-600 mb-4">Apaga só o cadastro escolhido, de uma vez. <strong>Não tem como desfazer.</strong> Antes, faça um backup do banco (no Neon: crie uma branch a partir da main). Se algo estiver em uso (peça numa maleta ou pedido em aberto), nada é apagado e aparece o que fazer antes.</p>
+          <div id="listaZerarCadastros" class="divide-y divide-gray-100 border border-gray-100 rounded-lg">
+            <p class="p-3 text-sm text-gray-500">Carregando...</p>
+          </div>
+          <div id="painelZerarCadastro" class="hidden mt-4 border border-red-200 bg-red-50/40 rounded-lg p-4">
+            <h5 id="zerarCadastroTitulo" class="text-sm font-semibold text-red-700 mb-2"></h5>
+            <div id="zerarCadastroPrevia" class="text-sm text-gray-700 mb-3"></div>
+            <div id="zerarCadastroConfirmar">
+              <label for="zerarCadastroConfirmacao" class="block text-sm font-medium text-gray-700 mb-1">Para confirmar, digite ZERAR</label>
+              <input type="text" id="zerarCadastroConfirmacao" autocomplete="off" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 mb-3 bg-white">
+            </div>
+            <div class="flex flex-wrap gap-2">
+              <button id="btnZerarCadastro" disabled class="bg-red-600 hover:bg-red-700 disabled:opacity-40 disabled:cursor-not-allowed text-white px-5 py-2 rounded-lg font-medium transition-colors">Zerar</button>
+              <button id="btnCancelarZerarCadastro" class="bg-white border border-gray-200 hover:bg-gray-100 text-gray-700 px-4 py-2 rounded-lg font-medium transition-colors">Cancelar</button>
+            </div>
+          </div>
+        </div>
+
         <!-- Zerar dados de teste: só o banco da empresa logada, com confirmação digitada. Só o dono. -->
         <div id="cardZerar" class="so-dono hidden bg-white rounded-xl border border-red-200 p-6 max-w-xl mt-6">
           <h4 class="text-base font-semibold text-red-700 mb-1">Zerar dados de teste</h4>
@@ -4842,9 +4864,12 @@
       try {
         const res = await fetchAdmin('/api/admin/zerar');
         if (!res.ok) throw new Error();
-        el.textContent = textoContagemZerar(await res.json());
+        const c = await res.json();
+        el.textContent = textoContagemZerar(c);
+        renderListaZerarCadastros(c);
       } catch (err) {
         el.textContent = 'Não foi possível contar os dados agora.';
+        renderListaZerarCadastros(null);
       }
     }
 
@@ -4870,6 +4895,7 @@
         if (!res.ok) throw new Error(data.error || 'Erro ao zerar os dados');
         campo.value = '';
         document.getElementById('zerarContagem').textContent = textoContagemZerar(data.agora);
+        renderListaZerarCadastros(data.agora);
         mostrarToast('Dados zerados. Pode cadastrar os produtos reais.');
         carregarProdutos();
         carregarPedidosGeral();
@@ -4969,6 +4995,127 @@
       }
     });
 
+
+    // Configurações > Zerar um cadastro (um de cada vez, só o dono)
+    const CADASTROS_ZERAR = [
+      ['produtos', 'Produtos', 'produto', 'produtos'],
+      ['clientes', 'Clientes', 'cliente', 'clientes'],
+      ['pedidos', 'Pedidos', 'pedido', 'pedidos'],
+      ['acertos', 'Acertos', 'acerto', 'acertos'],
+      ['encomendas', 'Encomendas', 'encomenda', 'encomendas'],
+      ['acessorios', 'Acessórios', 'acessório', 'acessórios'],
+    ];
+    let zerarCadastroAberto = null;
+
+    function renderListaZerarCadastros(c) {
+      const lista = document.getElementById('listaZerarCadastros');
+      if (!c) { lista.innerHTML = '<p class="p-3 text-sm text-gray-500">Não foi possível contar os dados agora.</p>'; return; }
+      lista.innerHTML = CADASTROS_ZERAR.map(([chave, titulo, um, varios]) => {
+        const n = Number(c[chave]) || 0;
+        return '<div class="flex items-center justify-between gap-3 px-3 py-2.5">' +
+          '<div class="min-w-0"><p class="text-sm font-medium text-gray-900">' + escapeHtml(titulo) + '</p>' +
+          '<p class="text-xs text-gray-500">' + escapeHtml(n ? plural(n, um, varios) + ' hoje' : 'Nenhum cadastrado') + '</p></div>' +
+          '<button type="button" data-zerar-cadastro="' + chave + '" ' + (n ? '' : 'disabled ') +
+          'class="shrink-0 bg-white border border-red-200 hover:bg-red-50 disabled:opacity-40 disabled:cursor-not-allowed text-red-700 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors">Zerar ' +
+          escapeHtml(varios) + '</button></div>';
+      }).join('');
+    }
+
+    const listaHtml = (itens, classe) => '<ul class="list-disc pl-5 ' + (classe || '') + '">' + itens.map((t) => '<li>' + escapeHtml(t) + '</li>').join('') + '</ul>';
+
+    function htmlPreviaZerarCadastro(p) {
+      const partes = [];
+      if (p.total_bloqueados) {
+        partes.push('<div class="mb-3 rounded-lg border border-red-300 bg-white p-3">' +
+          '<p class="font-semibold text-red-700 mb-1">Ainda não dá para zerar: ' + escapeHtml(plural(p.total_bloqueados, 'item está', 'itens estão')) + ' em uso. Resolva antes:</p>' +
+          '<ul class="space-y-1">' + p.bloqueados.map((b) => '<li><strong>' + escapeHtml(b.titulo) + ':</strong> ' + escapeHtml(b.bloqueios.join(' ')) + '</li>').join('') + '</ul>' +
+          (p.total_bloqueados > p.bloqueados.length ? '<p class="mt-1 text-gray-500">e mais ' + (p.total_bloqueados - p.bloqueados.length) + '.</p>' : '') +
+          '</div>');
+      }
+      partes.push('<p class="font-medium">Sai:</p>' + listaHtml(p.sai, 'mb-2'));
+      partes.push('<p class="font-medium">Fica:</p>' + listaHtml(p.fica, 'mb-2 text-gray-600'));
+      if (p.avisos && p.avisos.length) partes.push('<p class="font-medium text-amber-700">Atenção:</p>' + listaHtml(p.avisos, 'text-amber-700'));
+      return partes.join('');
+    }
+
+    function fecharZerarCadastro() {
+      zerarCadastroAberto = null;
+      document.getElementById('painelZerarCadastro').classList.add('hidden');
+      document.getElementById('zerarCadastroConfirmacao').value = '';
+      document.getElementById('btnZerarCadastro').disabled = true;
+    }
+
+    async function abrirZerarCadastro(chave) {
+      const info = CADASTROS_ZERAR.find((x) => x[0] === chave);
+      if (!info) return;
+      zerarCadastroAberto = { chave, pode: false };
+      const painel = document.getElementById('painelZerarCadastro');
+      const previa = document.getElementById('zerarCadastroPrevia');
+      document.getElementById('zerarCadastroTitulo').textContent = 'Zerar ' + info[3];
+      document.getElementById('btnZerarCadastro').textContent = 'Zerar ' + info[3];
+      document.getElementById('zerarCadastroConfirmacao').value = '';
+      document.getElementById('btnZerarCadastro').disabled = true;
+      document.getElementById('zerarCadastroConfirmar').classList.add('hidden');
+      previa.textContent = 'Conferindo o que vai sair...';
+      painel.classList.remove('hidden');
+      painel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      try {
+        const res = await fetchAdmin('/api/admin/zerar/' + chave);
+        const p = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(p.error || 'Erro ao conferir');
+        if (!zerarCadastroAberto || zerarCadastroAberto.chave !== chave) return;
+        previa.innerHTML = htmlPreviaZerarCadastro(p);
+        zerarCadastroAberto.pode = !!p.pode_zerar;
+        document.getElementById('zerarCadastroConfirmar').classList.toggle('hidden', !p.pode_zerar);
+      } catch (err) {
+        previa.textContent = err.message || 'Não foi possível conferir agora.';
+      }
+    }
+
+    document.getElementById('listaZerarCadastros').addEventListener('click', (e) => {
+      const botao = e.target.closest('[data-zerar-cadastro]');
+      if (botao) abrirZerarCadastro(botao.dataset.zerarCadastro);
+    });
+    document.getElementById('btnCancelarZerarCadastro').addEventListener('click', fecharZerarCadastro);
+    document.getElementById('zerarCadastroConfirmacao').addEventListener('input', (e) => {
+      document.getElementById('btnZerarCadastro').disabled = !(zerarCadastroAberto && zerarCadastroAberto.pode) || e.target.value.trim() !== 'ZERAR';
+    });
+
+    document.getElementById('btnZerarCadastro').addEventListener('click', async () => {
+      if (!zerarCadastroAberto) return;
+      const { chave } = zerarCadastroAberto;
+      const botao = document.getElementById('btnZerarCadastro');
+      const campo = document.getElementById('zerarCadastroConfirmacao');
+      botao.disabled = true;
+      try {
+        const res = await fetchAdmin('/api/admin/zerar/' + chave, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ confirmacao: campo.value.trim() })
+        });
+        const data = await res.json().catch(() => ({}));
+        if (res.status === 409) {
+          document.getElementById('zerarCadastroPrevia').innerHTML = htmlPreviaZerarCadastro(data);
+          document.getElementById('zerarCadastroConfirmar').classList.add('hidden');
+          zerarCadastroAberto.pode = false;
+          throw new Error(data.error);
+        }
+        if (!res.ok) throw new Error(data.error || 'Erro ao zerar');
+        const info = CADASTROS_ZERAR.find((x) => x[0] === chave);
+        fecharZerarCadastro();
+        mostrarToast(plural(Number(data.apagados) || 0, info[2] + ' apagado', info[3] + ' apagados') + '.');
+        if (data.agora) {
+          renderListaZerarCadastros(data.agora);
+          document.getElementById('zerarContagem').textContent = textoContagemZerar(data.agora);
+        }
+        carregarProdutos();
+        carregarPedidosGeral();
+        carregarEncomendas();
+      } catch (err) {
+        mostrarToast(err.message, 'error');
+        botao.disabled = !(zerarCadastroAberto && zerarCadastroAberto.pode) || campo.value.trim() !== 'ZERAR';
+      }
+    });
     // ---------- Pedido do fornecedor ----------
     // Lê o PDF do pedido no servidor, mostra cada item para conferir (produto novo,
     // reposição de um produto que já existe, acessório ou não lançar) e lança tudo
