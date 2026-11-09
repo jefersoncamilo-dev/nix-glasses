@@ -10,6 +10,7 @@ const { lerEmpresas, empresaDoHost, normalizarHost, identidadeBanco, hostInterno
 const { CAMPOS_TEXTO, lerNicho, limparTextoLoja, montarLoja, renderizarPagina } = require('./loja');
 const master = require('./master');
 const { importarProduto, baixarImagem, ErroImportacao } = require('./importar-produto');
+const { lerPedidoPdf, ErroPedidoPdf } = require('./pedido-fornecedor');
 const usuariosAdmin = require('./usuarios-admin');
 
 const app = express();
@@ -167,6 +168,19 @@ const upload = multer({
     cb(err);
   },
 });
+
+// PDF do pedido do fornecedor (só lido na memória, não é gravado)
+const TAMANHO_MAX_PDF = 15 * 1024 * 1024;
+const pdfPedido = multer({ storage: multer.memoryStorage(), limits: { fileSize: TAMANHO_MAX_PDF, files: 1 } }).single('pdf');
+function uploadPdfPedido(req, res, next) {
+  pdfPedido(req, res, (err) => {
+    if (!err) return next();
+    if (err instanceof multer.MulterError) {
+      return res.status(400).json({ error: err.code === 'LIMIT_FILE_SIZE' ? `PDF muito grande (máximo ${TAMANHO_MAX_PDF / 1024 / 1024} MB)` : 'Envie um PDF só, no campo "pdf"' });
+    }
+    next(err);
+  });
+}
 
 // Grava a imagem enviada na tabela `imagens` e devolve a URL pública (/imagens/<id>).
 async function salvarImagem(db, file) {
@@ -906,6 +920,64 @@ async function reporEstoque(db, produtoId, { custo, quantidade, data, pedido }) 
   return { compra: compra.rows[0], produto };
 }
 
+// Grava as linhas já validadas do cadastro em lote (dentro da transação de quem
+// chama): produto novo, reposição (duplicado com Quantidade) ou ignorado.
+// Usado pelo Cadastro em Lote e pelo lançamento do pedido do fornecedor.
+async function gravarLote(client, produtos) {
+  const existentes = await client.query(
+    `SELECT lower(codigo_sku) AS sku, lower(fornecedor) AS fornecedor, lower(codigo_fornecedor) AS codigo
+     FROM produtos
+     WHERE lower(codigo_sku) = ANY($1) OR (codigo_fornecedor <> '' AND lower(codigo_fornecedor) = ANY($2))`,
+    [produtos.map((p) => p.codigo_sku.toLowerCase()), produtos.map((p) => p.codigo_fornecedor.toLowerCase()).filter(Boolean)]
+  );
+  const duplicados = encontrarDuplicadosLote(produtos, existentes.rows);
+  const ignorados = [];
+  const repostos = [];
+
+  const criados = [];
+  for (const [i, p] of produtos.entries()) {
+    const dup = duplicados.get(i);
+    const compra = { quantidade: p.quantidade || 1, data: p.data_compra, pedido: p.pedido_fornecedor };
+    if (dup && p.quantidade) {
+      // Mesmo SKU primeiro; senão o mesmo código do mesmo fornecedor (pode ser um produto criado linhas acima)
+      const alvo = (await client.query(
+        `SELECT id FROM produtos
+         WHERE lower(codigo_sku) = lower($1) OR ($2 <> '' AND lower(codigo_fornecedor) = lower($2) AND lower(fornecedor) = lower($3))
+         ORDER BY (lower(codigo_sku) = lower($1)) DESC, id LIMIT 1 FOR UPDATE`,
+        [p.codigo_sku, p.codigo_fornecedor, p.fornecedor]
+      )).rows[0];
+      if (alvo) {
+        const r = await reporEstoque(client, alvo.id, { custo: p.preco_custo, ...compra });
+        repostos.push({ linha: i, id: r.produto.id, nome: r.produto.nome, codigo_sku: r.produto.codigo_sku, quantidade: p.quantidade, estoque: r.produto.estoque });
+        continue;
+      }
+    }
+    if (dup) {
+      ignorados.push({ linha: i, codigo_sku: p.codigo_sku, codigo_fornecedor: p.codigo_fornecedor, ...dup });
+      continue;
+    }
+    // ON CONFLICT cobre outro cadastro do mesmo SKU entre a checagem e o INSERT
+    const r = await client.query(
+      `INSERT INTO produtos (nome, codigo_sku, preco_custo, preco_venda, status, disponibilidade, formato, estilo, cor_armacao, fornecedor, codigo_fornecedor, link_fornecedor,
+                             diametro_cm, ponte_cm, largura_total_cm, material, tipo, nome_curto, genero, estoque, tamanho, grade, nome_fornecedor)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23)
+       ON CONFLICT (codigo_sku) DO NOTHING
+       RETURNING *`,
+      [p.nome, p.codigo_sku, p.preco_custo, p.preco_venda, p.status, p.disponibilidade, p.formato, p.estilo, p.cor_armacao, p.fornecedor, p.codigo_fornecedor, p.link_fornecedor,
+        p.diametro_cm, p.ponte_cm, p.largura_total_cm, p.material, p.tipo, p.nome_curto, p.genero, compra.quantidade, p.tamanho, p.grade, p.nome_fornecedor]
+    );
+    if (!r.rows.length) {
+      ignorados.push({ linha: i, codigo_sku: p.codigo_sku, codigo_fornecedor: p.codigo_fornecedor, campo: 'codigo_sku', motivo: 'SKU já cadastrado' });
+      continue;
+    }
+    await registrarCompraCadastro(client, r.rows[0], compra);
+    if (p.status !== 'DISPONIVEL') await aplicarStatusManual(client, r.rows[0].id, p.status);
+    criados.push((await recalcularStatus(client, [r.rows[0].id]))[0]);
+  }
+  ignorados.sort((x, y) => x.linha - y.linha);
+  return { criados, repostos, ignorados };
+}
+
 // Status sai das contas: peça na loja (estoque) = DISPONIVEL; só em maletas =
 // CONDICIONAL; nenhuma = ESGOTADO. pedido_condicional_id fica com a maleta mais
 // antiga da peça, para as telas que mostram uma só.
@@ -1577,59 +1649,9 @@ async function startServer() {
     let client;
     try {
       client = await req.db.connect();
-      const existentes = await client.query(
-        `SELECT lower(codigo_sku) AS sku, lower(fornecedor) AS fornecedor, lower(codigo_fornecedor) AS codigo
-         FROM produtos
-         WHERE lower(codigo_sku) = ANY($1) OR (codigo_fornecedor <> '' AND lower(codigo_fornecedor) = ANY($2))`,
-        [produtos.map((p) => p.codigo_sku.toLowerCase()), produtos.map((p) => p.codigo_fornecedor.toLowerCase()).filter(Boolean)]
-      );
-      const duplicados = encontrarDuplicadosLote(produtos, existentes.rows);
-      const ignorados = [];
-      const repostos = [];
-
       await client.query('BEGIN');
-      const criados = [];
-      for (const [i, p] of produtos.entries()) {
-        const dup = duplicados.get(i);
-        const compra = { quantidade: p.quantidade || 1, data: p.data_compra, pedido: p.pedido_fornecedor };
-        if (dup && p.quantidade) {
-          // Mesmo SKU primeiro; senão o mesmo código do mesmo fornecedor (pode ser um produto criado linhas acima)
-          const alvo = (await client.query(
-            `SELECT id FROM produtos
-             WHERE lower(codigo_sku) = lower($1) OR ($2 <> '' AND lower(codigo_fornecedor) = lower($2) AND lower(fornecedor) = lower($3))
-             ORDER BY (lower(codigo_sku) = lower($1)) DESC, id LIMIT 1 FOR UPDATE`,
-            [p.codigo_sku, p.codigo_fornecedor, p.fornecedor]
-          )).rows[0];
-          if (alvo) {
-            const r = await reporEstoque(client, alvo.id, { custo: p.preco_custo, ...compra });
-            repostos.push({ linha: i, id: r.produto.id, nome: r.produto.nome, codigo_sku: r.produto.codigo_sku, quantidade: p.quantidade, estoque: r.produto.estoque });
-            continue;
-          }
-        }
-        if (dup) {
-          ignorados.push({ linha: i, codigo_sku: p.codigo_sku, codigo_fornecedor: p.codigo_fornecedor, ...dup });
-          continue;
-        }
-        // ON CONFLICT cobre outro cadastro do mesmo SKU entre a checagem e o INSERT
-        const r = await client.query(
-          `INSERT INTO produtos (nome, codigo_sku, preco_custo, preco_venda, status, disponibilidade, formato, estilo, cor_armacao, fornecedor, codigo_fornecedor, link_fornecedor,
-                                 diametro_cm, ponte_cm, largura_total_cm, material, tipo, nome_curto, genero, estoque, tamanho, grade, nome_fornecedor)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23)
-           ON CONFLICT (codigo_sku) DO NOTHING
-           RETURNING *`,
-          [p.nome, p.codigo_sku, p.preco_custo, p.preco_venda, p.status, p.disponibilidade, p.formato, p.estilo, p.cor_armacao, p.fornecedor, p.codigo_fornecedor, p.link_fornecedor,
-            p.diametro_cm, p.ponte_cm, p.largura_total_cm, p.material, p.tipo, p.nome_curto, p.genero, compra.quantidade, p.tamanho, p.grade, p.nome_fornecedor]
-        );
-        if (!r.rows.length) {
-          ignorados.push({ linha: i, codigo_sku: p.codigo_sku, codigo_fornecedor: p.codigo_fornecedor, campo: 'codigo_sku', motivo: 'SKU já cadastrado' });
-          continue;
-        }
-        await registrarCompraCadastro(client, r.rows[0], compra);
-        if (p.status !== 'DISPONIVEL') await aplicarStatusManual(client, r.rows[0].id, p.status);
-        criados.push((await recalcularStatus(client, [r.rows[0].id]))[0]);
-      }
+      const { criados, repostos, ignorados } = await gravarLote(client, produtos);
       await client.query('COMMIT');
-      ignorados.sort((a, b) => a.linha - b.linha);
       res.status(criados.length || repostos.length ? 201 : 200).json({ produtos: criados, repostos, ignorados });
     } catch (err) {
       if (client) await client.query('ROLLBACK').catch(() => {});
@@ -1720,6 +1742,211 @@ async function startServer() {
       res.status(500).json({ error: 'Erro ao salvar as alterações' });
     } finally {
       if (client) client.release();
+    }
+  }
+
+  // ---------- Pedido do fornecedor ----------
+  // Lê o PDF do pedido (número, data, itens com código, quantidade, custo e foto).
+  // Não grava nada: o painel mostra os itens para conferir e depois lança.
+  async function handleLerPedidoFornecedor(req, res) {
+    if (!req.file) return res.status(400).json({ error: 'Envie o PDF do pedido' });
+    try {
+      const pedido = await lerPedidoPdf(req.file.buffer);
+      if (!pedido.itens.length) {
+        return res.status(422).json({ error: 'Não achei itens neste PDF. Ele precisa ter uma linha por item com "x1" e o valor (como a página do pedido na loja do fornecedor).' });
+      }
+      res.json(pedido);
+    } catch (err) {
+      if (err instanceof ErroPedidoPdf) return res.status(400).json({ error: err.message });
+      console.error(err);
+      res.status(500).json({ error: 'Erro ao ler o PDF do pedido' });
+    }
+  }
+
+  // Lança o pedido do fornecedor de uma vez (tudo ou nada):
+  // - produtos: linhas do cadastro em lote (produto novo ou reposição pelo SKU),
+  //   todas com o fornecedor, o nº do pedido e a data do pedido;
+  // - acessorios: estojos, flanelas... somam no estoque do acessório escolhido (id)
+  //   ou criam um acessório novo; cada um registra a compra (custo e quantidade).
+  // Pedido já lançado (mesmo nº e fornecedor) volta 409, a não ser com `forcar`.
+  async function handleLancarPedidoFornecedor(req, res) {
+    const b = req.body || {};
+    const fornecedor = textoCurto(b.fornecedor, 120);
+    const numero = textoCurto(b.numero, 60);
+    const data = lerDataCompra(b.data);
+    const erros = [];
+    if (!numero) erros.push({ campo: 'numero', mensagem: 'Informe o número do pedido' });
+    if (data === false) erros.push({ campo: 'data', mensagem: 'Data inválida (use DD/MM/AAAA)' });
+    const linhas = Array.isArray(b.produtos) ? b.produtos : [];
+    const listaAcessorios = Array.isArray(b.acessorios) ? b.acessorios : [];
+    if (!linhas.length && !listaAcessorios.length) erros.push({ campo: 'itens', mensagem: 'O pedido não tem itens para lançar' });
+    if (linhas.length > MAX_LOTE) erros.push({ campo: 'itens', mensagem: `Máximo de ${MAX_LOTE} produtos por pedido` });
+    if (listaAcessorios.length > MAX_LOTE) erros.push({ campo: 'itens', mensagem: `Máximo de ${MAX_LOTE} acessórios por pedido` });
+    if (listaAcessorios.length && !req.admin.dono && !req.admin.permissoes.includes('acessorios')) {
+      return res.status(403).json({ error: 'Seu usuário não tem acesso a Acessórios: tire os acessórios do pedido ou peça acesso ao dono' });
+    }
+    if (erros.length) return res.status(400).json({ error: erros[0].mensagem, erros });
+
+    const produtos = linhas.map((linha, i) => {
+      const r = validarProdutoLote({ ...linha, fornecedor, pedido_fornecedor: numero, data_compra: data || '', quantidade: linha && linha.quantidade !== undefined && linha.quantidade !== '' ? linha.quantidade : 1 });
+      r.erros.forEach((e) => erros.push({ linha: i, ...e }));
+      return r.produto;
+    });
+    const acessorios = listaAcessorios.map((a, i) => {
+      const item = a && typeof a === 'object' ? a : {};
+      const id = item.id === undefined || item.id === null || item.id === '' ? null : Number(item.id);
+      const nome = textoCurto(item.nome, 100);
+      const quantidade = lerQuantidade(item.quantidade ?? 1);
+      const custo = lerPrecoLote(item.preco_custo ?? 0);
+      const venda = lerPrecoLote(item.preco_venda ?? 0);
+      if (id !== null && !(Number.isInteger(id) && id > 0)) erros.push({ acessorio: i, campo: 'id', mensagem: 'Acessório inválido' });
+      if (id === null && !nome) erros.push({ acessorio: i, campo: 'nome', mensagem: 'Informe o nome do acessório' });
+      if (!quantidade) erros.push({ acessorio: i, campo: 'quantidade', mensagem: 'Quantidade inválida (número inteiro a partir de 1)' });
+      if (!Number.isFinite(custo) || custo < 0 || custo >= 1e6) erros.push({ acessorio: i, campo: 'preco_custo', mensagem: 'Custo inválido' });
+      if (!Number.isFinite(venda) || venda < 0 || venda >= 1e6) erros.push({ acessorio: i, campo: 'preco_venda', mensagem: 'Preço de venda inválido' });
+      return { id, nome, quantidade, custo, venda };
+    });
+    if (erros.length) return res.status(400).json({ error: 'Corrija os itens marcados', erros });
+
+    let client;
+    try {
+      client = await req.db.connect();
+      await client.query('BEGIN');
+      // Trava por pedido: dois cliques em "Lançar" não lançam o mesmo pedido duas vezes
+      await client.query('SELECT pg_advisory_xact_lock(hashtext($1))', [`pedido-fornecedor:${fornecedor.toLowerCase()}:${numero.toLowerCase()}`]);
+      if (b.forcar !== true) {
+        const ja = (await client.query(
+          `SELECT min(created_at) AS lancado_em, sum(quantidade)::int AS pecas FROM (
+             SELECT created_at, quantidade FROM compras_fornecedor WHERE lower(pedido_fornecedor) = lower($1) AND (lower(fornecedor) = lower($2) OR fornecedor = '')
+             UNION ALL
+             SELECT created_at, quantidade FROM compras_acessorio WHERE lower(pedido_fornecedor) = lower($1) AND (lower(fornecedor) = lower($2) OR fornecedor = '')
+           ) c`,
+          [numero, fornecedor]
+        )).rows[0];
+        if (ja && ja.lancado_em) {
+          await client.query('ROLLBACK');
+          return res.status(409).json({ error: `O pedido ${numero}${fornecedor ? ` de ${fornecedor}` : ''} já foi lançado (${ja.pecas} peça(s))`, ja_lancado: true, lancado_em: ja.lancado_em, pecas: ja.pecas });
+        }
+      }
+      const { criados, repostos, ignorados } = produtos.length ? await gravarLote(client, produtos) : { criados: [], repostos: [], ignorados: [] };
+      const acessoriosGravados = [];
+      for (const a of acessorios) {
+        const custo = Math.round(a.custo * 100) / 100;
+        const r = a.id !== null
+          ? await client.query(
+            `UPDATE acessorios SET estoque = estoque + $2, preco_custo = $3, updated_at = CURRENT_TIMESTAMP
+             WHERE id = $1 RETURNING id, nome, estoque, preco_venda, preco_custo`,
+            [a.id, a.quantidade, custo])
+          : await client.query(
+            `INSERT INTO acessorios (nome, preco_venda, estoque, preco_custo) VALUES ($1, $2, $3, $4)
+             RETURNING id, nome, estoque, preco_venda, preco_custo`,
+            [a.nome, Math.round(a.venda * 100) / 100, a.quantidade, custo]);
+        if (!r.rows.length) {
+          await client.query('ROLLBACK');
+          return res.status(400).json({ error: 'Acessório não encontrado (foi excluído?)', erros: [{ acessorio: acessorios.indexOf(a), campo: 'id', mensagem: 'Acessório não encontrado' }] });
+        }
+        await client.query(
+          `INSERT INTO compras_acessorio (acessorio_id, fornecedor, preco_custo, quantidade, data_compra, pedido_fornecedor)
+           VALUES ($1, $2, $3, $4, COALESCE($5::date, CURRENT_DATE), $6)`,
+          [r.rows[0].id, fornecedor, custo, a.quantidade, data || null, numero]
+        );
+        acessoriosGravados.push({ ...r.rows[0], quantidade: a.quantidade, novo: a.id === null });
+      }
+      await client.query('COMMIT');
+      res.status(201).json({ produtos: criados, repostos, ignorados, acessorios: acessoriosGravados });
+    } catch (err) {
+      if (client) await client.query('ROLLBACK').catch(() => {});
+      console.error(err);
+      res.status(500).json({ error: 'Erro ao lançar o pedido' });
+    } finally {
+      if (client) client.release();
+    }
+  }
+
+  // Compras de produtos e acessórios com nº de pedido, uma linha por peça comprada
+  const COMPRAS_COM_PEDIDO = `
+    SELECT 'produto' AS tipo, c.produto_id AS item_id, c.fornecedor, c.pedido_fornecedor, c.data_compra, c.quantidade, c.preco_custo, c.origem, c.created_at
+    FROM compras_fornecedor c WHERE c.pedido_fornecedor <> ''
+    UNION ALL
+    SELECT 'acessorio', c.acessorio_id, c.fornecedor, c.pedido_fornecedor, c.data_compra, c.quantidade, c.preco_custo, 'ACESSORIO', c.created_at
+    FROM compras_acessorio c WHERE c.pedido_fornecedor <> ''`;
+
+  // Relatório: pedidos do fornecedor lançados (cadastro em lote com nº do pedido ou
+  // a tela Pedido do fornecedor), com peças, valor, produtos novos e reposições.
+  async function handleListPedidosFornecedor(req, res) {
+    try {
+      const { rows } = await req.db.query(
+        `SELECT fornecedor, pedido_fornecedor AS numero, to_char(min(data_compra), 'YYYY-MM-DD') AS data_compra,
+                sum(quantidade)::int AS pecas, round(sum(quantidade * preco_custo), 2)::float AS valor,
+                count(*) FILTER (WHERE origem = 'CADASTRO')::int AS novos,
+                count(*) FILTER (WHERE origem = 'REPOSICAO')::int AS reposicoes,
+                count(*) FILTER (WHERE tipo = 'acessorio')::int AS acessorios,
+                min(created_at) AS lancado_em
+         FROM (${COMPRAS_COM_PEDIDO}) c
+         GROUP BY fornecedor, pedido_fornecedor
+         ORDER BY min(data_compra) DESC, min(created_at) DESC
+         LIMIT 500`
+      );
+      res.json(rows);
+    } catch (err) {
+      console.error(err);
+      res.status(500).json({ error: 'Erro ao buscar os pedidos do fornecedor' });
+    }
+  }
+
+  // O que veio num pedido: cada produto/acessório, quantidade, custo, se foi novo ou
+  // reposição, e quantas vezes o produto já foi comprado (em quantos pedidos).
+  async function handleItensPedidoFornecedor(req, res) {
+    const numero = textoCurto(req.query.numero, 60);
+    const fornecedor = textoCurto(req.query.fornecedor, 120);
+    if (!numero) return res.status(400).json({ error: 'Informe o número do pedido' });
+    try {
+      const { rows } = await req.db.query(
+        `SELECT c.tipo, c.item_id AS id, c.quantidade, c.preco_custo::float AS preco_custo, c.origem, to_char(c.data_compra, 'YYYY-MM-DD') AS data_compra,
+                COALESCE(p.nome, a.nome, '(excluído)') AS nome, p.codigo_sku, p.codigo_fornecedor, p.cor_armacao,
+                COALESCE(p.fotos[1], p.imagem_url) AS foto, COALESCE(p.estoque, a.estoque) AS estoque,
+                h.pedidos::int AS pedidos, h.pecas::int AS pecas_compradas
+         FROM (${COMPRAS_COM_PEDIDO}) c
+         LEFT JOIN produtos p ON c.tipo = 'produto' AND p.id = c.item_id
+         LEFT JOIN acessorios a ON c.tipo = 'acessorio' AND a.id = c.item_id
+         LEFT JOIN LATERAL (
+           SELECT count(DISTINCT x.pedido_fornecedor) AS pedidos, sum(x.quantidade) AS pecas
+           FROM (${COMPRAS_COM_PEDIDO}) x WHERE x.tipo = c.tipo AND x.item_id = c.item_id
+         ) h ON true
+         WHERE lower(c.pedido_fornecedor) = lower($1) AND lower(c.fornecedor) = lower($2)
+         ORDER BY c.tipo DESC, c.created_at, nome`,
+        [numero, fornecedor]
+      );
+      res.json(rows);
+    } catch (err) {
+      console.error(err);
+      res.status(500).json({ error: 'Erro ao buscar os itens do pedido' });
+    }
+  }
+
+  // Relatório por produto: em quantos pedidos veio, peças compradas, reposições,
+  // custo (último, menor, maior) e os números dos pedidos.
+  async function handleComprasPorProduto(req, res) {
+    try {
+      const { rows } = await req.db.query(
+        `SELECT p.id, p.nome, p.codigo_sku, p.fornecedor, p.codigo_fornecedor, p.cor_armacao, p.estoque,
+                COALESCE(p.fotos[1], p.imagem_url) AS foto,
+                count(*)::int AS compras, sum(c.quantidade)::int AS pecas,
+                count(*) FILTER (WHERE c.origem = 'REPOSICAO')::int AS reposicoes,
+                count(DISTINCT NULLIF(c.pedido_fornecedor, ''))::int AS pedidos,
+                array_remove(array_agg(DISTINCT NULLIF(c.pedido_fornecedor, '')), NULL) AS numeros_pedidos,
+                to_char(max(c.data_compra), 'YYYY-MM-DD') AS ultima_compra,
+                min(c.preco_custo)::float AS custo_min, max(c.preco_custo)::float AS custo_max,
+                (SELECT x.preco_custo FROM compras_fornecedor x WHERE x.produto_id = p.id ORDER BY x.data_compra DESC, x.id DESC LIMIT 1)::float AS custo_ultimo
+         FROM produtos p JOIN compras_fornecedor c ON c.produto_id = p.id
+         GROUP BY p.id
+         ORDER BY sum(c.quantidade) DESC, count(*) DESC, p.nome
+         LIMIT 1000`
+      );
+      res.json(rows);
+    } catch (err) {
+      console.error(err);
+      res.status(500).json({ error: 'Erro ao buscar o histórico de compras' });
     }
   }
 
@@ -2890,7 +3117,7 @@ async function startServer() {
       const logo = idDaImagem((await lojaDaEmpresa(req.empresa)).logo);
       if (escopo === 'tudo') {
         const tabelas = ['produtos', 'compras_fornecedor', 'maleta_pecas', 'acertos', 'pedidos', 'clientes', 'encomendas'];
-        if (acessorios === true) tabelas.push('acessorios');
+        if (acessorios === true) tabelas.push('acessorios', 'compras_acessorio');
         await client.query(`TRUNCATE ${tabelas.join(', ')} RESTART IDENTITY`);
         // Sem produtos, a única imagem que ainda serve é a logo
         await client.query('DELETE FROM imagens WHERE id IS DISTINCT FROM $1', [logo]);
@@ -3554,6 +3781,11 @@ async function startServer() {
   app.post('/api/admin/produtos/excluir', exigirArea('produtos'), handleExcluirProdutos);
   app.post('/api/admin/importar-url', exigirArea('produtos'), handleImportarUrl);
   app.post('/api/admin/importar-imagem', exigirArea('produtos'), handleImportarImagem);
+  app.post('/api/admin/pedidos-fornecedor/ler', exigirArea('produtos'), uploadPdfPedido, handleLerPedidoFornecedor);
+  app.post('/api/admin/pedidos-fornecedor', exigirArea('produtos'), handleLancarPedidoFornecedor);
+  app.get('/api/admin/pedidos-fornecedor', exigirArea('produtos', 'metricas'), handleListPedidosFornecedor);
+  app.get('/api/admin/pedidos-fornecedor/itens', exigirArea('produtos', 'metricas'), handleItensPedidoFornecedor);
+  app.get('/api/admin/compras/produtos', exigirArea('produtos', 'metricas'), handleComprasPorProduto);
   app.get('/api/admin/produtos/:id/compras', exigirArea('produtos'), handleListCompras);
   app.post('/api/admin/produtos/:id/compras', exigirArea('produtos'), handleCreateCompra);
   app.get('/api/admin/fornecedores/reposicao', exigirArea('metricas', 'produtos'), handleResumoFornecedores);

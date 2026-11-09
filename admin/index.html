@@ -56,6 +56,10 @@
         <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h18M3 14h18M10 3v18M5 3h14a2 2 0 012 2v14a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2z"/></svg>
         Cadastro em Lote
       </a>
+      <a href="#" data-tab="compras" class="tab-btn flex items-center px-4 py-3 text-gray-700 rounded-lg hover:bg-gray-100 font-medium">
+        <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17v-6h6v6m-9 4h12a2 2 0 002-2V7l-5-4H6a2 2 0 00-2 2v14a2 2 0 002 2z"/></svg>
+        Pedidos do fornecedor
+      </a>
       <a href="#" data-tab="acessorios" class="tab-btn flex items-center px-4 py-3 text-gray-700 rounded-lg hover:bg-gray-100 font-medium">
         <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4"/></svg>
         Acessórios
@@ -111,6 +115,7 @@
           <div class="flex flex-col sm:flex-row gap-2">
           <button type="button" data-abrir-fotos-sku class="w-full sm:w-auto justify-center bg-gray-100 hover:bg-gray-200 text-gray-700 px-4 py-2 rounded-lg font-medium transition-colors">Fotos por SKU</button>
           <button id="btnAcertoEstoque" type="button" class="w-full sm:w-auto justify-center bg-white border border-red-300 hover:bg-red-50 text-red-700 px-4 py-2 rounded-lg font-medium transition-colors" title="Excluir produtos definitivamente, um ou vários">Acerto de estoque</button>
+          <button id="btnAbrirPedidoFornecedor" type="button" class="w-full sm:w-auto justify-center bg-gray-100 hover:bg-gray-200 text-gray-700 px-4 py-2 rounded-lg font-medium transition-colors">Lançar pedido do fornecedor</button>
           <button id="btnAbrirLote" type="button" class="w-full sm:w-auto justify-center bg-gray-100 hover:bg-gray-200 text-gray-700 px-4 py-2 rounded-lg font-medium transition-colors">Cadastro em Lote</button>
           <button id="btnNovoProduto" class="w-full sm:w-auto justify-center bg-orange-500 hover:bg-orange-600 text-white px-4 py-2 rounded-lg font-medium transition-colors flex items-center">
             <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
@@ -295,6 +300,96 @@
             </div>
           </div>
           <p id="edicaoResumo" class="text-sm text-gray-500 mt-2"></p>
+        </div>
+      </div>
+
+      <!-- Aba Pedidos do fornecedor: lançar a compra (PDF do pedido) e os relatórios
+           do que veio em cada pedido e do que cada produto já teve de reposição -->
+      <div id="tab-compras" class="tab-content hidden">
+        <div class="inline-flex flex-wrap mb-4 p-1 bg-gray-100 rounded-lg" role="tablist" aria-label="Pedidos do fornecedor">
+          <button type="button" data-modo-compras="lancar" role="tab" aria-selected="true" class="px-4 py-2 rounded-md text-sm font-medium">Lançar pedido</button>
+          <button type="button" data-modo-compras="pedidos" role="tab" aria-selected="false" class="px-4 py-2 rounded-md text-sm font-medium">Pedidos lançados</button>
+          <button type="button" data-modo-compras="produtos" role="tab" aria-selected="false" class="px-4 py-2 rounded-md text-sm font-medium">Compras por produto</button>
+        </div>
+
+        <div id="comprasModoLancar">
+          <div class="mb-4">
+            <h3 class="text-lg font-semibold text-gray-900">Lançar pedido do fornecedor</h3>
+            <p class="text-sm text-gray-500">Envie o PDF do pedido: os itens aparecem com foto, código, quantidade e custo. Confira cada um (produto novo, reposição de um que você já tem, acessório ou não lançar) e clique em Lançar pedido. O estoque e o histórico de compras ficam com o número do pedido.</p>
+          </div>
+          <div class="bg-white rounded-xl border border-gray-200 p-4 mb-4">
+            <div class="grid sm:grid-cols-2 lg:grid-cols-4 gap-3">
+              <label class="block text-sm">
+                <span class="font-medium text-gray-700">Fornecedor</span>
+                <input type="text" id="pfFornecedor" maxlength="120" list="listaFornecedores" class="mt-1 w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500" placeholder="Ex.: Tassia Nunes Atacado">
+              </label>
+              <label class="block text-sm">
+                <span class="font-medium text-gray-700">Nº do pedido</span>
+                <input type="text" id="pfNumero" maxlength="60" class="mt-1 w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500" placeholder="Ex.: 16612">
+              </label>
+              <label class="block text-sm">
+                <span class="font-medium text-gray-700">Data do pedido</span>
+                <input type="text" id="pfData" maxlength="10" inputmode="numeric" class="mt-1 w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500" placeholder="DD/MM/AAAA">
+              </label>
+              <div class="text-sm">
+                <span class="font-medium text-gray-700">PDF do pedido</span>
+                <label class="mt-1 flex items-center justify-center gap-2 w-full px-3 py-2 bg-orange-500 hover:bg-orange-600 text-white rounded-lg font-medium cursor-pointer">
+                  <input type="file" id="pfArquivo" accept="application/pdf,.pdf" class="sr-only">
+                  <span id="pfArquivoRotulo">Escolher PDF</span>
+                </label>
+              </div>
+            </div>
+            <p id="pfStatus" class="text-sm text-gray-600 mt-3" role="status"></p>
+          </div>
+
+          <div id="pfResumo" class="hidden sticky top-0 z-10 bg-white/95 backdrop-blur rounded-xl border border-gray-200 p-3 mb-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+            <p id="pfResumoTexto" class="text-sm text-gray-700"></p>
+            <div class="flex gap-2">
+              <button type="button" id="pfAdicionar" class="px-3 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg text-sm font-medium">+ Item à mão</button>
+              <button type="button" id="pfLimpar" class="px-3 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg text-sm font-medium">Limpar</button>
+              <button type="button" id="pfLancar" class="px-5 py-2 bg-orange-500 hover:bg-orange-600 text-white rounded-lg text-sm font-semibold">Lançar pedido</button>
+            </div>
+          </div>
+          <div id="pfItens" class="space-y-3"></div>
+          <button type="button" id="pfAdicionarVazio" class="mt-3 px-3 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg text-sm font-medium">+ Lançar sem PDF (item à mão)</button>
+          <datalist id="pfCores">
+            <option value="Preto"><option value="Preto, lente marrom"><option value="Preto, lente fumê"><option value="Tartaruga"><option value="Marrom"><option value="Dourado"><option value="Dourado, lente marrom"><option value="Prata"><option value="Branco"><option value="Transparente"><option value="Nude"><option value="Rosa"><option value="Vermelho"><option value="Vinho"><option value="Azul"><option value="Verde"><option value="Roxo"><option value="Lilás"><option value="Cinza"><option value="Bege"><option value="Amarelo"><option value="Laranja">
+          </datalist>
+          <div id="pfResultado" class="hidden mt-6 bg-white rounded-xl border border-green-200 p-4"></div>
+        </div>
+
+        <div id="comprasModoPedidos" class="hidden">
+          <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
+            <div>
+              <h3 class="text-lg font-semibold text-gray-900">Pedidos lançados</h3>
+              <p class="text-sm text-gray-500">Cada pedido do fornecedor com o que veio nele: produtos novos, reposições e acessórios. Toque no pedido para ver os itens.</p>
+            </div>
+            <input type="search" id="pfBuscaPedidos" class="w-full sm:w-72 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500" placeholder="Buscar por nº ou fornecedor...">
+          </div>
+          <div id="pfListaPedidos" class="space-y-3"></div>
+        </div>
+
+        <div id="comprasModoProdutos" class="hidden">
+          <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
+            <div>
+              <h3 class="text-lg font-semibold text-gray-900">Compras por produto</h3>
+              <p class="text-sm text-gray-500">Quantas vezes cada produto foi comprado, em quais pedidos, quantas peças e quanto custou. Os mais comprados primeiro.</p>
+            </div>
+            <div class="flex flex-col sm:flex-row gap-2">
+              <input type="search" id="pfBuscaProdutos" class="w-full sm:w-72 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500" placeholder="Buscar por nome, SKU ou código...">
+              <label class="inline-flex items-center gap-2 text-sm text-gray-700"><input type="checkbox" id="pfSoReposicao" class="rounded border-gray-300"> Só os que tiveram reposição</label>
+            </div>
+          </div>
+          <div class="bg-white rounded-xl border border-gray-200 overflow-hidden">
+            <div class="overflow-x-auto">
+              <table class="w-full min-w-[860px] text-sm">
+                <thead class="bg-gray-50 border-b border-gray-200 text-xs font-semibold text-gray-500 uppercase">
+                  <tr><th class="px-3 py-3 text-left">Produto</th><th class="px-3 py-3 text-left">Pedidos</th><th class="px-3 py-3 text-right">Peças compradas</th><th class="px-3 py-3 text-right">Reposições</th><th class="px-3 py-3 text-right">Custo</th><th class="px-3 py-3 text-left">Última compra</th><th class="px-3 py-3 text-right">Estoque</th></tr>
+                </thead>
+                <tbody id="pfTabelaProdutos" class="divide-y divide-gray-100"></tbody>
+              </table>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -1221,6 +1316,7 @@
         document.getElementById('pageTitle').textContent = tab.textContent.trim();
         if (target === 'acerto') carregarAcerto();
         if (target === 'lote') iniciarLote();
+        if (target === 'compras') iniciarCompras();
         if (target === 'clientes') carregarClientes();
         if (target === 'pedidos') carregarPedidosGeral();
         if (target === 'encomendas') carregarEncomendas();
@@ -2704,7 +2800,7 @@
         translucido: ['Translucent', 'Translucent', ''], fosco: ['Matte', 'Matte', ''],
       };
       const MATERIAIS = /^(metal|acetato|injetado|nylon|tr ?90|policarbonato|madeira|titanio)$/;
-      const FORMATOS = /^(oculos|de|sol|premium|esportivo|mascara|hexagonal|redondo|oval|aviador|retangular|quadrado|maxi|gatinho|gato|arredondado|borboleta|geometrico|classico|oversized|shield|piloto|octogonal|grau|feminino|masculino|unissex)$/;
+      const FORMATOS = /^(oculos|de|sol|premium|polarizado|polarizada|esportivo|mascara|hexagonal|redondo|oval|aviador|retangular|quadrado|maxi|gatinho|gato|arredondado|borboleta|geometrico|classico|oversized|shield|piloto|octogonal|grau|feminino|masculino|unissex)$/;
       const semAcento = t => String(t || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
       const titulo = String(c.nome_fornecedor || '').trim();
       if (!titulo) return null;
@@ -4732,10 +4828,566 @@
       }
     });
 
+    // ---------- Pedido do fornecedor ----------
+    // Lê o PDF do pedido no servidor, mostra cada item para conferir (produto novo,
+    // reposição de um produto que já existe, acessório ou não lançar) e lança tudo
+    // de uma vez em /api/admin/pedidos-fornecedor (mesmas regras do cadastro em lote).
+    let itensPedidoForn = [];
+    let pedidoFornLido = null;
+
+    // Código do fornecedor para comparar: sem espaços, hífens e maiúsculas
+    // ("XFG 50610" = "xfg-50610"). Sem o sufixo de cor que o lote usa para outra
+    // cor do mesmo código ("XFG976-BLK-BRW" -> "XFG976").
+    function normalizarCodigoForn(codigo, tirarCor = false) {
+      let t = String(codigo || '').trim().toUpperCase();
+      if (tirarCor) t = t.replace(/(-[A-Z]{3}){1,3}$/, '').replace(/-\d$/, '');
+      return t.replace(/[^A-Z0-9]/g, '');
+    }
+
+    // Produtos já cadastrados que podem ser o item do pedido: mesmo código (de
+    // qualquer cor) do mesmo fornecedor, ou de cadastro sem fornecedor.
+    // Sem código no pedido (Clush), vale o mesmo nome na loja do fornecedor, que já
+    // traz a cor ("Óculos de Sol Aviador Gold - Marrom Degradê/Dourado - Metal").
+    function candidatosDoItem(item, produtos, fornecedor) {
+      const codigo = normalizarCodigoForn(item.codigo);
+      const nomeForn = (t) => semAcentoPf(t).replace(/[^a-z0-9]/g, '');
+      const descricao = nomeForn(item.descricao);
+      if (!codigo && !descricao) return [];
+      const forn = String(fornecedor || '').trim().toLowerCase();
+      return produtos.filter(p => {
+        const pf = String(p.fornecedor || '').trim().toLowerCase();
+        if (forn && pf && pf !== forn) return false;
+        if (!codigo) return nomeForn(p.nome_fornecedor) === descricao;
+        return normalizarCodigoForn(p.codigo_fornecedor, true) === codigo || normalizarCodigoForn(p.codigo_fornecedor) === codigo;
+      });
+    }
+
+    // Item lido do PDF -> item da tela, já com o destino sugerido
+    function itemPedidoForn(dados, todos, produtos, acessorios, fornecedor) {
+      const custo = Number(dados.preco_unitario);
+      const item = {
+        descricao: String(dados.descricao || ''), modelo: String(dados.modelo || ''), codigo: String(dados.codigo || ''),
+        formato: String(dados.formato || ''), material: String(dados.material || ''), tipo: String(dados.tipo || ''), genero: String(dados.genero || ''),
+        quantidade: String(Number(dados.quantidade) || 1), custo: Number.isFinite(custo) ? custo.toFixed(2).replace('.', ',') : '',
+        foto: typeof dados.foto === 'string' && dados.foto.startsWith('data:image/') ? dados.foto : '',
+        oculos: dados.oculos !== false, cor: String(dados.cor || ''), nome: '', sku: '', venda: '', codigoNovo: '',
+        nomeEditado: false, skuEditado: false, vendaEditada: false, acessorioNome: '', acessorioVenda: '', destino: '',
+      };
+      if (!item.oculos) {
+        // Brinde (R$ 0), taxa de gravação, frete: não entram no estoque
+        if (!(custo > 0) || /^(taxa|frete|servico|gravacao|personaliza)/.test(semAcentoPf(item.descricao))) item.destino = 'ignorar';
+        else {
+          const palavra = semAcentoPf(item.descricao).match(/estojo|flanela|sacola|cordao|case|limpa|spray|caixa|relogio|pulseira/);
+          const conhecido = palavra && acessorios.find(a => semAcentoPf(a.nome).includes(palavra[0]));
+          item.destino = conhecido ? `acessorio:${conhecido.id}` : 'acessorio-novo';
+          item.acessorioNome = item.descricao.split('•')[0].trim().slice(0, 100);
+          item.acessorioVenda = '';
+        }
+        return item;
+      }
+      const candidatos = candidatosDoItem(item, produtos, fornecedor);
+      const chave = (d) => normalizarCodigoForn(d.codigo) || semAcentoPf(d.descricao).replace(/[^a-z0-9]/g, '');
+      const mesmoCodigo = todos.filter(d => d.oculos !== false && chave(d) && chave(d) === chave(item)).length;
+      if (!candidatos.length) item.destino = 'novo';
+      else if (candidatos.length === 1 && mesmoCodigo <= 1) item.destino = `repor:${candidatos[0].id}`;
+      return item;
+    }
+
+    function semAcentoPf(t) {
+      return String(t || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+    }
+
+    // Nome Nix, SKU, venda e código dos produtos novos. Dois itens novos com o mesmo
+    // nome (mesmo modelo e cor) ficam com o mesmo SKU: o 2º soma no 1º como reposição.
+    // Outra cor de um código que já existe ganha o sufixo da cor (XFG976-BLK), para a
+    // reposição não cair no produto da outra cor.
+    function recalcularItensPedidoForn(itens, produtos, fornecedor) {
+      const usados = [];
+      const porNome = new Map();
+      const codigosUsados = new Set(produtos.filter(p => {
+        const pf = String(p.fornecedor || '').trim().toLowerCase();
+        return !pf || pf === String(fornecedor || '').trim().toLowerCase();
+      }).flatMap(p => [normalizarCodigoForn(p.codigo_fornecedor), normalizarCodigoForn(p.codigo_fornecedor, true)]).filter(Boolean));
+      for (const item of itens) {
+        if (item.destino !== 'novo') continue;
+        const modelo = item.modelo || item.codigo;
+        const tema = nomeTematico({
+          nome_fornecedor: `Óculos de Sol ${modelo} ${item.formato}${item.cor ? ` - ${item.cor}` : ''}`,
+          formato: item.formato, estilo: '', cor_armacao: item.cor,
+        }, produtos, usados);
+        if (!item.nomeEditado) item.nome = tema ? tema.nome : '';
+        const igual = porNome.get(item.nome.trim().toLowerCase());
+        if (!item.skuEditado) item.sku = igual ? igual.sku : (tema ? tema.codigo_sku : proximoSku(produtos, usados));
+        if (!item.vendaEditada) item.venda = String(precoVendaPadrao(lerPreco(item.custo)) || '').replace('.', ',');
+        if (igual && igual.sku === item.sku) item.codigoNovo = igual.codigoNovo;
+        else {
+          const base = item.codigo.trim();
+          let codigo = base;
+          if (base && codigosUsados.has(normalizarCodigoForn(base))) {
+            const cor = item.sku.split('-').slice(3).join('-');
+            codigo = cor ? `${base}-${cor}` : base;
+            for (let n = 2; codigosUsados.has(normalizarCodigoForn(codigo)); n++) codigo = `${base}-${cor ? `${cor}-` : ''}${n}`;
+          }
+          item.codigoNovo = codigo;
+          if (codigo) codigosUsados.add(normalizarCodigoForn(codigo));
+          if (item.nome.trim()) porNome.set(item.nome.trim().toLowerCase(), item);
+        }
+        usados.push(item.sku);
+      }
+    }
+
+    // Itens da tela -> corpo do POST (ou { erros: Map índice -> mensagem })
+    function montarLancamentoPedidoForn(itens, cabecalho, produtos, acessorios) {
+      const erros = new Map();
+      const produtosLote = [];
+      const listaAcessorios = [];
+      if (!String(cabecalho.numero || '').trim()) erros.set(-1, 'Informe o número do pedido');
+      if (cabecalho.data && !lerDataCompra(cabecalho.data)) erros.set(-1, 'Data do pedido inválida (use DD/MM/AAAA)');
+      itens.forEach((item, i) => {
+        if (item.destino === 'ignorar') return;
+        const quantidade = Number(item.quantidade);
+        const custo = lerPreco(item.custo);
+        const problema = !item.destino ? 'Escolha como lançar este item'
+          : !(Number.isInteger(quantidade) && quantidade > 0) ? 'Quantidade inválida'
+          : !Number.isFinite(custo) ? 'Custo inválido' : '';
+        if (problema) return erros.set(i, problema);
+        if (item.destino.startsWith('repor:')) {
+          const p = produtos.find(x => String(x.id) === item.destino.slice(6));
+          if (!p) return erros.set(i, 'Produto não encontrado: escolha de novo');
+          produtosLote.push({
+            nome: p.nome, codigo_sku: p.codigo_sku, codigo_fornecedor: p.codigo_fornecedor || '', nome_fornecedor: p.nome_fornecedor || item.descricao,
+            preco_custo: custo, preco_venda: Number(p.preco_venda), disponibilidade: p.disponibilidade || 'PRONTA_ENTREGA', quantidade, _item: i,
+          });
+        } else if (item.destino === 'novo') {
+          const venda = lerPreco(item.venda);
+          const mesmoCodigo = normalizarCodigoForn(item.codigo) && itens.some((o, k) => k !== i && o.destino === 'novo'
+            && normalizarCodigoForn(o.codigo) === normalizarCodigoForn(item.codigo));
+          if (mesmoCodigo && !String(item.cor || '').trim() && !item.skuEditado) return erros.set(i, 'Informe a cor: este código aparece em mais de um item novo');
+          if (!item.nome.trim()) return erros.set(i, 'Informe o nome do produto');
+          if (!item.sku.trim()) return erros.set(i, 'Informe o SKU');
+          if (!Number.isFinite(venda)) return erros.set(i, 'Preço de venda inválido');
+          produtosLote.push({
+            nome: item.nome.trim(), codigo_sku: item.sku.trim(), codigo_fornecedor: item.codigoNovo || item.codigo, nome_fornecedor: item.descricao,
+            preco_custo: custo, preco_venda: venda, disponibilidade: 'PRONTA_ENTREGA', formato: item.formato, cor_armacao: item.cor.trim(),
+            material: item.material, tipo: item.tipo, genero: item.genero, quantidade, _item: i,
+          });
+        } else if (item.destino === 'acessorio-novo') {
+          const venda = item.acessorioVenda === '' ? 0 : lerPreco(item.acessorioVenda);
+          if (!item.acessorioNome.trim()) return erros.set(i, 'Informe o nome do acessório');
+          if (!Number.isFinite(venda)) return erros.set(i, 'Preço de venda inválido');
+          listaAcessorios.push({ nome: item.acessorioNome.trim(), preco_venda: venda, preco_custo: custo, quantidade, _item: i });
+        } else if (item.destino.startsWith('acessorio:')) {
+          const a = acessorios.find(x => String(x.id) === item.destino.slice(10));
+          if (!a) return erros.set(i, 'Acessório não encontrado: escolha de novo');
+          listaAcessorios.push({ id: a.id, preco_custo: custo, quantidade, _item: i });
+        }
+      });
+      if (!erros.size && !produtosLote.length && !listaAcessorios.length) erros.set(-1, 'Nenhum item para lançar');
+      if (erros.size) return { erros };
+      const tirar = ({ _item, ...resto }) => resto;
+      return {
+        corpo: {
+          fornecedor: String(cabecalho.fornecedor || '').trim(), numero: String(cabecalho.numero || '').trim(), data: String(cabecalho.data || '').trim(),
+          produtos: produtosLote.map(tirar), acessorios: listaAcessorios.map(tirar),
+        },
+        origem: { produtos: produtosLote.map(p => p._item), acessorios: listaAcessorios.map(a => a._item) },
+      };
+    }
+
+    function cabecalhoPedidoForn() {
+      return {
+        fornecedor: document.getElementById('pfFornecedor').value,
+        numero: document.getElementById('pfNumero').value,
+        data: document.getElementById('pfData').value,
+      };
+    }
+
+    function opcoesDestinoPedidoForn(item, candidatos) {
+      const op = (v, t) => `<option value="${escapeHtml(v)}"${item.destino === v ? ' selected' : ''}>${escapeHtml(t)}</option>`;
+      const partes = [];
+      if (!item.destino) partes.push('<option value="" selected>Escolha...</option>');
+      if (candidatos.length) {
+        partes.push(`<optgroup label="Reposição (já tenho)">${candidatos.map(p => op(`repor:${p.id}`, `${p.nome} · ${p.codigo_sku}${p.cor_armacao ? ` · ${p.cor_armacao}` : ''}`)).join('')}</optgroup>`);
+      }
+      partes.push(op('novo', candidatos.length ? 'Produto novo (outra cor)' : 'Produto novo'));
+      const ativos = acessoriosCache.filter(a => a.ativo !== false);
+      partes.push(`<optgroup label="Acessórios">${op('acessorio-novo', 'Acessório novo')}${ativos.map(a => op(`acessorio:${a.id}`, `${a.nome} (${Number(a.estoque)} em estoque)`)).join('')}</optgroup>`);
+      partes.push(op('ignorar', 'Não lançar'));
+      return partes.join('');
+    }
+
+    function renderizarPedidoForn(erros = new Map()) {
+      const fornecedor = document.getElementById('pfFornecedor').value;
+      recalcularItensPedidoForn(itensPedidoForn, todosProdutos, fornecedor);
+      const lista = document.getElementById('pfItens');
+      const campo = (i, nome, valor, extra = '') => `<input data-pf="${i}" data-campo="${nome}" value="${escapeHtml(valor)}" class="w-full px-2 py-1.5 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-orange-500" ${extra}>`;
+      const rotulo = (t, html, larg = '') => `<label class="block text-xs text-gray-500 ${larg}">${t}${html}</label>`;
+      lista.innerHTML = itensPedidoForn.map((item, i) => {
+        const candidatos = item.oculos ? candidatosDoItem(item, todosProdutos, fornecedor) : [];
+        const erro = erros.get(i);
+        const ignorado = item.destino === 'ignorar';
+        let detalhe = '';
+        if (item.destino === 'novo') {
+          detalhe = `<div class="grid grid-cols-2 sm:grid-cols-4 gap-2 mt-2">
+            ${rotulo('Cor', campo(i, 'cor', item.cor, 'list="pfCores" placeholder="Ex.: Preto, lente marrom"'), 'col-span-2 sm:col-span-1')}
+            ${rotulo('Nome na loja', campo(i, 'nome', item.nome), 'col-span-2')}
+            ${rotulo('Venda', campo(i, 'venda', item.venda, 'inputmode="decimal"'))}
+            ${rotulo('SKU', campo(i, 'sku', item.sku), 'col-span-2 sm:col-span-1')}
+            ${rotulo('Cód. fornecedor', campo(i, 'codigoNovo', item.codigoNovo), 'col-span-2 sm:col-span-1')}
+            <p class="col-span-2 text-xs text-gray-500 self-end">${escapeHtml([item.formato, item.material, item.tipo].filter(Boolean).join(' · '))}</p>
+          </div>`;
+        } else if (item.destino.startsWith('repor:')) {
+          const p = todosProdutos.find(x => String(x.id) === item.destino.slice(6));
+          const foto = p && ((Array.isArray(p.fotos) && p.fotos[0]) || p.imagem_url);
+          detalhe = p ? `<div class="flex items-center gap-3 mt-2 p-2 bg-blue-50 rounded-lg">
+            ${foto ? `<img src="${escapeHtml(foto)}" alt="" class="w-12 h-12 object-cover rounded" onerror="imgFallback(this)">` : ''}
+            <p class="text-sm text-blue-900">Soma ${Number(item.quantidade) || 0} peça(s) em <strong>${escapeHtml(p.nome)}</strong> (${escapeHtml(p.codigo_sku)}), que tem ${Number(p.estoque) || 0} na loja.</p>
+          </div>` : '';
+        } else if (item.destino === 'acessorio-novo') {
+          detalhe = `<div class="grid grid-cols-2 sm:grid-cols-4 gap-2 mt-2">
+            ${rotulo('Nome do acessório', campo(i, 'acessorioNome', item.acessorioNome, 'maxlength="100"'), 'col-span-2 sm:col-span-3')}
+            ${rotulo('Venda (avulso)', campo(i, 'acessorioVenda', item.acessorioVenda, 'inputmode="decimal" placeholder="0,00"'))}
+          </div>`;
+        }
+        return `<div class="bg-white rounded-xl border ${erro ? 'border-red-400' : 'border-gray-200'} p-3 ${ignorado ? 'opacity-60' : ''}">
+          <div class="flex gap-3">
+            ${item.foto ? `<img src="${escapeHtml(item.foto)}" alt="" class="w-20 h-20 sm:w-24 sm:h-24 object-contain bg-gray-50 rounded-lg shrink-0">` : '<div class="w-20 h-20 sm:w-24 sm:h-24 bg-gray-100 rounded-lg shrink-0"></div>'}
+            <div class="flex-1 min-w-0">
+              <p class="text-xs text-gray-500 truncate" title="${escapeHtml(item.descricao)}">${i + 1}. ${escapeHtml(item.descricao || 'Item à mão')}</p>
+              <div class="grid grid-cols-2 sm:grid-cols-6 gap-2 mt-1">
+                ${rotulo('Modelo', campo(i, 'modelo', item.modelo), 'col-span-2 sm:col-span-1')}
+                ${rotulo('Código', campo(i, 'codigo', item.codigo))}
+                ${rotulo('Qtd', campo(i, 'quantidade', item.quantidade, 'inputmode="numeric"'))}
+                ${rotulo('Custo un.', campo(i, 'custo', item.custo, 'inputmode="decimal"'))}
+                ${rotulo('Lançar como', `<select data-pf="${i}" data-campo="destino" class="w-full px-2 py-1.5 border ${!item.destino ? 'border-amber-400 bg-amber-50' : 'border-gray-300'} rounded text-sm">${opcoesDestinoPedidoForn(item, candidatos)}</select>`, 'col-span-2')}
+              </div>
+              ${detalhe}
+              ${erro ? `<p class="text-xs text-red-600 mt-1">${escapeHtml(erro)}</p>` : ''}
+              ${candidatos.length > 1 && !item.destino ? `<p class="text-xs text-amber-700 mt-1">Você já tem ${candidatos.length} produtos com este código. Compare a foto e escolha qual é (ou Produto novo, se for outra cor).</p>` : ''}
+            </div>
+            <button type="button" data-pf-remover="${i}" class="self-start px-2 py-1 text-red-500 hover:bg-red-50 rounded" title="Tirar item">✕</button>
+          </div>
+        </div>`;
+      }).join('');
+      const ativos = itensPedidoForn.filter(i => i.destino !== 'ignorar');
+      const conta = (f) => itensPedidoForn.filter(f).length;
+      const pecas = ativos.reduce((s, i) => s + (Number(i.quantidade) || 0), 0);
+      const total = ativos.reduce((s, i) => s + (Number(i.quantidade) || 0) * (lerPreco(i.custo) || 0), 0);
+      document.getElementById('pfResumo').classList.toggle('hidden', !itensPedidoForn.length);
+      document.getElementById('pfResumoTexto').innerHTML = `<strong>${pecas} peça(s)</strong> · ${formatarMoeda(total)} · `
+        + [[conta(i => i.destino === 'novo'), 'novo(s)'], [conta(i => i.destino.startsWith('repor:')), 'reposição(ões)'],
+          [conta(i => i.destino.startsWith('acessorio')), 'acessório(s)'], [conta(i => i.destino === 'ignorar'), 'fora'],
+          [conta(i => !i.destino), 'para escolher']].filter(([n]) => n).map(([n, t]) => `${n} ${t}`).join(' · ')
+        + (erros.get(-1) ? ` <span class="text-red-600">${escapeHtml(erros.get(-1))}</span>` : '');
+    }
+
+    document.getElementById('pfItens').addEventListener('input', (e) => {
+      const el = e.target.closest('[data-pf]');
+      if (!el || el.tagName === 'SELECT') return;
+      const item = itensPedidoForn[Number(el.dataset.pf)];
+      item[el.dataset.campo] = el.value;
+      if (el.dataset.campo === 'nome') item.nomeEditado = true;
+      if (el.dataset.campo === 'sku') item.skuEditado = true;
+      if (el.dataset.campo === 'venda') item.vendaEditada = true;
+    });
+    // Ao sair do campo: refaz nome/SKU (cor, modelo) e o resumo
+    document.getElementById('pfItens').addEventListener('change', (e) => {
+      const el = e.target.closest('[data-pf]');
+      if (!el) return;
+      const item = itensPedidoForn[Number(el.dataset.pf)];
+      if (el.dataset.campo === 'destino') item.destino = el.value;
+      if (el.dataset.campo === 'codigo' && item.destino === 'novo') {
+        const c = candidatosDoItem(item, todosProdutos, document.getElementById('pfFornecedor').value);
+        if (c.length) item.destino = '';
+      }
+      renderizarPedidoForn();
+    });
+    document.getElementById('pfItens').addEventListener('click', (e) => {
+      const btn = e.target.closest('[data-pf-remover]');
+      if (!btn) return;
+      itensPedidoForn.splice(Number(btn.dataset.pfRemover), 1);
+      renderizarPedidoForn();
+    });
+    document.getElementById('pfFornecedor').addEventListener('change', () => renderizarPedidoForn());
+    const adicionarItemManual = () => {
+      itensPedidoForn.push(itemPedidoForn({ descricao: '', quantidade: 1, preco_unitario: '' }, [], [], acessoriosCache, ''));
+      itensPedidoForn[itensPedidoForn.length - 1].destino = 'novo';
+      renderizarPedidoForn();
+    };
+    document.getElementById('pfAdicionar').addEventListener('click', adicionarItemManual);
+    document.getElementById('pfAdicionarVazio').addEventListener('click', adicionarItemManual);
+    document.getElementById('pfLimpar').addEventListener('click', () => {
+      if (itensPedidoForn.length && !confirm('Tirar todos os itens deste pedido da tela? Nada foi lançado ainda.')) return;
+      itensPedidoForn = [];
+      pedidoFornLido = null;
+      ['pfNumero', 'pfData'].forEach(id => { document.getElementById(id).value = ''; });
+      document.getElementById('pfStatus').textContent = '';
+      renderizarPedidoForn();
+    });
+
+    document.getElementById('pfArquivo').addEventListener('change', async (e) => {
+      const arquivo = e.target.files[0];
+      e.target.value = '';
+      if (!arquivo) return;
+      const status = document.getElementById('pfStatus');
+      const rotuloArq = document.getElementById('pfArquivoRotulo');
+      if (itensPedidoForn.length && !confirm('Trocar os itens da tela pelos deste PDF?')) return;
+      rotuloArq.textContent = 'Lendo o PDF...';
+      status.textContent = '';
+      try {
+        const fd = new FormData();
+        fd.append('pdf', arquivo);
+        const res = await fetchAdmin('/api/admin/pedidos-fornecedor/ler', { method: 'POST', body: fd });
+        const dados = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(dados.error || 'Não foi possível ler o PDF');
+        await Promise.all([todosProdutos.length ? null : carregarProdutos(), carregarAcessoriosPedidoForn()]);
+        pedidoFornLido = dados;
+        if (dados.numero) document.getElementById('pfNumero').value = dados.numero;
+        if (dados.data) document.getElementById('pfData').value = dados.data;
+        const fornecedor = document.getElementById('pfFornecedor').value;
+        itensPedidoForn = dados.itens.map(d => itemPedidoForn(d, dados.itens, todosProdutos, acessoriosCache, fornecedor));
+        const soma = dados.itens.reduce((s, i) => s + Number(i.preco_total || 0), 0);
+        const confere = dados.subtotal === null || Math.abs(soma - Number(dados.subtotal)) < 0.05;
+        status.innerHTML = `Pedido <strong>${escapeHtml(dados.numero || '?')}</strong>${dados.data ? ` de ${escapeHtml(dados.data)}` : ''}: ${dados.itens.length} item(ns), soma ${formatarMoeda(soma)}`
+          + (dados.subtotal !== null ? (confere ? ' (confere com o subtotal do PDF)' : ` <span class="text-red-600">(o subtotal do PDF é ${formatarMoeda(dados.subtotal)}: confira se faltou algum item)</span>`) : '')
+          + (dados.desconto ? `. Desconto do pedido: ${formatarMoeda(dados.desconto)} (o custo fica pelo preço de cada item)` : '')
+          + (fornecedor.trim() ? '.' : '. <span class="text-amber-700">Preencha o fornecedor para achar os produtos que você já tem.</span>');
+        renderizarPedidoForn();
+      } catch (err) {
+        console.error(err);
+        status.innerHTML = `<span class="text-red-600">${escapeHtml(err.message)}</span>`;
+      } finally {
+        rotuloArq.textContent = 'Escolher PDF';
+      }
+    });
+
+    async function carregarAcessoriosPedidoForn() {
+      if (!podeArea('acessorios')) return;
+      try {
+        const res = await fetchAdmin('/api/admin/acessorios');
+        if (res.ok) acessoriosCache = await res.json();
+      } catch (err) {
+        console.error(err);
+      }
+    }
+
+    // Foto do PDF (data URL) -> File, para entrar como foto 1 do produto novo
+    async function arquivoDaFotoPdf(dataUrl, sku) {
+      const blob = await (await fetch(dataUrl)).blob();
+      return new File([blob], `${nomeArquivoSku(sku, 'png')}`, { type: blob.type || 'image/png' });
+    }
+
+    document.getElementById('pfLancar').addEventListener('click', async () => {
+      const btn = document.getElementById('pfLancar');
+      recalcularItensPedidoForn(itensPedidoForn, todosProdutos, document.getElementById('pfFornecedor').value);
+      const r = montarLancamentoPedidoForn(itensPedidoForn, cabecalhoPedidoForn(), todosProdutos, acessoriosCache);
+      if (r.erros) {
+        renderizarPedidoForn(r.erros);
+        return mostrarToast(r.erros.get(-1) || 'Confira os itens marcados em vermelho', 'error');
+      }
+      if (!r.corpo.fornecedor && !confirm('Lançar sem o nome do fornecedor? Os relatórios ficam melhores com ele.')) return;
+      btn.disabled = true;
+      try {
+        const enviar = (corpo) => fetchAdmin('/api/admin/pedidos-fornecedor', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(corpo),
+        });
+        let res = await enviar(r.corpo);
+        let data = await res.json().catch(() => ({}));
+        if (res.status === 409 && data.ja_lancado) {
+          if (!confirm(`${data.error}. Lançar de novo vai somar as peças outra vez. Lançar mesmo assim?`)) return;
+          res = await enviar({ ...r.corpo, forcar: true });
+          data = await res.json().catch(() => ({}));
+        }
+        if (!res.ok) {
+          const erros = new Map();
+          (data.erros || []).forEach(e => {
+            const i = e.linha !== undefined ? r.origem.produtos[e.linha] : e.acessorio !== undefined ? r.origem.acessorios[e.acessorio] : -1;
+            erros.set(i ?? -1, e.mensagem);
+          });
+          renderizarPedidoForn(erros);
+          throw new Error(data.error || 'Erro ao lançar o pedido');
+        }
+        // Fotos do PDF nos produtos novos (em segundo plano)
+        const criados = new Map((data.produtos || []).map(p => [String(p.codigo_sku).toLowerCase(), p.id]));
+        const fotos = [];
+        r.corpo.produtos.forEach((p, k) => {
+          const item = itensPedidoForn[r.origem.produtos[k]];
+          const id = criados.get(String(p.codigo_sku).toLowerCase());
+          if (id && item.foto && !fotos.some(f => f.id === id)) fotos.push({ id, sku: p.codigo_sku, foto: item.foto });
+        });
+        const numero = r.corpo.numero;
+        renderizarResultadoPedidoForn(data, numero, (data.ignorados || []).map(g => r.origem.produtos[g.linha]).map(i => itensPedidoForn[i]));
+        itensPedidoForn = [];
+        pedidoFornLido = null;
+        ['pfNumero', 'pfData'].forEach(id => { document.getElementById(id).value = ''; });
+        document.getElementById('pfStatus').textContent = '';
+        await carregarProdutos();
+        renderizarPedidoForn();
+        mostrarToast(`Pedido ${numero} lançado`);
+        let anexadas = 0;
+        for (const f of fotos) {
+          try {
+            const fd = new FormData();
+            fd.append('foto1', await prepararImagem(await arquivoDaFotoPdf(f.foto, f.sku)));
+            const resFoto = await fetchAdmin(`/api/produtos/${f.id}`, { method: 'PUT', body: fd });
+            if (!resFoto.ok) throw new Error((await resFoto.json().catch(() => ({}))).error || 'Erro ao salvar a foto');
+            anexadas++;
+          } catch (err) {
+            mostrarToast(`Foto de ${f.sku}: ${err.message}`, 'error');
+          }
+        }
+        if (anexadas) {
+          mostrarToast(`${anexadas} foto(s) do PDF incluída(s) nos produtos novos`);
+          carregarProdutos();
+        }
+      } catch (err) {
+        console.error(err);
+        mostrarToast(err.message, 'error');
+      } finally {
+        btn.disabled = false;
+      }
+    });
+
+    function renderizarResultadoPedidoForn(data, numero, ignorados) {
+      const painel = document.getElementById('pfResultado');
+      const li = (t) => `<li class="py-1.5 text-sm text-gray-800">${t}</li>`;
+      const blocos = [];
+      if (data.produtos.length) blocos.push(`<p class="font-medium text-green-700 mt-2">${data.produtos.length} produto(s) novo(s)</p><ul class="divide-y divide-gray-100">${data.produtos.map(p => li(`<strong>${escapeHtml(p.nome)}</strong> <span class="text-gray-500">(${escapeHtml(p.codigo_sku)})</span>: ${Number(p.estoque)} peça(s)`)).join('')}</ul>`);
+      if (data.repostos.length) blocos.push(`<p class="font-medium text-blue-700 mt-3">${data.repostos.length} reposição(ões)</p><ul class="divide-y divide-gray-100">${data.repostos.map(p => li(`<strong>${escapeHtml(p.nome)}</strong> <span class="text-gray-500">(${escapeHtml(p.codigo_sku)})</span>: +${Number(p.quantidade)}, estoque agora ${Number(p.estoque)}`)).join('')}</ul>`);
+      if (data.acessorios.length) blocos.push(`<p class="font-medium text-gray-700 mt-3">${data.acessorios.length} acessório(s)</p><ul class="divide-y divide-gray-100">${data.acessorios.map(a => li(`<strong>${escapeHtml(a.nome)}</strong>${a.novo ? ' (novo)' : ''}: +${Number(a.quantidade)}, estoque agora ${Number(a.estoque)}`)).join('')}</ul>`);
+      if (data.ignorados.length) blocos.push(`<p class="font-medium text-amber-700 mt-3">${data.ignorados.length} não lançado(s) porque o SKU ou o código já existia</p><ul class="divide-y divide-gray-100">${data.ignorados.map((g, k) => li(`${escapeHtml(g.codigo_sku)}: ${escapeHtml(g.motivo)}${ignorados[k] ? ` <span class="text-gray-500">(${escapeHtml(ignorados[k].descricao)})</span>` : ''}`)).join('')}</ul>`);
+      painel.innerHTML = `<div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2"><p class="font-semibold text-gray-900">Pedido ${escapeHtml(numero)} lançado</p>
+        <button type="button" id="pfVerPedidos" class="px-3 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg text-xs font-medium">Ver nos pedidos lançados</button></div>${blocos.join('')}`;
+      painel.classList.remove('hidden');
+      document.getElementById('pfVerPedidos').addEventListener('click', () => trocarModoCompras('pedidos'));
+    }
+
+    // ---------- Relatórios: pedidos lançados e compras por produto ----------
+    let pedidosFornCache = [];
+    let comprasProdutosCache = [];
+    const dataBr = (iso) => { const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(iso || '')); return m ? `${m[3]}/${m[2]}/${m[1]}` : ''; };
+
+    async function carregarPedidosForn() {
+      const lista = document.getElementById('pfListaPedidos');
+      lista.innerHTML = '<p class="text-sm text-gray-500">Carregando...</p>';
+      try {
+        const res = await fetchAdmin('/api/admin/pedidos-fornecedor');
+        if (!res.ok) throw new Error('Erro ao carregar os pedidos');
+        pedidosFornCache = await res.json();
+        renderizarPedidosForn();
+      } catch (err) {
+        lista.innerHTML = `<p class="text-sm text-red-600">${escapeHtml(err.message)}</p>`;
+      }
+    }
+
+    function renderizarPedidosForn() {
+      const busca = semAcentoPf(document.getElementById('pfBuscaPedidos').value).trim();
+      const lista = pedidosFornCache.filter(p => !busca || semAcentoPf(`${p.numero} ${p.fornecedor}`).includes(busca));
+      document.getElementById('pfListaPedidos').innerHTML = lista.length ? lista.map((p, k) => `
+        <details class="bg-white rounded-xl border border-gray-200" data-pedido-forn="${pedidosFornCache.indexOf(p)}">
+          <summary class="cursor-pointer p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1">
+            <span><strong class="text-gray-900">Pedido ${escapeHtml(p.numero)}</strong> <span class="text-gray-500">· ${escapeHtml(p.fornecedor || 'sem fornecedor')} · ${dataBr(p.data_compra)}</span></span>
+            <span class="text-sm text-gray-700">${Number(p.pecas)} peça(s) · ${formatarMoeda(Number(p.valor))} · ${Number(p.novos)} novo(s) · ${Number(p.reposicoes)} reposição(ões)${Number(p.acessorios) ? ` · ${Number(p.acessorios)} acessório(s)` : ''}</span>
+          </summary>
+          <div class="px-4 pb-4 text-sm text-gray-500" data-itens>Carregando...</div>
+        </details>`).join('')
+        : `<p class="text-sm text-gray-500">${pedidosFornCache.length ? 'Nenhum pedido encontrado.' : 'Nenhum pedido lançado ainda. Use Lançar pedido (ou o Cadastro em Lote com a coluna Pedido fornecedor).'}</p>`;
+    }
+
+    document.getElementById('pfBuscaPedidos').addEventListener('input', renderizarPedidosForn);
+    document.getElementById('pfListaPedidos').addEventListener('toggle', async (e) => {
+      const det = e.target.closest('[data-pedido-forn]');
+      if (!det || !det.open || det.dataset.carregado) return;
+      const p = pedidosFornCache[Number(det.dataset.pedidoForn)];
+      const alvo = det.querySelector('[data-itens]');
+      try {
+        const res = await fetchAdmin(`/api/admin/pedidos-fornecedor/itens?numero=${encodeURIComponent(p.numero)}&fornecedor=${encodeURIComponent(p.fornecedor || '')}`);
+        if (!res.ok) throw new Error('Erro ao carregar os itens');
+        const itens = await res.json();
+        det.dataset.carregado = '1';
+        alvo.innerHTML = `<div class="overflow-x-auto"><table class="w-full min-w-[640px] text-sm"><thead class="text-xs text-gray-500 uppercase"><tr>
+          <th class="py-2 text-left">Item</th><th class="py-2 text-left">Entrou como</th><th class="py-2 text-right">Qtd</th><th class="py-2 text-right">Custo un.</th><th class="py-2 text-right">Já comprado</th><th class="py-2 text-right">Estoque</th></tr></thead>
+          <tbody class="divide-y divide-gray-100">${itens.map(i => `<tr>
+            <td class="py-2 pr-2"><div class="flex items-center gap-2">${i.foto ? `<img src="${escapeHtml(i.foto)}" alt="" class="w-10 h-10 object-cover rounded" onerror="imgFallback(this)">` : ''}<span class="text-gray-900">${escapeHtml(i.nome)}${i.codigo_sku ? ` <span class="text-gray-500">(${escapeHtml(i.codigo_sku)})</span>` : ''}</span></div></td>
+            <td class="py-2">${i.tipo === 'acessorio' ? 'Acessório' : i.origem === 'REPOSICAO' ? '<span class="text-blue-700">Reposição</span>' : '<span class="text-green-700">Produto novo</span>'}</td>
+            <td class="py-2 text-right">${Number(i.quantidade)}</td>
+            <td class="py-2 text-right">${formatarMoeda(Number(i.preco_custo))}</td>
+            <td class="py-2 text-right" title="Em quantos pedidos este item veio e o total de peças">${Number(i.pedidos)} pedido(s), ${Number(i.pecas_compradas)} pç</td>
+            <td class="py-2 text-right">${i.estoque === null ? '—' : Number(i.estoque)}</td>
+          </tr>`).join('')}</tbody></table></div>`;
+      } catch (err) {
+        alvo.innerHTML = `<span class="text-red-600">${escapeHtml(err.message)}</span>`;
+      }
+    }, true);
+
+    async function carregarComprasProdutos() {
+      const corpo = document.getElementById('pfTabelaProdutos');
+      corpo.innerHTML = '<tr><td colspan="7" class="px-3 py-4 text-gray-500">Carregando...</td></tr>';
+      try {
+        const res = await fetchAdmin('/api/admin/compras/produtos');
+        if (!res.ok) throw new Error('Erro ao carregar as compras');
+        comprasProdutosCache = await res.json();
+        renderizarComprasProdutos();
+      } catch (err) {
+        corpo.innerHTML = `<tr><td colspan="7" class="px-3 py-4 text-red-600">${escapeHtml(err.message)}</td></tr>`;
+      }
+    }
+
+    function renderizarComprasProdutos() {
+      const busca = semAcentoPf(document.getElementById('pfBuscaProdutos').value).trim();
+      const soRepostos = document.getElementById('pfSoReposicao').checked;
+      const lista = comprasProdutosCache.filter(p => (!soRepostos || Number(p.reposicoes) > 0)
+        && (!busca || semAcentoPf(`${p.nome} ${p.codigo_sku} ${p.codigo_fornecedor} ${p.fornecedor}`).includes(busca)));
+      document.getElementById('pfTabelaProdutos').innerHTML = lista.length ? lista.map(p => `<tr>
+        <td class="px-3 py-2"><div class="flex items-center gap-2">${p.foto ? `<img src="${escapeHtml(p.foto)}" alt="" class="w-10 h-10 object-cover rounded" onerror="imgFallback(this)">` : ''}<div><p class="text-gray-900">${escapeHtml(p.nome)}</p><p class="text-xs text-gray-500">${escapeHtml(p.codigo_sku)}${p.codigo_fornecedor ? ` · cód. ${escapeHtml(p.codigo_fornecedor)}` : ''}</p></div></div></td>
+        <td class="px-3 py-2 text-gray-700">${(p.numeros_pedidos || []).map(n => escapeHtml(n)).join(', ') || '<span class="text-gray-400">sem nº</span>'}</td>
+        <td class="px-3 py-2 text-right font-medium">${Number(p.pecas)}</td>
+        <td class="px-3 py-2 text-right">${Number(p.reposicoes) ? `<span class="text-blue-700 font-medium">${Number(p.reposicoes)}</span>` : '0'}</td>
+        <td class="px-3 py-2 text-right">${formatarMoeda(Number(p.custo_ultimo))}${Number(p.custo_min) !== Number(p.custo_max) ? `<p class="text-xs text-gray-500">${formatarMoeda(Number(p.custo_min))} a ${formatarMoeda(Number(p.custo_max))}</p>` : ''}</td>
+        <td class="px-3 py-2">${dataBr(p.ultima_compra)}</td>
+        <td class="px-3 py-2 text-right">${Number(p.estoque)}</td>
+      </tr>`).join('') : '<tr><td colspan="7" class="px-3 py-4 text-gray-500">Nenhum produto encontrado.</td></tr>';
+    }
+    document.getElementById('pfBuscaProdutos').addEventListener('input', renderizarComprasProdutos);
+    document.getElementById('pfSoReposicao').addEventListener('change', renderizarComprasProdutos);
+
+    function trocarModoCompras(modo) {
+      document.querySelectorAll('[data-modo-compras]').forEach(b => {
+        const ativo = b.dataset.modoCompras === modo;
+        b.setAttribute('aria-selected', String(ativo));
+        b.classList.toggle('bg-white', ativo);
+        b.classList.toggle('shadow', ativo);
+        b.classList.toggle('text-gray-900', ativo);
+        b.classList.toggle('text-gray-500', !ativo);
+      });
+      document.getElementById('comprasModoLancar').classList.toggle('hidden', modo !== 'lancar');
+      document.getElementById('comprasModoPedidos').classList.toggle('hidden', modo !== 'pedidos');
+      document.getElementById('comprasModoProdutos').classList.toggle('hidden', modo !== 'produtos');
+      if (modo === 'pedidos') carregarPedidosForn();
+      if (modo === 'produtos') carregarComprasProdutos();
+    }
+    document.querySelectorAll('[data-modo-compras]').forEach(b => b.addEventListener('click', () => trocarModoCompras(b.dataset.modoCompras)));
+    trocarModoCompras('lancar');
+
+    function iniciarCompras() {
+      if (!todosProdutos.length) carregarProdutos();
+      carregarAcessoriosPedidoForn();
+      const forn = document.getElementById('pfFornecedor');
+      // Sugere o fornecedor mais usado nos produtos
+      if (!forn.value) {
+        const contagem = new Map();
+        todosProdutos.forEach(p => { const f = String(p.fornecedor || '').trim(); if (f) contagem.set(f, (contagem.get(f) || 0) + 1); });
+        const [mais] = [...contagem].sort((a, b) => b[1] - a[1]);
+        if (mais) forn.value = mais[0];
+      }
+      renderizarPedidoForn();
+    }
+    document.getElementById('btnAbrirPedidoFornecedor').addEventListener('click', () => document.querySelector('.tab-btn[data-tab="compras"]').click());
+
     // ---------- Acesso: dono (tudo) ou usuário com telas liberadas ----------
     // O servidor confere cada rota; aqui só escondemos o que a pessoa não pode abrir.
     let acessoAdmin = { dono: true, permissoes: [], areas: [] };
-    const AREA_DA_ABA = { lote: 'produtos' };
+    const AREA_DA_ABA = { lote: 'produtos', compras: 'produtos' };
     function podeArea(area) {
       return acessoAdmin.dono || acessoAdmin.permissoes.includes(area);
     }

@@ -330,6 +330,23 @@ async function initTables(pool) {
       ADD COLUMN IF NOT EXISTS pedido_fornecedor VARCHAR(60) NOT NULL DEFAULT ''
     `);
 
+    // Pedido do fornecedor: acessórios (estojos, flanelas...) também têm custo e
+    // histórico de compras, para o relatório de cada pedido
+    await client.query(`ALTER TABLE acessorios ADD COLUMN IF NOT EXISTS preco_custo DECIMAL(10,2) NOT NULL DEFAULT 0`);
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS compras_acessorio (
+        id SERIAL PRIMARY KEY,
+        acessorio_id INTEGER NOT NULL REFERENCES acessorios(id) ON DELETE CASCADE,
+        fornecedor VARCHAR(120) NOT NULL DEFAULT '',
+        preco_custo DECIMAL(10,2) NOT NULL DEFAULT 0,
+        quantidade INTEGER NOT NULL DEFAULT 1,
+        data_compra DATE NOT NULL DEFAULT CURRENT_DATE,
+        pedido_fornecedor VARCHAR(60) NOT NULL DEFAULT '',
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+    await client.query('CREATE INDEX IF NOT EXISTS compras_pedido_idx ON compras_fornecedor (pedido_fornecedor)');
+
     // Usuários do painel admin com permissão por área (Configurações > Usuários)
     await usuariosAdmin.criarTabela(client);
 
