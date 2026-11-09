@@ -245,7 +245,7 @@ describe('duas empresas no mesmo servidor', () => {
     });
     pool2 = new Pool({ connectionString: url2.href });
     await h.limparBanco();
-    await pool2.query('TRUNCATE produtos, compras_fornecedor, maleta_pecas, imagens, acertos, pedidos, clientes, acessorios, encomendas RESTART IDENTITY');
+    await pool2.query('TRUNCATE produtos, compras_fornecedor, maleta_pecas, imagens, acertos, pedidos, clientes, acessorios, compras_acessorio, encomendas RESTART IDENTITY');
     await pool2.query(`DELETE FROM configuracoes WHERE chave LIKE 'loja%'`);
     await h.pool.query(`DELETE FROM configuracoes WHERE chave LIKE 'loja%'`);
   });
