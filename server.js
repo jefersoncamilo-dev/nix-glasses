@@ -787,6 +787,8 @@ function validarProdutoLote(linha) {
     quantidade: lerQuantidade(l.quantidade),
     pedido_fornecedor: textoCurto(l.pedido_fornecedor, 60),
     data_compra: lerDataCompra(l.data_compra),
+    // Conferido no painel como produto diferente: o mesmo cód. do fornecedor não junta
+    cadastrar_novo: l.cadastrar_novo === true,
   };
   const { espec, erro: erroEspec } = lerEspecificacoes(l);
   Object.assign(produto, { diametro_cm: null, ponte_cm: null, largura_total_cm: null, material: '', tipo: '', nome_curto: '', genero: '', tamanho: '', grade: '' }, espec);
@@ -861,7 +863,7 @@ function encontrarDuplicadosLote(produtos, existentes) {
   const duplicados = new Map();
   produtos.forEach((p, i) => {
     const sku = p.codigo_sku.toLowerCase();
-    const codigo = p.codigo_fornecedor ? chaveForn(p.fornecedor.toLowerCase(), p.codigo_fornecedor.toLowerCase()) : '';
+    const codigo = p.codigo_fornecedor && !p.cadastrar_novo ? chaveForn(p.fornecedor.toLowerCase(), p.codigo_fornecedor.toLowerCase()) : '';
     let dup = null;
     if (skusBanco.has(sku)) dup = { campo: 'codigo_sku', motivo: 'SKU já cadastrado' };
     else if (codigo && codigosBanco.has(codigo)) dup = { campo: 'codigo_fornecedor', motivo: 'Cód. fornecedor já cadastrado' };
