@@ -91,6 +91,8 @@ describe('usuários do painel admin', () => {
       ['GET', '/api/admin/products/conditional'],
       ['POST', '/api/admin/encomendas', {}],
       ['POST', '/api/admin/acessorios', {}],
+      ['POST', '/api/admin/acessorios/excluir', { ids: [1], confirmacao: 'EXCLUIR' }],
+      ['POST', '/api/admin/encomendas/excluir/conferir', { ids: [1] }],
       ['GET', '/api/admin/usuarios'],
       ['POST', '/api/admin/usuarios', { nome: 'Eu', login: 'eu-mesmo', senha: 'senha-qualquer', permissoes: ['config'] }],
       ['GET', '/api/admin/zerar'],

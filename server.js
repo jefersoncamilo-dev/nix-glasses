@@ -2305,7 +2305,13 @@ async function startServer() {
         const a = estoque.get(id);
         if (!a) {
           if (depois > antes) return falhar(400, { error: 'Acessório não encontrado' });
-          continue; // acessório apagado do banco: só sai do pedido
+          // Acessório excluído do cadastro: o que já estava no pedido fica como foi
+          // lançado (nome e preço copiados), sem mexer em estoque; zerado, sai do pedido.
+          if (depois > 0) {
+            const ant = anteriores.get(id);
+            extras.push({ acessorio_id: id, nome: ant.nome, preco: Number(ant.preco), quantidade: depois });
+          }
+          continue;
         }
         const delta = depois - antes;
         if (delta > 0 && !a.ativo && antes === 0) return falhar(400, { error: `Acessório inativo: ${a.nome}` });
@@ -2916,12 +2922,12 @@ async function startServer() {
   const CONFIRMACAO_EXCLUIR = 'EXCLUIR';
   const MAX_EXCLUIR = 500;
 
-  function idsParaExcluir(body) {
+  function idsParaExcluir(body, um = 'produto', varios = 'produtos') {
     const lista = body && body.ids;
-    if (!Array.isArray(lista) || !lista.length) return { erro: 'Escolha ao menos um produto' };
-    if (lista.length > MAX_EXCLUIR) return { erro: `No máximo ${MAX_EXCLUIR} produtos por vez` };
+    if (!Array.isArray(lista) || !lista.length) return { erro: `Escolha ao menos um ${um === 'produto' ? 'produto' : 'item'} para excluir` };
+    if (lista.length > MAX_EXCLUIR) return { erro: `No máximo ${MAX_EXCLUIR} ${varios} por vez` };
     const ids = [...new Set(lista.map(Number))];
-    if (ids.some((id) => !Number.isInteger(id) || id <= 0)) return { erro: 'Produto inválido' };
+    if (ids.some((id) => !Number.isInteger(id) || id <= 0 || id >= 2 ** 31)) return { erro: `Lista de ${varios} inválida` };
     return { ids };
   }
 
@@ -3025,19 +3031,179 @@ async function startServer() {
     }
   }
 
+  // Excluir de vez nas abas Encomendas, Acessórios e Clientes, no mesmo jeito do
+  // Acerto de estoque: o servidor confere de novo dentro da transação e, se algum
+  // item quebraria um pedido ou maleta em aberto, nada é apagado (409).
+  // Cada tipo devolve itens { id, titulo, detalhe, bloqueios, avisos }.
+  const PEDIDO_ABERTO = `('NOVO', 'EM_ANDAMENTO')`;
+  const ENCOMENDA_FECHADA = `('ENTREGUE', 'CANCELADA')`;
+  const listaIds = (ids) => (ids || []).map((x) => `#${x}`).join(', ');
+  const ROTULO_STATUS_ENCOMENDA = {
+    AGUARDANDO_FABRICANTE: 'aguardando fabricante', EM_TRANSITO: 'em trânsito', PRONTO_ENTREGA: 'pronta para entrega',
+  };
+
+  const EXCLUSOES = {
+    encomendas: {
+      area: 'encomendas', um: 'encomenda', varios: 'encomendas',
+      async conferir(db, ids, bloquear) {
+        const { rows } = await db.query(
+          `SELECT e.id, e.modelo, e.codigo_sku, e.nome_cliente, e.status, e.sinal_pago, e.pedido_id, pe.status AS pedido_status
+           FROM encomendas e LEFT JOIN pedidos pe ON pe.id = e.pedido_id
+           WHERE e.id = ANY($1) ORDER BY e.id ${bloquear ? 'FOR UPDATE OF e' : ''}`, [ids]
+        );
+        return rows.map((e) => {
+          const bloqueios = [];
+          const avisos = [];
+          if (e.pedido_id && ['NOVO', 'EM_ANDAMENTO'].includes(e.pedido_status)) {
+            bloqueios.push(`É do pedido aberto #${e.pedido_id}. Entregue ou cancele o pedido antes (ou só cancele a encomenda).`);
+          }
+          if (ROTULO_STATUS_ENCOMENDA[e.status]) avisos.push(`Ainda está em aberto (${ROTULO_STATUS_ENCOMENDA[e.status]}).`);
+          if (Number(e.sinal_pago) > 0) avisos.push(`Tem ${formatarReais(e.sinal_pago)} de sinal registrado, que some junto.`);
+          return {
+            id: e.id,
+            titulo: `#${e.id} ${e.modelo || 'Sem modelo'}`,
+            detalhe: [e.nome_cliente || 'Sem nome', e.codigo_sku].filter(Boolean).join(' • '),
+            bloqueios, avisos,
+          };
+        });
+      },
+      apagar: (db, ids) => db.query('DELETE FROM encomendas WHERE id = ANY($1) RETURNING id, modelo AS nome', [ids]),
+    },
+    acessorios: {
+      area: 'acessorios', um: 'acessório', varios: 'acessórios',
+      async conferir(db, ids, bloquear) {
+        const { rows } = await db.query(
+          `SELECT id, nome, estoque, ativo FROM acessorios WHERE id = ANY($1) ORDER BY nome, id ${bloquear ? 'FOR UPDATE' : ''}`, [ids]
+        );
+        const emPedido = new Map((await db.query(
+          `SELECT (x->>'acessorio_id')::int AS id, array_agg(DISTINCT pe.id ORDER BY pe.id) AS pedidos
+           FROM pedidos pe CROSS JOIN LATERAL jsonb_array_elements(pe.extras) x
+           WHERE pe.status IN ${PEDIDO_ABERTO} AND x->>'acessorio_id' = ANY($1::text[]) GROUP BY 1`, [ids.map(String)]
+        )).rows.map((r) => [Number(r.id), r.pedidos]));
+        return rows.map((a) => {
+          const pedidos = emPedido.get(a.id);
+          const avisos = [];
+          if (Number(a.estoque) > 0) avisos.push(`Ainda tem ${a.estoque} un. em estoque.`);
+          if (a.ativo) avisos.push('Se for só para não aparecer no fechamento, dá para marcar como Inativo.');
+          return {
+            id: a.id,
+            titulo: a.nome,
+            detalhe: `${Number(a.estoque) || 0} un. • ${a.ativo ? 'Ativo' : 'Inativo'}`,
+            bloqueios: pedidos ? [`Está no fechamento do pedido aberto ${listaIds(pedidos)}. Entregue ou cancele o pedido antes.`] : [],
+            avisos,
+          };
+        });
+      },
+      apagar: (db, ids) => db.query('DELETE FROM acessorios WHERE id = ANY($1) RETURNING id, nome', [ids]),
+    },
+    clientes: {
+      area: 'clientes', um: 'cliente', varios: 'clientes',
+      async conferir(db, ids, bloquear) {
+        const { rows } = await db.query(
+          `SELECT c.id, c.nome, c.email,
+                  (SELECT array_agg(p.id ORDER BY p.id) FROM pedidos p WHERE p.cliente_id = c.id AND p.status IN ${PEDIDO_ABERTO}) AS pedidos_abertos,
+                  (SELECT array_agg(DISTINCT mp.pedido_id) FROM maleta_pecas mp JOIN pedidos p ON p.id = mp.pedido_id
+                    WHERE p.cliente_id = c.id) AS maletas,
+                  (SELECT array_agg(e.id ORDER BY e.id) FROM encomendas e WHERE e.cliente_id = c.id AND e.status NOT IN ${ENCOMENDA_FECHADA}) AS encomendas_abertas,
+                  (SELECT COUNT(*)::int FROM pedidos p WHERE p.cliente_id = c.id) AS pedidos,
+                  (SELECT COUNT(*)::int FROM encomendas e WHERE e.cliente_id = c.id) AS encomendas
+           FROM clientes c WHERE c.id = ANY($1) ORDER BY c.nome, c.id ${bloquear ? 'FOR UPDATE' : ''}`, [ids]
+        );
+        return rows.map((c) => {
+          const bloqueios = [];
+          if (c.maletas) bloqueios.push(`Está com a maleta do pedido ${listaIds(c.maletas)}. Faça o acerto da maleta antes.`);
+          if (c.pedidos_abertos) bloqueios.push(`Tem pedido aberto (${listaIds(c.pedidos_abertos)}). Entregue ou cancele antes.`);
+          if (c.encomendas_abertas) bloqueios.push(`Tem encomenda em aberto (${listaIds(c.encomendas_abertas)}). Entregue ou cancele antes.`);
+          const avisos = ['A conta de acesso dela some: para comprar logada de novo, ela cria outra.'];
+          const historico = [c.pedidos && `${c.pedidos} pedido(s)`, c.encomendas && `${c.encomendas} encomenda(s)`].filter(Boolean);
+          if (historico.length) avisos.push(`${historico.join(' e ')} antigos continuam, como "sem conta" (com nome e telefone).`);
+          return { id: c.id, titulo: c.nome || 'Sem nome', detalhe: c.email, bloqueios, avisos };
+        });
+      },
+      apagar: (db, ids) => db.query('DELETE FROM clientes WHERE id = ANY($1) RETURNING id, nome', [ids]),
+    },
+  };
+
+  function formatarReais(v) {
+    return `R$ ${Number(v).toFixed(2).replace('.', ',')}`;
+  }
+
+  async function conferirExclusaoDe(tipo, db, ids, bloquear = false) {
+    const itens = await tipo.conferir(db, ids, bloquear);
+    const encontrados = new Set(itens.map((i) => Number(i.id)));
+    return { itens, nao_encontrados: ids.filter((id) => !encontrados.has(id)) };
+  }
+
+  const lerIdsExclusao = (tipo, body) => idsParaExcluir(body, tipo.um, tipo.varios);
+
+  function handlersDeExclusao(tipo) {
+    return {
+      async conferir(req, res) {
+        const { ids, erro } = lerIdsExclusao(tipo, req.body);
+        if (erro) return res.status(400).json({ error: erro });
+        try {
+          res.json(await conferirExclusaoDe(tipo, req.db, ids));
+        } catch (err) {
+          console.error(err);
+          res.status(500).json({ error: `Erro ao conferir ${tipo.varios}` });
+        }
+      },
+      async excluir(req, res) {
+        const { ids, erro } = lerIdsExclusao(tipo, req.body);
+        if (erro) return res.status(400).json({ error: erro });
+        if ((req.body || {}).confirmacao !== CONFIRMACAO_EXCLUIR) {
+          return res.status(400).json({ error: `Digite ${CONFIRMACAO_EXCLUIR} para confirmar` });
+        }
+        let client;
+        try {
+          client = await req.db.connect();
+          await client.query('BEGIN');
+          const conferencia = await conferirExclusaoDe(tipo, client, ids, true);
+          const bloqueados = conferencia.itens.filter((i) => i.bloqueios.length);
+          if (bloqueados.length || conferencia.nao_encontrados.length) {
+            await client.query('ROLLBACK');
+            const n = bloqueados.length;
+            return res.status(409).json({
+              error: n
+                ? `${n} ${n === 1 ? `${tipo.um} não pode` : `${tipo.varios} não podem`} sair agora. Nada foi apagado.`
+                : 'A lista mudou (algum item já não existe). Nada foi apagado.',
+              ...conferencia,
+            });
+          }
+          const { rows } = await tipo.apagar(client, ids);
+          await client.query('COMMIT');
+          console.log(`[${req.empresa.slug}] excluir ${tipo.varios}: ${rows.length} por ${req.admin && req.admin.user}: ${rows.map((r) => `#${r.id}`).join(', ')}`);
+          res.json({ excluidos: rows });
+        } catch (err) {
+          if (client) await client.query('ROLLBACK').catch(() => {});
+          console.error(err);
+          res.status(500).json({ error: 'Erro ao excluir. Nada foi apagado.' });
+        } finally {
+          if (client) client.release();
+        }
+      },
+    };
+  }
+
   async function handleMetrics(req, res) {
     try {
-      // Peças = estoque na loja + peças em maletas
+      // Peças = estoque na loja + peças em maletas. Produto Sob Encomenda ainda não
+      // foi comprado: o "estoque" dele no cadastro não é peça de verdade, então fica
+      // fora de peças, valor investido e lucro potencial (só entra no resumo à parte).
+      // Peça dele que estiver numa maleta é real e conta.
       const { rows: [m] } = await req.db.query(
         `WITH u AS (
-           SELECT p.preco_custo, p.preco_venda, p.estoque,
+           SELECT p.preco_custo, p.preco_venda,
+                  (p.disponibilidade = 'SOB_ENCOMENDA') AS encomenda,
+                  CASE WHEN p.disponibilidade = 'SOB_ENCOMENDA' THEN 0 ELSE p.estoque END AS loja,
                   (SELECT COUNT(*) FROM maleta_pecas mp WHERE mp.produto_id = p.id) AS rua
            FROM produtos p
          )
-         SELECT COALESCE(SUM(estoque + rua), 0) AS total,
-                COALESCE(SUM(preco_custo * (estoque + rua)), 0) AS investido,
-                COALESCE(SUM((preco_venda - preco_custo) * (estoque + rua)), 0) AS lucro,
-                COALESCE(SUM(preco_venda * rua), 0) AS em_rua
+         SELECT COALESCE(SUM(loja + rua), 0) AS total,
+                COALESCE(SUM(preco_custo * (loja + rua)), 0) AS investido,
+                COALESCE(SUM((preco_venda - preco_custo) * (loja + rua)), 0) AS lucro,
+                COALESCE(SUM(preco_venda * rua), 0) AS em_rua,
+                COUNT(*) FILTER (WHERE encomenda) AS encomenda_modelos
          FROM u`
       );
       const totalEstoque = { rows: [{ total: m.total }] };
@@ -3059,6 +3225,7 @@ async function startServer() {
         lucroPotencial: parseFloat(lucroPotencial.rows[0].total),
         valorEmRua: parseFloat(valorEmRua.rows[0].total),
         topAdicionadosMaleta: topMaleta.rows,
+        modelosSobEncomenda: parseInt(m.encomenda_modelos),
         // aliases em inglês
         totalStock: parseInt(totalEstoque.rows[0].total),
         investedValue: parseFloat(valorInvestido.rows[0].total),
@@ -3415,6 +3582,12 @@ async function startServer() {
   app.get('/api/admin/acessorios', exigirArea('acessorios', 'pedidos'), handleListAcessorios);
   app.post('/api/admin/acessorios', exigirArea('acessorios'), handleCreateAcessorio);
   app.put('/api/admin/acessorios/:id', exigirArea('acessorios'), handleUpdateAcessorio);
+  // Excluir de vez (com conferência): encomendas, acessórios e clientes
+  for (const [rota, tipo] of Object.entries(EXCLUSOES)) {
+    const h = handlersDeExclusao(tipo);
+    app.post(`/api/admin/${rota}/excluir/conferir`, exigirArea(tipo.area), h.conferir);
+    app.post(`/api/admin/${rota}/excluir`, exigirArea(tipo.area), h.excluir);
+  }
 
   // Usuários do painel e as áreas de cada um: só o dono da loja cadastra
   const usuariosHandlers = usuariosAdmin.criarHandlers({
