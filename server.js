@@ -13,6 +13,7 @@ const { importarProduto, baixarImagem, ErroImportacao } = require('./importar-pr
 const { lerPedidoPdf, ErroPedidoPdf } = require('./pedido-fornecedor');
 const usuariosAdmin = require('./usuarios-admin');
 const conferenciaEstoque = require('./conferencia-estoque');
+const vendas = require('./vendas');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -4170,6 +4171,8 @@ async function startServer() {
   app.post('/api/config/whatsapp', exigirArea('config'), handlePostWhatsapp);
   app.post('/api/admin/whatsapp', exigirArea('config'), handlePostWhatsapp);
   app.get('/api/admin/metrics', exigirArea('metricas'), handleMetrics);
+  // Vendas do período (pedidos entregues, maletas acertadas, encomendas e Conferência de estoque)
+  app.get('/api/admin/vendas', exigirArea('metricas'), vendas.criarHandler({ lerMetricasDesde }).handleVendas);
   app.get('/api/admin/loja', exigirArea('config'), handleGetLoja);
   app.put('/api/admin/loja', exigirArea('config'), handleUpdateLoja);
   app.post('/api/admin/loja/logo', exigirArea('config'), uploadImagem, handleUpdateLogo);
