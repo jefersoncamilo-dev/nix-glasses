@@ -98,12 +98,13 @@ describe('leitura do pedido', () => {
       'Pedido #14563', 'Data: 09/11/2025', 'Estado: Finalizado', 'Endereço de Envio:', 'Fulana', 'Rua X 1', 'Cidade, 00000', 'Brasil', '+5546999990000',
       'Óculos de Sol Tucs • XFG07196 • UNISSEX', 'x1', 'R$16,90',
       'Óculos de Sol Harper•XFG59090• Unissex •', 'Quadrado x2', 'R$33,80',
-      'Frete (Correios - PAC): Grátis', 'Desconto (CUPOM): - R$35,90', 'Subtotal: R$50,70', 'Total: R$14,80',
+      'Frete (Correios - PAC (via Melhor Envio)): Grátis', 'Desconto (CUPOM): - R$35,90', 'Subtotal: R$50,70', 'Total: R$14,80',
     ].map((texto, i) => ({ texto, pagina: 1, y: 800 - i * 10 }));
     const p = lerPedidoTexto(linhas);
     assert.equal(p.numero, '14563');
     assert.equal(p.data, '09/11/2025');
     assert.deepEqual([p.subtotal, p.desconto, p.frete, p.total], [50.7, 35.9, 0, 14.8]);
+    assert.equal(p.frete_descricao, 'Correios - PAC (via Melhor Envio)');
     assert.equal(p.itens.length, 2);
     assert.equal(p.itens[0].descricao, 'Óculos de Sol Tucs • XFG07196 • UNISSEX');
     assert.equal(p.itens[1].quantidade, 2);
@@ -168,6 +169,39 @@ describe('API: ler o PDF', () => {
     assert.equal(res.status, 400);
     const semLogin = await fetch(srv.url('/api/admin/pedidos-fornecedor/ler'), { method: 'POST', body: new FormData() });
     assert.equal(semLogin.status, 401);
+  });
+});
+
+describe('API: totais do pedido (frete, desconto, subtotal, total)', () => {
+  it('guarda os totais no lançamento, mostra na lista e deixa corrigir depois', async () => {
+    const r = await api('POST', '/api/admin/pedidos-fornecedor', {
+      fornecedor: 'Tassia', numero: '16511', data: '21/03/2026', produtos: [linhaProduto('T-1', { quantidade: 2, preco_custo: 134 })],
+      totais: { frete_descricao: 'Nuvem Envio - Jadlog Econômico', frete: '20,45', desconto: '- R$ 26,80', subtotal: 268, total: '261,65' },
+    });
+    assert.equal(r.status, 201, JSON.stringify(r.body));
+    assert.deepEqual([r.body.totais.frete, r.body.totais.desconto, r.body.totais.subtotal, r.body.totais.total], [20.45, 26.8, 268, 261.65]);
+    // Pedido lançado antes desta versão (sem totais): aparece com os totais vazios
+    await api('POST', '/api/admin/produtos/lote', { produtos: [linhaProduto('T-2', { fornecedor: 'Clush', quantidade: 1, pedido_fornecedor: '68670' })] });
+    let lista = (await api('GET', '/api/admin/pedidos-fornecedor')).body;
+    const tassia = lista.find((p) => p.numero === '16511');
+    assert.deepEqual([tassia.frete_descricao, tassia.frete, tassia.desconto, tassia.subtotal, tassia.total, tassia.valor], ['Nuvem Envio - Jadlog Econômico', 20.45, 26.8, 268, 261.65, 268]);
+    const clush = lista.find((p) => p.numero === '68670');
+    assert.deepEqual([clush.total, clush.frete_descricao], [null, '']);
+
+    const corrigido = await api('PUT', '/api/admin/pedidos-fornecedor/totais', { fornecedor: 'clush', numero: '68670', totais: { frete: 18.27, desconto: 50, subtotal: 282, total: 250.27 } });
+    assert.equal(corrigido.status, 200, JSON.stringify(corrigido.body));
+    lista = (await api('GET', '/api/admin/pedidos-fornecedor')).body;
+    assert.equal(lista.find((p) => p.numero === '68670').total, 250.27);
+    // Corrigir de novo atualiza a mesma linha
+    await api('PUT', '/api/admin/pedidos-fornecedor/totais', { fornecedor: 'Clush', numero: '68670', totais: { total: 250 } });
+    assert.equal(Number((await h.pool.query('SELECT count(*) FROM pedidos_fornecedor')).rows[0].count), 2);
+    assert.equal((await api('GET', '/api/admin/pedidos-fornecedor')).body.find((p) => p.numero === '68670').total, 250);
+
+    assert.equal((await api('PUT', '/api/admin/pedidos-fornecedor/totais', { fornecedor: 'Clush', numero: '68670', totais: { frete: 'abc' } })).status, 400);
+    assert.equal((await api('PUT', '/api/admin/pedidos-fornecedor/totais', { fornecedor: 'Clush', totais: {} })).status, 400);
+    const ruim = await api('POST', '/api/admin/pedidos-fornecedor', { fornecedor: 'Tassia', numero: '9', produtos: [linhaProduto('T-9')], totais: { total: 'x' } });
+    assert.equal(ruim.status, 400);
+    assert.equal(Number((await h.pool.query(`SELECT count(*) FROM produtos WHERE codigo_sku = 'T-9'`)).rows[0].count), 0);
   });
 });
 
@@ -267,11 +301,32 @@ function extrairFuncao(nome) {
     else if (html[i] === '}' && --nivel === 0) return html.slice(inicio, i + 1);
   }
 }
-const funcoes = ['lerPreco', 'lerDataCompra', 'precoVendaPadrao', 'proximoSku', 'nomeTematico', 'semAcentoPf', 'normalizarCodigoForn',
+const funcoes = ['lerTotaisDigitados', 'totalPagoPedidoForn', 'somarPedidosForn', 'lerPreco', 'lerDataCompra', 'precoVendaPadrao', 'proximoSku', 'nomeTematico', 'semAcentoPf', 'normalizarCodigoForn',
   'candidatosDoItem', 'itemPedidoForn', 'recalcularItensPedidoForn', 'montarLancamentoPedidoForn'];
 const ctx = vm.createContext({ Number, String, Math, Map, Set, Object, Date });
 const j = (v) => JSON.parse(JSON.stringify(v));
 vm.runInContext(`const ACRESCIMO_VENDA = 100;\n${funcoes.map(extrairFuncao).join('\n')}\n${funcoes.map((f) => `this.${f} = ${f};`).join('\n')}`, ctx);
+
+describe('painel: totais dos pedidos', () => {
+  it('lê os totais digitados (com sinal de menos e R$) e aponta o inválido', () => {
+    const t = j(ctx.lerTotaisDigitados({ frete_descricao: ' Jadlog ', frete: '20,45', desconto: '- R$ 26,80', subtotal: '268,00', total: '' }));
+    assert.deepEqual(t.totais, { frete_descricao: 'Jadlog', frete: 20.45, desconto: 26.8, subtotal: 268, total: null });
+    assert.equal(ctx.lerTotaisDigitados({ total: 'abc' }).erro, 'Total do pedido inválido');
+  });
+
+  it('soma o total geral e por fornecedor; pedido sem totais conta o valor dos itens', () => {
+    const r = j(ctx.somarPedidosForn([
+      { fornecedor: 'Tassia', pecas: 8, valor: 268, frete: 20.45, desconto: 26.8, subtotal: 268, total: 261.65 },
+      { fornecedor: 'tassia', pecas: 2, valor: 50, frete: null, desconto: null, subtotal: null, total: null },
+      { fornecedor: 'Clush', pecas: 9, valor: 282, frete: 18.27, desconto: 50, subtotal: 282, total: 250.27 },
+    ]));
+    assert.equal(r.geral.pedidos, 3);
+    assert.equal(r.geral.semTotais, 1);
+    assert.equal(Math.round(r.geral.total * 100) / 100, 561.92);
+    assert.equal(Math.round(r.geral.frete * 100) / 100, 38.72);
+    assert.deepEqual(r.porFornecedor.map((f) => [f.fornecedor, f.pedidos, Math.round(f.total * 100) / 100]), [['Tassia', 2, 311.65], ['Clush', 1, 250.27]]);
+  });
+});
 
 describe('painel: pedido do fornecedor', () => {
   const produtos = [
@@ -329,8 +384,9 @@ describe('painel: pedido do fornecedor', () => {
     assert.equal(itens[2].codigoNovo, 'NV 560');
     assert.match(itens[2].nome, /^Nix Tricera Zaya/);
 
-    const r = ctx.montarLancamentoPedidoForn(itens, { fornecedor: 'Tassia', numero: '20001', data: '05/11/2026' }, produtos, []);
+    const r = ctx.montarLancamentoPedidoForn(itens, { fornecedor: 'Tassia', numero: '20001', data: '05/11/2026', totais: { frete: '10,00', total: '100,00' } }, produtos, []);
     assert.equal(r.erros, undefined);
+    assert.deepEqual(j(r.corpo.totais), { frete_descricao: '', frete: 10, desconto: null, subtotal: null, total: 100 });
     assert.deepEqual(j(r.corpo.produtos.map((p) => [p.codigo_sku, p.quantidade, p.preco_custo, p.codigo_fornecedor])), [
       ['NIX-VOG-BRO-GLD-GRN', 2, 29.9, 'XFG976-GLD-GRN'], ['NIX-VOG-BRO-GLD-GRN', 1, 29.9, 'XFG976-GLD-GRN'], [itens[2].sku, 1, 29.9, 'NV 560'],
     ]);
@@ -348,5 +404,22 @@ describe('painel: pedido do fornecedor', () => {
     assert.deepEqual(j(r.corpo.acessorios), [{ id: 7, preco_custo: 3.9, quantidade: 10 }]);
     assert.deepEqual(j(r.origem), { produtos: [0], acessorios: [2] });
     assert.equal(ctx.montarLancamentoPedidoForn(itens, { numero: '' }, produtos, []).erros.get(-1), 'Informe o número do pedido');
+  });
+});
+
+describe('banco: totais dos pedidos antigos (lidos dos PDFs)', () => {
+  it('preenche só os pedidos que existem na loja, no fornecedor certo, sem sobrescrever', async () => {
+    const { initTables } = require('../db');
+    await api('POST', '/api/admin/produtos/lote', { produtos: [
+      linhaProduto('S-1', { fornecedor: 'Tassia Nunes Atacado', quantidade: 1, pedido_fornecedor: '16511' }),
+      linhaProduto('S-2', { fornecedor: '', quantidade: 1, pedido_fornecedor: '16511' }),
+      linhaProduto('S-3', { fornecedor: 'Clush', quantidade: 1, pedido_fornecedor: '68670' }),
+      linhaProduto('S-4', { fornecedor: 'Outra', quantidade: 1, pedido_fornecedor: '15074' }),
+    ] });
+    await h.pool.query(`INSERT INTO pedidos_fornecedor (fornecedor, numero, total) VALUES ('Clush', '68670', 999)`);
+    await initTables(h.pool);
+    const { rows } = await h.pool.query('SELECT fornecedor, numero, total::float, frete_descricao FROM pedidos_fornecedor ORDER BY numero');
+    assert.deepEqual(rows.map((r) => [r.fornecedor, r.numero, r.total]), [['Tassia Nunes Atacado', '16511', 261.65], ['Clush', '68670', 999]]);
+    assert.equal(rows[0].frete_descricao, 'Nuvem Envio - Jadlog Econômico');
   });
 });

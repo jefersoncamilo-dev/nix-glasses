@@ -29,6 +29,23 @@ function criarPool(databaseUrl) {
   });
 }
 
+// Totais (rodapé do PDF) dos pedidos de fornecedor já lançados antes da tela guardar
+// frete, desconto, subtotal e total. `fornecedor` é o padrão do nome (ILIKE).
+const TOTAIS_PEDIDOS_ANTIGOS = [
+  { fornecedor: '%tassia%', numero: '14314', data: '2025-10-22', frete: 24.19, frete_descricao: 'Nuvem Envio - Loggi Econômico', desconto: null, subtotal: 250.3, total: 274.49 },
+  { fornecedor: '%tassia%', numero: '14563', data: '2025-11-09', frete: 0, frete_descricao: 'Correios - PAC (via Melhor Envio)', desconto: 35.9, subtotal: 1395.6, total: 1359.7 },
+  { fornecedor: '%tassia%', numero: '15074', data: '2025-12-09', frete: 22.61, frete_descricao: 'Nuvem Envio - Jadlog Econômico', desconto: 79.2, subtotal: 266, total: 209.41 },
+  { fornecedor: '%tassia%', numero: '15956', data: '2026-02-04', frete: 18.75, frete_descricao: 'Nuvem Envio - Jadlog Econômico', desconto: 10.48, subtotal: 104.8, total: 113.07 },
+  { fornecedor: '%tassia%', numero: '16511', data: '2026-03-21', frete: 20.45, frete_descricao: 'Nuvem Envio - Jadlog Econômico', desconto: 26.8, subtotal: 268, total: 261.65 },
+  { fornecedor: '%tassia%', numero: '16599', data: '2026-03-28', frete: 14.41, frete_descricao: 'Nuvem Envio - Jadlog Econômico', desconto: 10.65, subtotal: 106.5, total: 110.26 },
+  { fornecedor: '%tassia%', numero: '16612', data: '2026-03-30', frete: 20.71, frete_descricao: 'Nuvem Envio - Jadlog Econômico', desconto: 26.4, subtotal: 264, total: 258.31 },
+  { fornecedor: '%tassia%', numero: '16896', data: '2026-04-23', frete: 44.2, frete_descricao: 'Jadlog - .Package (via Melhor Envio)', desconto: 84.48, subtotal: 285, total: 244.72 },
+  { fornecedor: '%tassia%', numero: '16977', data: '2026-04-30', frete: 28.27, frete_descricao: 'Nuvem Envio Correios PAC', desconto: 10.5, subtotal: 105, total: 122.77 },
+  { fornecedor: '%clush%', numero: '56543', data: '2026-03-02', frete: 19.71, frete_descricao: 'A combinar com a Clush', desconto: 50, subtotal: 209.4, total: 179.11 },
+  { fornecedor: '%clush%', numero: '63647', data: '2026-06-15', frete: 18.27, frete_descricao: 'Correios - PAC', desconto: 50, subtotal: 229.7, total: 197.97 },
+  { fornecedor: '%clush%', numero: '68670', data: '2026-08-25', frete: 18.27, frete_descricao: 'Correios - PAC', desconto: 50, subtotal: 282, total: 250.27 },
+];
+
 async function initTables(pool) {
   const client = await pool.connect();
   try {
@@ -346,6 +363,40 @@ async function initTables(pool) {
       )
     `);
     await client.query('CREATE INDEX IF NOT EXISTS compras_pedido_idx ON compras_fornecedor (pedido_fornecedor)');
+    // Totais do pedido do fornecedor, como no rodapé do PDF (frete, desconto, subtotal, total)
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS pedidos_fornecedor (
+        id SERIAL PRIMARY KEY,
+        fornecedor VARCHAR(120) NOT NULL DEFAULT '',
+        numero VARCHAR(60) NOT NULL,
+        data_compra DATE,
+        frete DECIMAL(10,2),
+        frete_descricao VARCHAR(120) NOT NULL DEFAULT '',
+        desconto DECIMAL(10,2),
+        subtotal DECIMAL(10,2),
+        total DECIMAL(10,2),
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+    await client.query('CREATE UNIQUE INDEX IF NOT EXISTS pedidos_fornecedor_numero_idx ON pedidos_fornecedor (lower(fornecedor), lower(numero))');
+    // Pedidos da Tassia e da Clush lançados antes dos totais (lidos dos PDFs do Jefe em
+    // 2026-11-09). Só entra no pedido que existe nesta loja e ainda não tem totais.
+    for (const t of TOTAIS_PEDIDOS_ANTIGOS) {
+      await client.query(
+        `INSERT INTO pedidos_fornecedor (fornecedor, numero, data_compra, frete, frete_descricao, desconto, subtotal, total)
+         SELECT g.fornecedor, $1, $2::date, $3, $4, $5, $6, $7
+         FROM (
+           SELECT fornecedor FROM compras_fornecedor
+           WHERE pedido_fornecedor = $1 AND (fornecedor ILIKE $8 OR fornecedor = '')
+           GROUP BY fornecedor
+           ORDER BY (fornecedor <> '') DESC, count(*) DESC
+           LIMIT 1
+         ) g
+         ON CONFLICT ((lower(fornecedor)), (lower(numero))) DO NOTHING`,
+        [t.numero, t.data, t.frete, t.frete_descricao, t.desconto, t.subtotal, t.total, t.fornecedor]
+      );
+    }
 
     // Usuários do painel admin com permissão por área (Configurações > Usuários)
     await usuariosAdmin.criarTabela(client);
