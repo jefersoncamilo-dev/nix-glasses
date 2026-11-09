@@ -12,6 +12,7 @@ const master = require('./master');
 const { importarProduto, baixarImagem, ErroImportacao } = require('./importar-produto');
 const { lerPedidoPdf, ErroPedidoPdf } = require('./pedido-fornecedor');
 const usuariosAdmin = require('./usuarios-admin');
+const conferenciaEstoque = require('./conferencia-estoque');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -3218,7 +3219,7 @@ async function startServer() {
       } else if (escopo === 'tudo') {
         const tabelas = ['produtos', 'compras_fornecedor', 'maleta_pecas', 'acertos', 'pedidos', 'clientes', 'encomendas'];
         if (acessorios === true) tabelas.push('acessorios', 'compras_acessorio');
-        tabelas.push('pedidos_fornecedor');
+        tabelas.push('pedidos_fornecedor', 'movimentos_estoque');
         await client.query(`TRUNCATE ${tabelas.join(', ')} RESTART IDENTITY`);
         // Sem produtos, a única imagem que ainda serve é a logo
         await client.query('DELETE FROM imagens WHERE id IS DISTINCT FROM $1', [logo]);
@@ -4146,6 +4147,11 @@ async function startServer() {
   app.put('/api/admin/produtos/lote', exigirArea('produtos'), handleUpdateLote);
   app.post('/api/admin/produtos/excluir/conferir', exigirArea('produtos'), handleConferirExclusao);
   app.post('/api/admin/produtos/excluir', exigirArea('produtos'), handleExcluirProdutos);
+  // Conferência de estoque: vendido, baixa, Sob Encomenda ou esgotado (com conferência antes)
+  const conferencia = conferenciaEstoque.criarHandlers({ recalcularStatus, textoCurto });
+  app.post('/api/admin/estoque/conferencia/conferir', exigirArea('produtos'), conferencia.handleConferir);
+  app.post('/api/admin/estoque/conferencia', exigirArea('produtos'), conferencia.handleAplicar);
+  app.get('/api/admin/estoque/movimentos', exigirArea('produtos'), conferencia.handleListar);
   app.post('/api/admin/importar-url', exigirArea('produtos'), handleImportarUrl);
   app.post('/api/admin/importar-imagem', exigirArea('produtos'), handleImportarImagem);
   app.post('/api/admin/pedidos-fornecedor/ler', exigirArea('produtos'), uploadPdfPedido, handleLerPedidoFornecedor);
