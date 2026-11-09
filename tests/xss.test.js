@@ -161,6 +161,8 @@ describe('painel (admin/index.html) escapa dados de produto', () => {
       emptyProdutos: elemento(),
       formatarMoeda,
       statusClass: () => '',
+      // quadro de totais tem teste próprio (relatorio-estoque.test.js)
+      atualizarRelatorioEstoque: () => {},
     });
     ctx.renderizarTabela();
     semInjecao(tabelaProdutos.innerHTML);
