@@ -507,6 +507,7 @@
             <p id="metricaRua" class="text-3xl font-bold text-orange-600">-</p>
           </div>
         </div>
+        <p id="notaMetricasEncomenda" class="hidden -mt-5 mb-8 text-sm text-gray-500"></p>
         <div class="bg-white rounded-xl border border-gray-200 p-6">
           <h4 class="text-lg font-semibold text-gray-900 mb-4">Top 10 Mais Adicionados à Maleta</h4>
           <div class="overflow-x-auto">
@@ -724,7 +725,7 @@
     </div>
   </main>
 
-  <!-- Modal Excluir definitivamente (Acerto de estoque e lixeira da linha) -->
+  <!-- Modal Excluir definitivamente (produtos, encomendas, acessórios e clientes) -->
   <div id="modalExclusao" class="fixed inset-0 modal-overlay bg-black/50 hidden z-50 flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-labelledby="tituloExclusao">
     <div class="bg-white rounded-2xl max-w-lg w-full max-h-[90vh] overflow-hidden flex flex-col">
       <div class="flex items-center justify-between p-6 border-b border-gray-200">
@@ -739,7 +740,7 @@
           <button id="btnTirarBloqueados" type="button" class="mt-2 bg-white border border-red-300 hover:bg-red-100 text-red-700 px-3 py-1.5 rounded-lg text-sm font-medium">Tirar esses da lista e continuar</button>
         </div>
         <div id="confirmaExclusao" class="hidden">
-          <p class="text-sm text-gray-600 mb-3">Some do painel e da vitrine, junto com as fotos e o histórico de compras. Pedidos e acertos antigos continuam. <strong>Não tem como desfazer.</strong></p>
+          <p class="text-sm text-gray-600 mb-3"><span id="efeitoExclusao">Some do painel e da vitrine, junto com as fotos e o histórico de compras. Pedidos e acertos antigos continuam.</span> <strong>Não tem como desfazer.</strong></p>
           <label for="campoConfirmaExclusao" class="block text-sm font-medium text-gray-700 mb-1">Para confirmar, digite EXCLUIR</label>
           <input type="text" id="campoConfirmaExclusao" autocomplete="off" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500">
         </div>
@@ -3328,6 +3329,11 @@
         document.getElementById('metricaInvestido').textContent = formatarMoeda(m.valorInvestido);
         document.getElementById('metricaLucro').textContent = formatarMoeda(m.lucroPotencial);
         document.getElementById('metricaRua').textContent = formatarMoeda(m.valorEmRua);
+        // Sob Encomenda ainda não foi comprado: fica fora de estoque, investido e lucro
+        const nEnc = Number(m.modelosSobEncomenda) || 0;
+        const nota = document.getElementById('notaMetricasEncomenda');
+        nota.textContent = nEnc ? `${nEnc} ${nEnc === 1 ? 'produto Sob Encomenda não entra' : 'produtos Sob Encomenda não entram'} em estoque, valor investido nem lucro: ainda não foram comprados.` : '';
+        nota.classList.toggle('hidden', !nEnc);
 
         const tbody = document.getElementById('tabelaTopMaleta');
         tbody.innerHTML = m.topAdicionadosMaleta.map((p, i) => `
@@ -3420,7 +3426,10 @@
           <td class="px-4 sm:px-6 py-4 text-sm text-gray-500">${escapeHtml(formatarData(c.ultimo_pedido))}</td>
           <td class="px-4 sm:px-6 py-4">${badgesPendencias(c)}</td>
           <td class="px-4 sm:px-6 py-4 text-right">
-            <button data-cliente="${Number(c.id)}" class="ver-pedidos text-orange-600 hover:text-orange-700 text-sm font-medium">Ver perfil</button>
+            <div class="flex items-center justify-end gap-1 whitespace-nowrap">
+              <button data-cliente="${Number(c.id)}" class="ver-pedidos text-orange-600 hover:text-orange-700 text-sm font-medium">Ver perfil</button>
+              <button type="button" data-excluir-cliente="${Number(c.id)}" class="ml-1 p-1.5 text-red-500 hover:text-red-700 hover:bg-red-50 rounded-lg" title="Excluir definitivamente" aria-label="Excluir ${escapeHtml(c.nome || c.email)}"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg></button>
+            </div>
           </td>
         </tr>
       `).join('') || '<tr><td colspan="7" class="px-6 py-8 text-center text-gray-500">Nenhum cliente cadastrado ainda</td></tr>';
@@ -3624,6 +3633,8 @@
     }
 
     document.getElementById('tabelaClientes').addEventListener('click', (e) => {
+      const lixo = e.target.closest('[data-excluir-cliente]');
+      if (lixo) return abrirExclusao([Number(lixo.dataset.excluirCliente)], 'clientes');
       const btn = e.target.closest('.ver-pedidos');
       if (!btn) return;
       carregarPerfil(Number(btn.dataset.cliente));
@@ -3975,6 +3986,7 @@
             ${proximo ? `<button type="button" data-status-encomenda="${id}" data-novo-status="${proximo[0]}" class="px-3 py-1.5 bg-orange-500 hover:bg-orange-600 text-white rounded-lg text-sm font-medium">${proximo[1]}</button>` : ''}
             ${e.status === 'PRONTO_ENTREGA' && e.telefone ? `<button type="button" data-avisar-encomenda="${id}" class="px-3 py-1.5 bg-green-500 hover:bg-green-600 text-white rounded-lg text-sm font-medium">Avisar no WhatsApp</button>` : ''}
             <button type="button" data-editar-encomenda="${id}" class="px-3 py-1.5 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 text-sm font-medium">Editar</button>
+            <button type="button" data-excluir-encomenda="${id}" class="ml-auto px-3 py-1.5 border border-red-200 text-red-600 rounded-lg hover:bg-red-50 text-sm font-medium" title="Excluir definitivamente">Excluir</button>
           </div>
         </div>`;
     }
@@ -4093,6 +4105,8 @@
       const acharEnc = (id) => todasEncomendas.find(x => Number(x.id) === Number(id)) ||
         (perfilAtual ? perfilAtual.encomendas.find(x => Number(x.id) === Number(id)) : undefined);
       if (editar) return abrirModalEncomenda(acharEnc(editar.dataset.editarEncomenda));
+      const excluir = ev.target.closest('[data-excluir-encomenda]');
+      if (excluir) return abrirExclusao([Number(excluir.dataset.excluirEncomenda)], 'encomendas');
       const avisar = ev.target.closest('[data-avisar-encomenda]');
       if (avisar) {
         const e = acharEnc(avisar.dataset.avisarEncomenda);
@@ -4314,7 +4328,7 @@
           <td class="px-4 py-3 text-gray-700">${formatarMoeda(Number(a.preco_venda))}</td>
           <td class="px-4 py-3 font-medium ${Number(a.estoque) > 0 ? 'text-gray-900' : 'text-red-600'}">${Number(a.estoque) || 0} un.</td>
           <td class="px-4 py-3 text-sm">${a.ativo ? '<span class="px-2 py-0.5 rounded-full bg-green-100 text-green-700">Ativo</span>' : '<span class="px-2 py-0.5 rounded-full bg-gray-100 text-gray-600">Inativo</span>'}</td>
-          <td class="px-4 py-3 text-right"><button type="button" data-editar-acessorio="${Number(a.id)}" class="text-orange-600 hover:text-orange-700 text-sm font-medium">Editar</button></td>
+          <td class="px-4 py-3 text-right whitespace-nowrap"><button type="button" data-editar-acessorio="${Number(a.id)}" class="text-orange-600 hover:text-orange-700 text-sm font-medium">Editar</button><button type="button" data-excluir-acessorio="${Number(a.id)}" class="ml-2 p-1.5 align-middle text-red-500 hover:text-red-700 hover:bg-red-50 rounded-lg" title="Excluir definitivamente" aria-label="Excluir ${escapeHtml(a.nome)}"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg></button></td>
         </tr>`).join('') || '<tr><td colspan="5" class="px-4 py-6 text-center text-gray-500">Nenhum acessório cadastrado ainda</td></tr>';
     }
 
@@ -4327,6 +4341,8 @@
     }
 
     document.getElementById('tabelaAcessorios').addEventListener('click', (e) => {
+      const lixo = e.target.closest('[data-excluir-acessorio]');
+      if (lixo) return abrirExclusao([Number(lixo.dataset.excluirAcessorio)], 'acessorios');
       const btn = e.target.closest('[data-editar-acessorio]');
       if (!btn) return;
       const a = acessoriosCache.find(x => Number(x.id) === Number(btn.dataset.editarAcessorio));
@@ -4791,35 +4807,78 @@
     btnExcluirMarcados.addEventListener('click', () => abrirExclusao([...marcadosAcerto]));
     document.getElementById('btnExcluirFlutuante').addEventListener('click', () => abrirExclusao([...marcadosAcerto]));
 
+    // Modal de exclusão definitiva, o mesmo para produtos, encomendas, acessórios e
+    // clientes. O servidor confere antes (o que quebraria pedido ou maleta aberta fica
+    // em vermelho e barra tudo) e pede EXCLUIR digitado.
+    const TIPOS_EXCLUSAO = {
+      produtos: {
+        rota: 'produtos', um: 'produto', varios: 'produtos', fem: false,
+        efeito: 'Some do painel e da vitrine, junto com as fotos e o histórico de compras. Pedidos e acertos antigos continuam.',
+        linha: p => ({ titulo: nomeProdutoExclusao(p), detalhe: `${p.codigo_sku} • ${Number(p.estoque) || 0} em estoque` }),
+        marcados: () => marcadosAcerto,
+        depois: () => carregarProdutos(),
+      },
+      encomendas: {
+        rota: 'encomendas', um: 'encomenda', varios: 'encomendas', fem: true,
+        efeito: 'Some da lista de encomendas e do perfil da cliente. O pedido de onde ela veio continua como está.',
+        depois: async () => { await carregarEncomendas(); if (perfilAtual) await carregarPerfil(perfilAtual.cliente.id, false); },
+      },
+      acessorios: {
+        rota: 'acessorios', um: 'acessório', varios: 'acessórios', fem: false,
+        efeito: 'Sai do cadastro de acessórios e do fechamento. Pedidos já entregues continuam com o nome e o preço lançados.',
+        depois: () => carregarAcessorios(),
+      },
+      clientes: {
+        rota: 'clientes', um: 'cliente', varios: 'clientes', fem: true,
+        efeito: 'A conta da cliente some do painel e o login dela deixa de funcionar. Pedidos e encomendas antigos continuam, como "sem conta".',
+        depois: (ids) => {
+          if (perfilAtual && ids.includes(Number(perfilAtual.cliente.id))) {
+            perfilAtual = null;
+            document.getElementById('perfilCliente').classList.add('hidden');
+          }
+          return carregarClientes();
+        },
+      },
+    };
+
     const modalExclusao = document.getElementById('modalExclusao');
     const campoConfirmaExclusao = document.getElementById('campoConfirmaExclusao');
     const btnConfirmarExclusao = document.getElementById('btnConfirmarExclusao');
-    let exclusao = { ids: [], conferidos: [], bloqueados: [], salvando: false };
+    let exclusao = { tipo: TIPOS_EXCLUSAO.produtos, ids: [], conferidos: [], bloqueados: [], salvando: false };
 
     function nomeProdutoExclusao(p) {
       return `${p.nome}${p.tamanho ? ` (Tam. ${p.tamanho})` : ''}`;
     }
 
+    // "1 encomenda" / "3 encomendas"
+    function contagemExclusao(tipo, n) {
+      return `${n} ${n === 1 ? tipo.um : tipo.varios}`;
+    }
+
     function renderizarExclusao() {
-      const { conferidos, bloqueados } = exclusao;
+      const { tipo, conferidos, bloqueados } = exclusao;
       const liberados = conferidos.length - bloqueados.length;
-      document.getElementById('listaExclusao').innerHTML = conferidos.map(p => `
+      const o = tipo.fem ? 'a' : 'o';
+      document.getElementById('listaExclusao').innerHTML = conferidos.map(p => {
+        const l = tipo.linha ? tipo.linha(p) : p;
+        return `
         <li class="px-3 py-2 text-sm ${p.bloqueios.length ? 'bg-red-50' : ''}">
-          <p class="font-medium text-gray-900">${escapeHtml(nomeProdutoExclusao(p))} <span class="text-gray-500 font-normal">• ${escapeHtml(p.codigo_sku)} • ${Number(p.estoque) || 0} em estoque</span></p>
+          <p class="font-medium text-gray-900">${escapeHtml(l.titulo)}${l.detalhe ? ` <span class="text-gray-500 font-normal">• ${escapeHtml(l.detalhe)}</span>` : ''}</p>
           ${p.bloqueios.map(b => `<p class="text-red-700">Não pode sair: ${escapeHtml(b)}</p>`).join('')}
           ${p.avisos.map(a => `<p class="text-amber-700">Atenção: ${escapeHtml(a)}</p>`).join('')}
-        </li>`).join('');
+        </li>`;
+      }).join('');
       document.getElementById('resumoExclusao').innerHTML = conferidos.length === 1
-        ? 'Este produto vai ser <strong>excluído de vez</strong>:'
-        : `Estes <strong>${conferidos.length} produtos</strong> vão ser <strong>excluídos de vez</strong>:`;
+        ? `Est${tipo.fem ? 'a' : 'e'} ${escapeHtml(tipo.um)} vai ser <strong>excluíd${o} de vez</strong>:`
+        : `Est${tipo.fem ? 'as' : 'es'} <strong>${escapeHtml(contagemExclusao(tipo, conferidos.length))}</strong> vão ser <strong>excluíd${o}s de vez</strong>:`;
+      document.getElementById('efeitoExclusao').textContent = tipo.efeito;
       const temBloqueio = bloqueados.length > 0;
       document.getElementById('bloqueioExclusao').classList.toggle('hidden', !temBloqueio);
-      document.getElementById('textoBloqueioExclusao').textContent = bloqueados.length === 1
-        ? '1 produto não pode ser excluído agora (marcado em vermelho).'
-        : `${bloqueados.length} produtos não podem ser excluídos agora (marcados em vermelho).`;
+      document.getElementById('textoBloqueioExclusao').textContent =
+        `${contagemExclusao(tipo, bloqueados.length)} não ${bloqueados.length === 1 ? 'pode' : 'podem'} sair agora (em vermelho).`;
       document.getElementById('btnTirarBloqueados').classList.toggle('hidden', liberados === 0);
       document.getElementById('confirmaExclusao').classList.toggle('hidden', temBloqueio || !conferidos.length);
-      btnConfirmarExclusao.textContent = liberados === 1 ? 'Excluir 1 produto' : `Excluir ${liberados} produtos`;
+      btnConfirmarExclusao.textContent = liberados ? `Excluir ${contagemExclusao(tipo, liberados)}` : 'Excluir';
       atualizarBotaoExclusao();
     }
 
@@ -4829,18 +4888,18 @@
     }
 
     async function conferirParaExcluir(ids) {
-      exclusao = { ids, conferidos: [], bloqueados: [], salvando: false };
+      exclusao = { tipo: exclusao.tipo, ids, conferidos: [], bloqueados: [], salvando: false };
       document.getElementById('listaExclusao').innerHTML = '';
-      document.getElementById('resumoExclusao').textContent = 'Conferindo os produtos...';
+      document.getElementById('resumoExclusao').textContent = 'Conferindo...';
       document.getElementById('bloqueioExclusao').classList.add('hidden');
       document.getElementById('confirmaExclusao').classList.add('hidden');
       atualizarBotaoExclusao();
       try {
-        const res = await fetchAdmin('/api/admin/produtos/excluir/conferir', {
+        const res = await fetchAdmin(`/api/admin/${exclusao.tipo.rota}/excluir/conferir`, {
           method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ids })
         });
         const data = await res.json().catch(() => ({}));
-        if (!res.ok) throw new Error(data.error || 'Erro ao conferir os produtos');
+        if (!res.ok) throw new Error(res.status === 403 ? 'Seu usuário não tem acesso a esta tela.' : (data.error || 'Erro ao conferir'));
         aplicarConferencia(data);
       } catch (err) {
         document.getElementById('resumoExclusao').textContent = err.message;
@@ -4848,19 +4907,20 @@
     }
 
     function aplicarConferencia(data) {
-      exclusao.conferidos = data.produtos || [];
+      exclusao.conferidos = data.produtos || data.itens || [];
       exclusao.ids = exclusao.conferidos.map(p => Number(p.id));
       exclusao.bloqueados = exclusao.conferidos.filter(p => p.bloqueios.length);
       if (!exclusao.conferidos.length) {
-        document.getElementById('resumoExclusao').textContent = 'Esses produtos já não existem.';
+        document.getElementById('resumoExclusao').textContent = 'Isso já não existe (a lista mudou). Atualize a tela.';
         atualizarBotaoExclusao();
         return;
       }
       renderizarExclusao();
     }
 
-    function abrirExclusao(ids) {
+    function abrirExclusao(ids, tipo = 'produtos') {
       if (!ids.length) return;
+      exclusao.tipo = TIPOS_EXCLUSAO[tipo];
       campoConfirmaExclusao.value = '';
       modalExclusao.classList.remove('hidden');
       conferirParaExcluir(ids);
@@ -4877,25 +4937,27 @@
     campoConfirmaExclusao.addEventListener('input', atualizarBotaoExclusao);
     document.getElementById('btnTirarBloqueados').addEventListener('click', () => {
       const bloqueados = new Set(exclusao.bloqueados.map(p => Number(p.id)));
-      bloqueados.forEach(id => marcadosAcerto.delete(id));
+      const marcados = exclusao.tipo.marcados ? exclusao.tipo.marcados() : null;
+      if (marcados) bloqueados.forEach(id => marcados.delete(id));
       exclusao.conferidos = exclusao.conferidos.filter(p => !bloqueados.has(Number(p.id)));
       exclusao.ids = exclusao.conferidos.map(p => Number(p.id));
       exclusao.bloqueados = [];
       renderizarExclusao();
-      renderizarTabela();
+      if (marcados) renderizarTabela();
     });
 
     btnConfirmarExclusao.addEventListener('click', async () => {
+      const tipo = exclusao.tipo;
       exclusao.salvando = true;
       atualizarBotaoExclusao();
       btnConfirmarExclusao.textContent = 'Excluindo...';
       try {
-        const res = await fetchAdmin('/api/admin/produtos/excluir', {
+        const res = await fetchAdmin(`/api/admin/${tipo.rota}/excluir`, {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ ids: exclusao.ids, confirmacao: campoConfirmaExclusao.value.trim().toUpperCase() })
         });
         const data = await res.json().catch(() => ({}));
-        if (res.status === 409 && data.produtos) {
+        if (res.status === 409 && (data.produtos || data.itens)) {
           // Algo mudou desde a conferência (ex.: peça foi para uma maleta): mostra de novo
           exclusao.salvando = false;
           aplicarConferencia(data);
@@ -4903,12 +4965,15 @@
           return;
         }
         if (!res.ok) throw new Error(data.error || 'Erro ao excluir');
-        const n = (data.excluidos || []).length;
-        (data.excluidos || []).forEach(p => marcadosAcerto.delete(Number(p.id)));
+        const ids = (data.excluidos || []).map(p => Number(p.id));
+        const marcados = tipo.marcados ? tipo.marcados() : null;
+        if (marcados) ids.forEach(id => marcados.delete(id));
         exclusao.salvando = false;
         modalExclusao.classList.add('hidden');
-        mostrarToast(n === 1 ? 'Produto excluído definitivamente' : `${n} produtos excluídos definitivamente`);
-        carregarProdutos();
+        const o = tipo.fem ? 'a' : 'o';
+        const um = tipo.um[0].toUpperCase() + tipo.um.slice(1);
+        mostrarToast(ids.length === 1 ? `${um} excluíd${o} definitivamente` : `${contagemExclusao(tipo, ids.length)} excluíd${o}s definitivamente`);
+        await tipo.depois(ids);
       } catch (err) {
         exclusao.salvando = false;
         mostrarToast(err.message, 'error');
