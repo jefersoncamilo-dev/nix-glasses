@@ -25,6 +25,18 @@
     .modal-overlay { backdrop-filter: blur(4px); }
     /* Contador do menu fora do textContent (o título da página usa o texto do menu) */
     .badge-contagem::after { content: attr(data-n); }
+    /* Imprimir relatório de estoque: só a área #relatorioImpressao vai para o papel */
+    @media print {
+      body.imprimindo-relatorio > *:not(#relatorioImpressao) { display: none !important; }
+      body.imprimindo-relatorio { display: block; background: #fff; }
+      body.imprimindo-relatorio #relatorioImpressao { display: block !important; }
+      @page { size: A4 landscape; margin: 10mm; }
+    }
+    #relatorioImpressao table { width: 100%; border-collapse: collapse; font-size: 10px; }
+    #relatorioImpressao th, #relatorioImpressao td { border-bottom: 1px solid #ddd; padding: 3px 4px; text-align: left; vertical-align: top; }
+    #relatorioImpressao th { background: #f3f4f6; }
+    #relatorioImpressao .num { text-align: right; white-space: nowrap; }
+    #relatorioImpressao tfoot td { font-weight: 700; border-top: 2px solid #111; }
   </style>
 </head>
 <body class="bg-gray-50 min-h-screen flex">
@@ -191,6 +203,44 @@
             <svg class="mx-auto h-12 w-12 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/></svg>
             <p class="mt-4 text-gray-500">Nenhum produto cadastrado</p>
           </div>
+        </div>
+
+        <!-- Relatório de estoque: totais da lista filtrada acima -->
+        <div id="relatorioEstoque" class="bg-white rounded-xl border border-gray-200 p-4 sm:p-6 mt-6">
+          <div class="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 mb-4">
+            <div class="min-w-0">
+              <h4 class="text-lg font-semibold text-gray-900">Totais do relatório</h4>
+              <p id="relatorioFiltros" class="text-sm text-gray-500">Todos os produtos</p>
+            </div>
+            <div class="flex gap-2">
+              <button id="btnExportarRelatorio" type="button" class="disabled:opacity-40 disabled:cursor-not-allowed flex-1 sm:flex-none bg-gray-100 hover:bg-gray-200 text-gray-700 px-4 py-2 rounded-lg font-medium text-sm transition-colors" title="Baixar a lista filtrada em planilha (abre no Excel)">Exportar planilha</button>
+              <button id="btnImprimirRelatorio" type="button" class="disabled:opacity-40 disabled:cursor-not-allowed flex-1 sm:flex-none bg-gray-100 hover:bg-gray-200 text-gray-700 px-4 py-2 rounded-lg font-medium text-sm transition-colors" title="Imprimir ou salvar em PDF">Imprimir / PDF</button>
+            </div>
+          </div>
+          <div class="grid grid-cols-2 lg:grid-cols-5 gap-3">
+            <div class="rounded-lg bg-gray-50 p-3">
+              <p class="text-xs text-gray-500">Produtos</p>
+              <p id="totalRelProdutos" class="text-xl sm:text-2xl font-bold text-gray-900">0</p>
+            </div>
+            <div class="rounded-lg bg-gray-50 p-3">
+              <p class="text-xs text-gray-500">Peças</p>
+              <p id="totalRelPecas" class="text-xl sm:text-2xl font-bold text-gray-900">0</p>
+              <p id="totalRelPecasDetalhe" class="text-xs text-gray-500"></p>
+            </div>
+            <div class="rounded-lg bg-gray-50 p-3">
+              <p class="text-xs text-gray-500">Valor investido (custo)</p>
+              <p id="totalRelInvestido" class="text-xl sm:text-2xl font-bold text-gray-900">R$ 0,00</p>
+            </div>
+            <div class="rounded-lg bg-gray-50 p-3">
+              <p class="text-xs text-gray-500">Valor de venda</p>
+              <p id="totalRelVenda" class="text-xl sm:text-2xl font-bold text-gray-900">R$ 0,00</p>
+            </div>
+            <div class="col-span-2 lg:col-span-1 rounded-lg bg-green-50 p-3">
+              <p class="text-xs text-green-700">Lucro potencial</p>
+              <p id="totalRelLucro" class="text-xl sm:text-2xl font-bold text-green-600">R$ 0,00</p>
+            </div>
+          </div>
+          <p id="totalRelNota" class="hidden mt-3 text-sm text-gray-500"></p>
         </div>
       </div>
 
@@ -1254,6 +1304,9 @@
   </div>
 
   <datalist id="listaFornecedores"></datalist>
+
+  <!-- Relatório de estoque para imprimir / salvar em PDF (montado na hora) -->
+  <div id="relatorioImpressao" class="hidden"></div>
 
   <!-- Toast -->
   <div id="toastContainer" class="fixed top-6 right-6 z-50 space-y-2"></div>
@@ -2362,6 +2415,7 @@
 
       produtosFiltrados = filtrados;
       atualizarBarraAcertoEstoque();
+      atualizarRelatorioEstoque(filtrados);
       if (filtrados.length === 0) {
         tabelaProdutos.innerHTML = '';
         emptyProdutos.classList.remove('hidden');
@@ -2409,6 +2463,179 @@
 
     // Filtros
     [filtroStatusAdmin, filtroDisponibilidadeAdmin, filtroFormatoAdmin, filtroFornecedorAdmin, buscaAdmin].forEach(el => el.addEventListener('input', renderizarTabela));
+
+    // ---------- Relatório de estoque (totais da lista filtrada) ----------
+    // Mesma regra das Métricas: peça = estoque na loja + peças em maletas.
+    // Sob Encomenda ainda não foi comprado: o estoque do cadastro dele não conta
+    // (nem custo, nem venda, nem lucro); peça dele que estiver numa maleta conta.
+    function pecasRelatorio(p) {
+      const loja = p.disponibilidade === 'SOB_ENCOMENDA' ? 0 : Math.max(0, Number(p.estoque) || 0);
+      const maleta = Math.max(0, Number(p.em_maleta) || 0);
+      return { loja, maleta, total: loja + maleta };
+    }
+
+    // Valores de um produto no relatório, em centavos para não acumular erro de arredondamento
+    function valoresRelatorio(p) {
+      const pecas = pecasRelatorio(p);
+      const custo = Math.round((Number(p.preco_custo) || 0) * 100);
+      const venda = Math.round((Number(p.preco_venda) || 0) * 100);
+      return { ...pecas, custo, venda, investido: custo * pecas.total, valorVenda: venda * pecas.total, lucro: (venda - custo) * pecas.total };
+    }
+
+    // Totais em reais. encomendas = produtos Sob Encomenda da lista (fora dos valores)
+    function totaisRelatorioEstoque(lista) {
+      const t = { produtos: 0, pecas: 0, pecasLoja: 0, pecasMaleta: 0, investido: 0, venda: 0, lucro: 0, encomendas: 0 };
+      for (const p of lista) {
+        const v = valoresRelatorio(p);
+        t.produtos++;
+        t.pecas += v.total;
+        t.pecasLoja += v.loja;
+        t.pecasMaleta += v.maleta;
+        t.investido += v.investido;
+        t.venda += v.valorVenda;
+        t.lucro += v.lucro;
+        if (p.disponibilidade === 'SOB_ENCOMENDA') t.encomendas++;
+      }
+      t.investido /= 100;
+      t.venda /= 100;
+      t.lucro /= 100;
+      return t;
+    }
+
+    // Texto dos filtros em uso, para o cabeçalho do relatório
+    function descreverFiltrosRelatorio(filtros) {
+      const partes = [filtros.status, filtros.disponibilidade, filtros.formato, filtros.fornecedor].filter(Boolean);
+      if (filtros.busca) partes.push(`busca "${filtros.busca}"`);
+      return partes.length ? 'Filtros: ' + partes.join(' • ') : 'Todos os produtos';
+    }
+
+    function filtrosRelatorioAtuais() {
+      const rotulo = (sel) => sel.value ? sel.selectedOptions[0].textContent.trim() : '';
+      return {
+        status: rotulo(filtroStatusAdmin),
+        disponibilidade: rotulo(filtroDisponibilidadeAdmin),
+        formato: rotulo(filtroFormatoAdmin),
+        fornecedor: rotulo(filtroFornecedorAdmin),
+        busca: buscaAdmin.value.trim(),
+      };
+    }
+
+    const ROTULO_STATUS_RELATORIO = { DISPONIVEL: 'Disponível', CONDICIONAL: 'Condicional', ESGOTADO: 'Esgotado' };
+    const rotuloDisponibilidade = (d) => d === 'SOB_ENCOMENDA' ? 'Sob Encomenda' : 'Pronta Entrega';
+
+    // Planilha (CSV com ; e vírgula decimal, como o Excel em português abre)
+    function csvRelatorioEstoque(lista, rotuloFormato = 'Formato') {
+      const numero = (centavos) => (centavos / 100).toFixed(2).replace('.', ',');
+      const celula = (v) => {
+        let t = String(v ?? '');
+        if (/^[=+\-@\t\r]/.test(t)) t = "'" + t; // não deixa o Excel tratar texto como fórmula
+        return /[;"\n\r]/.test(t) ? '"' + t.replace(/"/g, '""') + '"' : t;
+      };
+      const cabecalho = ['Produto', 'SKU', 'Fornecedor', 'Cód. fornecedor', rotuloFormato, 'Cor', 'Disponibilidade', 'Status',
+        'Peças na loja', 'Peças em maleta', 'Peças', 'Custo unit.', 'Venda unit.', 'Valor investido', 'Valor de venda', 'Lucro potencial'];
+      const linhas = [cabecalho];
+      const tot = { loja: 0, maleta: 0, total: 0, investido: 0, valorVenda: 0, lucro: 0 };
+      for (const p of lista) {
+        const v = valoresRelatorio(p);
+        Object.keys(tot).forEach(k => { tot[k] += v[k]; });
+        linhas.push([p.nome, p.codigo_sku, p.fornecedor, p.codigo_fornecedor, p.formato, p.cor_armacao, rotuloDisponibilidade(p.disponibilidade),
+          ROTULO_STATUS_RELATORIO[p.status] || p.status, v.loja, v.maleta, v.total, numero(v.custo), numero(v.venda),
+          numero(v.investido), numero(v.valorVenda), numero(v.lucro)]);
+      }
+      linhas.push([`TOTAL (${lista.length} produtos)`, '', '', '', '', '', '', '', tot.loja, tot.maleta, tot.total, '', '',
+        numero(tot.investido), numero(tot.valorVenda), numero(tot.lucro)]);
+      return linhas.map(l => l.map(celula).join(';')).join('\r\n') + '\r\n';
+    }
+
+    function notaEncomendasRelatorio(n) {
+      return n ? `${n} ${n === 1 ? 'produto Sob Encomenda não entra' : 'produtos Sob Encomenda não entram'} em peças, valor investido, venda nem lucro: ainda não ${n === 1 ? 'foi comprado' : 'foram comprados'} (só conta peça dele que estiver em maleta).` : '';
+    }
+
+    function atualizarRelatorioEstoque(lista) {
+      const t = totaisRelatorioEstoque(lista);
+      document.getElementById('relatorioFiltros').textContent = descreverFiltrosRelatorio(filtrosRelatorioAtuais());
+      document.getElementById('totalRelProdutos').textContent = t.produtos;
+      document.getElementById('totalRelPecas').textContent = t.pecas;
+      document.getElementById('totalRelPecasDetalhe').textContent = t.pecasMaleta ? `${t.pecasLoja} na loja • ${t.pecasMaleta} em maleta` : '';
+      document.getElementById('totalRelInvestido').textContent = formatarMoeda(t.investido);
+      document.getElementById('totalRelVenda').textContent = formatarMoeda(t.venda);
+      document.getElementById('totalRelLucro').textContent = formatarMoeda(t.lucro);
+      const nota = document.getElementById('totalRelNota');
+      nota.textContent = notaEncomendasRelatorio(t.encomendas);
+      nota.classList.toggle('hidden', !t.encomendas);
+      document.getElementById('btnExportarRelatorio').disabled = !lista.length;
+      document.getElementById('btnImprimirRelatorio').disabled = !lista.length;
+    }
+
+    function nomeArquivoRelatorio(extensao) {
+      const d = new Date();
+      const dia = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+      return `relatorio-estoque-${dia}.${extensao}`;
+    }
+
+    document.getElementById('btnExportarRelatorio').addEventListener('click', () => {
+      const csv = csvRelatorioEstoque(produtosFiltrados, rotulosPainel().formato);
+      const url = URL.createObjectURL(new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8' }));
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = nomeArquivoRelatorio('csv');
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    });
+
+    // Monta a página de impressão (tabela simples + totais) e abre o imprimir do navegador,
+    // onde dá para escolher "Salvar como PDF"
+    function htmlImpressaoRelatorio(lista, filtrosTexto, nomeLoja, rotuloFormato = 'Formato', quando = new Date()) {
+      const reais = (c) => formatarMoeda(c / 100);
+      const t = totaisRelatorioEstoque(lista);
+      const linhas = lista.map(p => {
+        const v = valoresRelatorio(p);
+        return `<tr>
+          <td>${escapeHtml(p.nome)}<br><span style="color:#6b7280">${escapeHtml(p.codigo_sku)}</span></td>
+          <td>${escapeHtml(p.fornecedor || '-')}${p.codigo_fornecedor ? '<br><span style="color:#6b7280">Cód. ' + escapeHtml(p.codigo_fornecedor) + '</span>' : ''}</td>
+          <td>${escapeHtml(p.formato || '-')}</td>
+          <td>${escapeHtml(ROTULO_STATUS_RELATORIO[p.status] || p.status || '-')}<br><span style="color:#6b7280">${rotuloDisponibilidade(p.disponibilidade)}</span></td>
+          <td class="num">${v.loja}</td><td class="num">${v.maleta}</td><td class="num">${v.total}</td>
+          <td class="num">${reais(v.custo)}</td><td class="num">${reais(v.venda)}</td>
+          <td class="num">${reais(v.investido)}</td><td class="num">${reais(v.valorVenda)}</td><td class="num">${reais(v.lucro)}</td>
+        </tr>`;
+      }).join('');
+      const nota = notaEncomendasRelatorio(t.encomendas);
+      return `
+        <div style="font-family:Inter,sans-serif;color:#111">
+          <h1 style="font-size:16px;font-weight:700;margin:0">Relatório de estoque — ${escapeHtml(nomeLoja)}</h1>
+          <p style="font-size:11px;color:#4b5563;margin:2px 0 8px">${escapeHtml(filtrosTexto)} • ${escapeHtml(quando.toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' }))}</p>
+          <table>
+            <thead><tr>
+              <th>Produto / SKU</th><th>Fornecedor</th><th>${escapeHtml(rotuloFormato)}</th><th>Status</th>
+              <th class="num">Loja</th><th class="num">Maleta</th><th class="num">Peças</th>
+              <th class="num">Custo un.</th><th class="num">Venda un.</th><th class="num">Investido</th><th class="num">Venda total</th><th class="num">Lucro</th>
+            </tr></thead>
+            <tbody>${linhas}</tbody>
+            <tfoot><tr>
+              <td colspan="4">TOTAL: ${t.produtos} ${t.produtos === 1 ? 'produto' : 'produtos'}</td>
+              <td class="num">${t.pecasLoja}</td><td class="num">${t.pecasMaleta}</td><td class="num">${t.pecas}</td>
+              <td></td><td></td>
+              <td class="num">${formatarMoeda(t.investido)}</td><td class="num">${formatarMoeda(t.venda)}</td><td class="num">${formatarMoeda(t.lucro)}</td>
+            </tr></tfoot>
+          </table>
+          ${nota ? `<p style="font-size:10px;color:#4b5563;margin-top:6px">${escapeHtml(nota)}</p>` : ''}
+        </div>`;
+    }
+
+    document.getElementById('btnImprimirRelatorio').addEventListener('click', () => {
+      const area = document.getElementById('relatorioImpressao');
+      area.innerHTML = htmlImpressaoRelatorio(produtosFiltrados, descreverFiltrosRelatorio(filtrosRelatorioAtuais()),
+        globalThis.LOJA?.nome || 'Nix Glasses', rotulosPainel().formato);
+      document.body.classList.add('imprimindo-relatorio');
+      window.print();
+    });
+    window.addEventListener('afterprint', () => {
+      document.body.classList.remove('imprimindo-relatorio');
+      document.getElementById('relatorioImpressao').innerHTML = '';
+    });
 
     // Até 4 fotos por produto. Cada posição guarda a URL que já está salva (url)
     // ou o arquivo novo escolhido (file), que substitui a foto daquela posição.
