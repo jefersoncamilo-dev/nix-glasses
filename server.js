@@ -3134,6 +3134,11 @@ async function startServer() {
   // escopo 'tudo': produtos, fotos, compras, clientes, pedidos/maletas, acertos e
   //   encomendas, com a numeração (ids) voltando a 1.
   // escopo 'produtos': só produtos, fotos e compras; o histórico de pedidos fica.
+  // escopo 'movimento' (Métricas > Limpar testes de venda): pedidos, maletas,
+  //   acertos, encomendas e (se marcado) clientes; o Top 10 volta a zero e as
+  //   Métricas passam a contar a partir de agora. Produtos, fotos, compras do
+  //   fornecedor, acessórios e usuários ficam. Peça que estava numa maleta de
+  //   teste volta para o estoque da loja.
   const CONFIRMACAO_ZERAR = 'ZERAR';
 
   async function contarDadosDeTeste(db) {
@@ -3148,13 +3153,50 @@ async function startServer() {
     return r.rows[0];
   }
 
+  async function lerMetricasDesde(db) {
+    const { rows } = await db.query(`SELECT valor FROM configuracoes WHERE chave = 'metricas_desde'`);
+    return rows.length ? rows[0].valor : null;
+  }
+
+  // O que a limpeza dos testes de venda mexe, para mostrar antes de confirmar
+  async function previaMovimento(db) {
+    const { rows: [r] } = await db.query(`
+      SELECT (SELECT COUNT(*) FROM maleta_pecas)::int AS pecas_em_maleta,
+             (SELECT COUNT(DISTINCT produto_id) FROM maleta_pecas)::int AS produtos_em_maleta,
+             (SELECT COUNT(*) FROM produtos WHERE vezes_em_maleta > 0)::int AS produtos_no_top,
+             (SELECT COALESCE(SUM(vezes_em_maleta), 0) FROM produtos)::int AS vezes_em_maleta,
+             (SELECT COALESCE(SUM(cardinality(comprados)), 0) FROM acertos)::int AS pecas_vendidas_em_acertos,
+             (SELECT COUNT(*) FROM pedidos WHERE status = 'ENTREGUE')::int AS pedidos_entregues
+    `);
+    return { ...r, metricas_desde: await lerMetricasDesde(db) };
+  }
+
   async function handleContagemZerar(req, res) {
     try {
-      res.json(await contarDadosDeTeste(req.db));
+      res.json({ ...(await contarDadosDeTeste(req.db)), movimento: await previaMovimento(req.db) });
     } catch (err) {
       console.error(err);
       res.status(500).json({ error: 'Erro ao contar os dados' });
     }
+  }
+
+  async function limparMovimento(client, { clientes }) {
+    // Peças com clientes de teste voltam para a loja antes de a maleta sumir
+    const fora = await client.query(
+      `UPDATE produtos p SET estoque = p.estoque + m.n
+       FROM (SELECT produto_id, COUNT(*)::int AS n FROM maleta_pecas GROUP BY produto_id) m
+       WHERE p.id = m.produto_id RETURNING p.id`
+    );
+    await client.query('DELETE FROM maleta_pecas');
+    await client.query('UPDATE produtos SET vezes_em_maleta = 0, pedido_condicional_id = NULL WHERE vezes_em_maleta <> 0 OR pedido_condicional_id IS NOT NULL');
+    await recalcularStatus(client, fora.rows.map((r) => r.id));
+    const tabelas = ['acertos', 'encomendas', 'pedidos', 'maleta_pecas'];
+    if (clientes) tabelas.push('clientes');
+    for (const t of tabelas.slice(0, 3)) await client.query(`DELETE FROM ${t}`);
+    if (clientes) await client.query('DELETE FROM clientes');
+    // A numeração dos pedidos (e o resto do movimento) volta a 1
+    for (const t of tabelas) await client.query(`SELECT setval(pg_get_serial_sequence($1, 'id'), 1, false)`, [t]);
+    await salvarConfiguracoes(client, [['metricas_desde', new Date().toISOString()]]);
   }
 
   async function handleZerarDados(req, res) {
@@ -3162,7 +3204,7 @@ async function startServer() {
     if (confirmacao !== CONFIRMACAO_ZERAR) {
       return res.status(400).json({ error: `Digite ${CONFIRMACAO_ZERAR} para confirmar` });
     }
-    if (escopo !== 'tudo' && escopo !== 'produtos') {
+    if (escopo !== 'tudo' && escopo !== 'produtos' && escopo !== 'movimento') {
       return res.status(400).json({ error: 'Escolha o que zerar' });
     }
     let client;
@@ -3171,7 +3213,9 @@ async function startServer() {
       await client.query('BEGIN');
       const antes = await contarDadosDeTeste(client);
       const logo = idDaImagem((await lojaDaEmpresa(req.empresa)).logo);
-      if (escopo === 'tudo') {
+      if (escopo === 'movimento') {
+        await limparMovimento(client, { clientes: req.body.clientes === true });
+      } else if (escopo === 'tudo') {
         const tabelas = ['produtos', 'compras_fornecedor', 'maleta_pecas', 'acertos', 'pedidos', 'clientes', 'encomendas'];
         if (acessorios === true) tabelas.push('acessorios', 'compras_acessorio');
         tabelas.push('pedidos_fornecedor');
@@ -3189,7 +3233,10 @@ async function startServer() {
       }
       await client.query('COMMIT');
       console.log(`[${req.empresa.slug}] dados zerados (escopo ${escopo}) por ${req.admin && req.admin.u}`);
-      res.json({ apagados: antes, agora: await contarDadosDeTeste(req.db) });
+      res.json({
+        apagados: antes,
+        agora: { ...(await contarDadosDeTeste(req.db)), movimento: await previaMovimento(req.db) },
+      });
     } catch (err) {
       if (client) await client.query('ROLLBACK').catch(() => {});
       console.error(err);
@@ -3512,6 +3559,9 @@ async function startServer() {
         valorEmRua: parseFloat(valorEmRua.rows[0].total),
         topAdicionadosMaleta: topMaleta.rows,
         modelosSobEncomenda: parseInt(m.encomenda_modelos),
+        // Quando os testes de venda foram limpos (null = nunca): o Top 10 e a
+        // conversão das maletas contam a partir daí
+        metricasDesde: await lerMetricasDesde(req.db),
         // aliases em inglês
         totalStock: parseInt(totalEstoque.rows[0].total),
         investedValue: parseFloat(valorInvestido.rows[0].total),
