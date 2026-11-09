@@ -947,6 +947,28 @@
     </div>
   </div>
 
+  <!-- Modal Conferência do cadastro em lote: produto que já existe ou linha repetida -->
+  <div id="modalConferencia" class="fixed inset-0 modal-overlay bg-black/50 hidden z-50 flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-labelledby="tituloConferencia">
+    <div class="bg-white rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-hidden flex flex-col">
+      <div class="flex items-center justify-between p-5 border-b border-gray-200">
+        <div class="min-w-0">
+          <h3 id="tituloConferencia" class="text-xl font-bold text-gray-900">Conferir produto</h3>
+          <p id="conferenciaMotivo" class="text-sm text-amber-700"></p>
+        </div>
+        <button type="button" id="btnConferenciaFechar" class="p-2 text-gray-500 hover:text-gray-700 rounded-lg hover:bg-gray-100" aria-label="Voltar ao lote sem salvar"><svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg></button>
+      </div>
+      <div class="p-5 overflow-y-auto flex-1">
+        <p class="text-sm text-gray-600 mb-3">Compare a foto e os dados. Se for o mesmo produto, as peças da linha nova entram como reposição no estoque dele. Se for outro produto (outra cor, outro modelo), ele é cadastrado à parte.</p>
+        <div id="conferenciaCartoes" class="grid grid-cols-2 gap-3"></div>
+      </div>
+      <div class="p-4 border-t border-gray-200 flex flex-col sm:flex-row sm:items-center gap-2">
+        <p id="conferenciaProgresso" class="text-sm text-gray-500 sm:mr-auto"></p>
+        <button type="button" id="btnConferenciaNovo" class="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 font-medium">É outro produto: cadastrar novo</button>
+        <button type="button" id="btnConferenciaMesmo" class="bg-orange-500 hover:bg-orange-600 text-white px-4 py-2 rounded-lg font-medium transition-colors"></button>
+      </div>
+    </div>
+  </div>
+
   <!-- Modal Fotos por SKU (upload múltiplo) -->
   <div id="modalFotosSku" class="fixed inset-0 modal-overlay bg-black/50 hidden z-50 flex items-center justify-center p-4">
     <div class="bg-white rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-hidden flex flex-col">
@@ -1452,8 +1474,80 @@
       });
     }
 
+
+    // ---------- Conferência: produto que já existe ou linha repetida ----------
+    // Linha do lote que parece um produto já cadastrado (mesmo SKU, mesmo cód. do
+    // fornecedor de qualquer fornecedor, ou mesmo link) ou repete uma linha anterior.
+    // Mesmo código com outra cor também aparece, mas a sugestão é cadastrar à parte.
+    // Linhas já conferidas (l.conferencia) ficam de fora. A linha que foi juntada a um
+    // produto não serve de alvo: as próximas comparam com o produto, que tem a foto.
+    // -> [{ linha, alvo: { tipo: 'produto', produto } | { tipo: 'linha', linha }, motivo, sugestao }]
+    function conflitosLote(linhas, produtos) {
+      const norm = v => String(v ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().toLowerCase().replace(/\s+/g, ' ');
+      const caminho = v => { try { return new URL(v).pathname.replace(/\/+$/, '').toLowerCase(); } catch { return ''; } };
+      const compara = (a, b) => {
+        let motivo = '';
+        if (norm(a.codigo_sku) && norm(a.codigo_sku) === norm(b.codigo_sku)) motivo = `Mesmo SKU (${String(b.codigo_sku).trim()})`;
+        else if (norm(a.codigo_fornecedor) && norm(a.codigo_fornecedor) === norm(b.codigo_fornecedor)) motivo = `Mesmo cód. do fornecedor (${String(b.codigo_fornecedor).trim()})`;
+        else if (caminho(a.link_fornecedor) && caminho(a.link_fornecedor) === caminho(b.link_fornecedor)) motivo = 'Mesmo link do fornecedor';
+        if (!motivo) return null;
+        const corDiferente = norm(a.cor_armacao) && norm(b.cor_armacao) && norm(a.cor_armacao) !== norm(b.cor_armacao);
+        return corDiferente ? { motivo: `${motivo}, mas a cor é diferente`, sugestao: 'novo' } : { motivo, sugestao: 'mesmo' };
+      };
+      const conflitos = [];
+      const anteriores = [];
+      linhas.forEach((l, i) => {
+        if (linhaLoteEstaVazia(l)) return;
+        if (!l.conferencia) {
+          let achou = null;
+          for (const j of anteriores) {
+            const c = compara(l, linhas[j]);
+            if (c) { achou = { ...c, alvo: { tipo: 'linha', linha: j } }; break; }
+          }
+          for (const p of achou ? [] : produtos) {
+            const c = compara(l, p);
+            if (c) { achou = { ...c, alvo: { tipo: 'produto', produto: p } }; break; }
+          }
+          if (achou) conflitos.push({ linha: i, ...achou });
+        }
+        if (l.conferencia?.decisao !== 'mesmo') anteriores.push(i);
+      });
+      return conflitos;
+    }
+
+    // Grava a escolha da conferência na linha.
+    // 'mesmo': a linha passa a usar o SKU (e o nome) do produto/linha de cima e as
+    // peças dela somam no estoque (reposição; sem quantidade, 1 peça).
+    // 'novo': cadastra à parte (o servidor não junta pelo cód. do fornecedor); se o
+    // SKU já for de outro, ganha um final -2, -3...
+    function aplicarConferenciaLote(linhas, conflito, decisao, produtos) {
+      const minusc = v => String(v ?? '').trim().toLowerCase();
+      const l = linhas[conflito.linha];
+      if (decisao === 'mesmo') {
+        const alvo = conflito.alvo.tipo === 'produto' ? conflito.alvo.produto : linhas[conflito.alvo.linha];
+        l.nome = alvo.nome;
+        l.codigo_sku = alvo.codigo_sku;
+        if (!String(l.quantidade ?? '').trim()) l.quantidade = '1';
+        delete l.cadastrar_novo;
+        const onde = conflito.alvo.tipo === 'produto' ? `${alvo.nome} (${alvo.codigo_sku})` : `linha ${conflito.alvo.linha + 1}`;
+        l.conferencia = { decisao, texto: `Conferido: mesmo produto de ${onde}, soma ${l.quantidade} no estoque (reposição)` };
+      } else {
+        l.cadastrar_novo = true;
+        const usados = new Set([...produtos.map(p => minusc(p.codigo_sku)), ...linhas.filter((x, k) => k !== conflito.linha).map(x => minusc(x.codigo_sku))]);
+        const base = String(l.codigo_sku ?? '').trim();
+        if (usados.has(minusc(base))) {
+          let n = 2;
+          while (usados.has(minusc(`${base}-${n}`))) n++;
+          l.codigo_sku = `${base}-${n}`;
+        }
+        l.conferencia = { decisao, texto: `Conferido: outro produto, cadastra como novo${l.codigo_sku !== base ? ` com o SKU ${l.codigo_sku}` : ''}` };
+      }
+    }
+
     function renderizarLote() {
-      const avisos = avisosDuplicidade(linhasLote, todosProdutos);
+      const conflitos = new Map(conflitosLote(linhasLote, todosProdutos).map(c => [c.linha, c]));
+      const avisos = avisosDuplicidade(linhasLote, todosProdutos).map((a, i) => linhasLote[i].conferencia?.texto
+        || (conflitos.has(i) ? `${conflitos.get(i).motivo}${conflitos.get(i).alvo.tipo === 'linha' ? ` da linha ${conflitos.get(i).alvo.linha + 1}` : ' de um produto cadastrado'}: confira ao salvar` : a));
       tabelaLote.innerHTML = linhasLote.map((l, i) => {
         const erros = errosLote[i] || {};
         const celulas = COLUNAS_LOTE.map(col => {
@@ -1476,11 +1570,11 @@
           </td>
         </tr>${mensagens.length ? `
         <tr class="lote-erro"><td></td><td colspan="${COLUNAS_LOTE.length + 1}" class="px-2 pb-2 text-xs text-red-600">${mensagens.map(escapeHtml).join(' • ')}</td></tr>` : ''}${avisos[i] ? `
-        <tr class="lote-aviso"><td></td><td colspan="${COLUNAS_LOTE.length + 1}" class="px-2 pb-2 text-xs text-amber-700">⚠ ${escapeHtml(avisos[i])}</td></tr>` : ''}`;
+        <tr class="lote-aviso"><td></td><td colspan="${COLUNAS_LOTE.length + 1}" class="px-2 pb-2 text-xs ${l.conferencia ? 'text-green-700' : 'text-amber-700'}">${l.conferencia ? '✓' : '⚠'} ${escapeHtml(avisos[i])}${l.conferencia ? ` <button type="button" data-acao="reconferir" data-linha="${i}" class="ml-1 underline hover:text-green-900">Conferir de novo</button>` : ''}</td></tr>` : ''}`;
       }).join('');
       const preenchidas = linhasLote.filter(l => !linhaLoteEstaVazia(l)).length;
-      const duplicados = avisos.filter(Boolean).length;
-      document.getElementById('loteResumo').textContent = `${preenchidas} produto(s) preenchido(s) de ${linhasLote.length} linha(s)${duplicados ? `, ${duplicados} duplicado(s) que será(ão) ignorado(s)` : ''}. Máximo de ${MAX_LOTE} por vez.`;
+      const duplicados = avisos.filter((a, i) => a && !linhasLote[i].conferencia).length;
+      document.getElementById('loteResumo').textContent = `${preenchidas} produto(s) preenchido(s) de ${linhasLote.length} linha(s)${duplicados ? `, ${duplicados} duplicado(s) para conferir ao salvar` : ''}. Máximo de ${MAX_LOTE} por vez.`;
     }
 
     function iniciarLote() {
@@ -1508,21 +1602,34 @@
       if (!el) return;
       const i = Number(el.dataset.linha);
       linhasLote[i][el.dataset.campo] = el.value;
+      if (CAMPOS_CONFERENCIA.includes(el.dataset.campo)) esquecerConferencias();
       if (errosLote[i]?.[el.dataset.campo]) {
         delete errosLote[i][el.dataset.campo];
         el.classList.remove('border-red-500', 'bg-red-50');
         el.classList.add('border-gray-300');
       }
     });
+    // Campos que decidem se a linha é um produto que já existe. Mexeu num deles à
+    // mão: as conferências feitas valem de novo (uma linha pode apontar para outra).
+    const CAMPOS_CONFERENCIA = ['codigo_sku', 'fornecedor', 'codigo_fornecedor', 'link_fornecedor', 'cor_armacao'];
+    function esquecerConferencias() {
+      linhasLote.forEach(l => { delete l.conferencia; delete l.cadastrar_novo; });
+    }
     // Ao sair de um campo de SKU/fornecedor, refaz os avisos de duplicidade
     tabelaLote.addEventListener('change', (e) => {
       const el = e.target.closest('.lote-campo');
-      if (el && ['codigo_sku', 'fornecedor', 'codigo_fornecedor'].includes(el.dataset.campo)) renderizarLote();
+      if (el && CAMPOS_CONFERENCIA.includes(el.dataset.campo)) renderizarLote();
     });
     tabelaLote.addEventListener('click', (e) => {
       const btn = e.target.closest('button[data-acao]');
       if (!btn) return;
       const i = Number(btn.dataset.linha);
+      // Uma linha pode apontar para outra: conferir de novo refaz todas
+      if (btn.dataset.acao === 'reconferir') {
+        esquecerConferencias();
+        return conferirLote();
+      }
+      esquecerConferencias();
       if (btn.dataset.acao === 'duplicar') linhasLote.splice(i + 1, 0, { ...linhasLote[i], codigo_sku: '' });
       else linhasLote.splice(i, 1);
       if (!linhasLote.length) linhasLote.push(linhaLoteVazia());
@@ -1623,9 +1730,11 @@
         renderizarLote();
         return mostrarToast('Corrija as linhas marcadas em vermelho', 'error');
       }
+      // Produto que já existe ou linha repetida: conferir antes de gravar
+      if (!(await conferirLote())) return mostrarToast('Confira os produtos repetidos para salvar o lote', 'error');
 
       const produtos = indices.map(i => {
-        const l = linhasLote[i];
+        const { conferencia: _conferida, ...l } = linhasLote[i];
         const medidas = Object.fromEntries(CAMPOS_MEDIDA.map(c => [c, lerMedida(l[c])]));
         return { ...l, ...medidas, preco_custo: lerPreco(l.preco_custo), preco_venda: lerPreco(l.preco_venda) };
       });
@@ -1725,6 +1834,90 @@
         </li>`).join('');
       document.getElementById('loteCriados').classList.toggle('hidden', !produtos.length);
     }
+
+    // Tela de conferência: mostra um repetido por vez (foto e dados lado a lado)
+    // até não sobrar nenhum. -> true quando tudo foi conferido; false se voltou ao lote.
+    let fimConferencia = null;
+    let conflitoAtual = null;
+    function conferirLote() {
+      if (fimConferencia) fimConferencia(false);
+      return new Promise(resolve => {
+        fimConferencia = resolve;
+        mostrarProximaConferencia();
+      });
+    }
+    function terminarConferencia(ok) {
+      fecharModalSimples('modalConferencia');
+      conflitoAtual = null;
+      const fim = fimConferencia;
+      fimConferencia = null;
+      renderizarLote();
+      if (fim) fim(ok);
+    }
+    function cartaoConferencia(titulo, d, outro, destaque) {
+      const igual = (a, b) => String(a ?? '').trim().toLowerCase() === String(b ?? '').trim().toLowerCase();
+      const campos = [['Nome', 'nome'], ['SKU', 'codigo_sku'], ['Fornecedor', 'fornecedor'], ['Cód. fornec.', 'codigo_fornecedor'], ['Cor', 'cor_armacao'], ['Custo', 'custo'], [d.rotuloPecas, 'pecas'], ['Pedido', 'pedido']];
+      return `
+        <div class="min-w-0 border-2 ${destaque} rounded-xl p-3">
+          <p class="text-xs font-semibold uppercase text-gray-500 mb-2">${escapeHtml(titulo)}</p>
+          ${d.foto
+            ? `<img src="${escapeHtml(d.foto)}" alt="" onerror="imgFallback(this)" class="w-full aspect-square object-contain bg-gray-50 rounded-lg">`
+            : '<div class="w-full aspect-square bg-gray-50 rounded-lg flex items-center justify-center text-sm text-gray-400 text-center p-3">Sem foto</div>'}
+          <dl class="mt-3 text-xs sm:text-sm space-y-1">
+            ${campos.filter(([, c]) => String(d[c] ?? '').trim() || String(outro[c] ?? '').trim()).map(([rotulo, c]) => {
+              const difere = !['pecas', 'pedido', 'custo'].includes(c) && !igual(d[c], outro[c]);
+              return `<div class="flex gap-1"><dt class="text-gray-500 shrink-0">${escapeHtml(rotulo)}:</dt><dd class="min-w-0 break-words ${difere ? 'font-semibold text-amber-700' : 'text-gray-900'}">${escapeHtml(String(d[c] ?? '').trim() || '—')}</dd></div>`;
+            }).join('')}
+          </dl>
+        </div>`;
+    }
+    function dadosConferencia(x, ehProduto) {
+      const preco = v => { const n = typeof v === 'number' ? v : lerPreco(v); return Number.isFinite(n) ? formatarMoeda(n) : ''; };
+      return {
+        foto: ehProduto ? ((Array.isArray(x.fotos) && x.fotos[0]) || x.imagem_url || '') : linkSeguro(x.imagem_fornecedor),
+        nome: x.nome, codigo_sku: x.codigo_sku, fornecedor: x.fornecedor, codigo_fornecedor: x.codigo_fornecedor, cor_armacao: x.cor_armacao,
+        custo: preco(ehProduto ? Number(x.preco_custo) : x.preco_custo),
+        rotuloPecas: ehProduto ? 'Estoque' : 'Quantidade',
+        pecas: ehProduto ? `${Number(x.estoque) || 0} peça(s)${Number(x.em_maleta) ? ` + ${Number(x.em_maleta)} em maleta` : ''}` : `${String(x.quantidade ?? '').trim() || '1'} peça(s)`,
+        pedido: ehProduto ? '' : x.pedido_fornecedor,
+      };
+    }
+    function mostrarProximaConferencia() {
+      const conflitos = conflitosLote(linhasLote, todosProdutos);
+      if (!conflitos.length) return terminarConferencia(true);
+      const c = conflitos[0];
+      conflitoAtual = c;
+      const nova = linhasLote[c.linha];
+      const ehProduto = c.alvo.tipo === 'produto';
+      const alvo = ehProduto ? c.alvo.produto : linhasLote[c.alvo.linha];
+      const dAlvo = dadosConferencia(alvo, ehProduto);
+      const dNova = dadosConferencia(nova, false);
+      const mesmo = c.sugestao === 'mesmo';
+      document.getElementById('conferenciaMotivo').textContent = `Linha ${c.linha + 1}: ${c.motivo}${ehProduto ? '' : ` da linha ${c.alvo.linha + 1}`}`;
+      document.getElementById('conferenciaCartoes').innerHTML =
+        cartaoConferencia(ehProduto ? 'Já cadastrado' : `Linha ${c.alvo.linha + 1} do lote`, dAlvo, dNova, 'border-gray-200')
+        + cartaoConferencia(`Linha ${c.linha + 1} (nova)`, dNova, dAlvo, 'border-orange-300');
+      document.getElementById('conferenciaProgresso').textContent = conflitos.length > 1 ? `Faltam ${conflitos.length} para conferir` : 'Último para conferir';
+      const btnMesmo = document.getElementById('btnConferenciaMesmo');
+      const btnNovo = document.getElementById('btnConferenciaNovo');
+      btnMesmo.textContent = `É o mesmo: somar ${String(nova.quantidade ?? '').trim() || '1'} no estoque`;
+      // A sugestão fica com o botão laranja (mesmo código e outra cor: cadastrar à parte)
+      const laranja = 'bg-orange-500 hover:bg-orange-600 text-white border-transparent';
+      const branco = 'border-gray-300 text-gray-700 hover:bg-gray-50 bg-white';
+      btnMesmo.className = `px-4 py-2 border rounded-lg font-medium transition-colors ${mesmo ? laranja : branco}`;
+      btnNovo.className = `px-4 py-2 border rounded-lg font-medium transition-colors ${mesmo ? branco : laranja}`;
+      abrirModalSimples('modalConferencia');
+      (mesmo ? btnMesmo : btnNovo).focus();
+    }
+    function decidirConferencia(decisao) {
+      if (!conflitoAtual) return;
+      aplicarConferenciaLote(linhasLote, conflitoAtual, decisao, todosProdutos);
+      mostrarProximaConferencia();
+    }
+    document.getElementById('btnConferenciaMesmo').addEventListener('click', () => decidirConferencia('mesmo'));
+    document.getElementById('btnConferenciaNovo').addEventListener('click', () => decidirConferencia('novo'));
+    document.getElementById('btnConferenciaFechar').addEventListener('click', () => terminarConferencia(false));
+    document.getElementById('modalConferencia').addEventListener('click', (e) => { if (e.target.id === 'modalConferencia') terminarConferencia(false); });
 
     // ---------- Editar em estoque ----------
     // Mesma tabela do cadastro em lote, preenchida com os produtos já cadastrados.
