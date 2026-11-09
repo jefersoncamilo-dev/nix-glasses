@@ -33,7 +33,37 @@ const MATERIAIS = [
 
 // "Óculos de Sol Vogue • XFG976 •Metal • Oval • Acetato" -> modelo, código e o que der
 // para tirar das especificações (formato, material, polarizado, gênero).
+// Texto todo em maiúsculas (padrão da Clush) -> "Primeira Letra Maiúscula"
+function titulo(t) {
+  const texto = String(t || '').trim();
+  if (!texto || texto !== texto.toUpperCase()) return texto;
+  return texto.toLowerCase().replace(/(^|[\s/(-])(\p{L})/gu, (_, antes, letra) => antes + letra.toUpperCase())
+    .replace(/\b(De|Da|Do|Das|Dos|E)\b/g, (m) => m.toLowerCase());
+}
+
+// "ÓCULOS DE SOL AVIADOR GOLD - MARROM DEGRADÊ/DOURADO - METAL" (Clush): sem código,
+// a cor e o material vêm depois de " - ".
+function lerDescricaoComHifen(descricao) {
+  const partes = String(descricao || '').split(/\s+[-–]\s+/).map((p) => p.trim()).filter(Boolean);
+  const nome = partes.shift() || '';
+  const resultado = lerDescricao(nome);
+  resultado.modelo = titulo(resultado.modelo);
+  resultado.cor = titulo(partes[0] || '');
+  const material = partes.slice(1).join(' ');
+  const materiais = [];
+  for (const palavra of semAcento(material).split(/[\s/]+/)) {
+    const mat = MATERIAIS.find(([re]) => re.test(palavra));
+    if (mat && !materiais.includes(mat[1])) materiais.push(mat[1]);
+  }
+  resultado.material = materiais.join(' / ') || titulo(material);
+  for (const palavra of semAcento(nome).split(/\s+/)) {
+    if (palavra.startsWith('polariz')) resultado.tipo = 'Polarizado';
+  }
+  return resultado;
+}
+
 function lerDescricao(descricao) {
+  if (!String(descricao || '').includes('•') && /\s[-–]\s/.test(String(descricao || ''))) return lerDescricaoComHifen(descricao);
   const partes = String(descricao || '').split('•').map((p) => p.replace(/\s+/g, ' ').trim()).filter(Boolean);
   const primeira = partes.shift() || '';
   const modelo = primeira.replace(/^(o|ó)culos(\s+de\s+(sol|grau))?\s*/i, '').replace(/^arma(c|ç)(a|ã)o\s*/i, '').trim();
@@ -50,7 +80,7 @@ function lerDescricao(descricao) {
     }
   }
   const especificacoes = partes.map((p) => p.replace(/\s*[-–]\s*$/, '').replace(/\s+ok$/i, '').trim()).filter(Boolean);
-  const resultado = { modelo, codigo, especificacoes, formato: '', material: '', tipo: '', genero: '' };
+  const resultado = { modelo, codigo, especificacoes, formato: '', material: '', tipo: '', genero: '', cor: '' };
   const materiais = [];
   for (const e of especificacoes) {
     for (const palavra of semAcento(e).split(/\s+/)) {
@@ -98,6 +128,8 @@ function lerPedidoTexto(linhas) {
       continue;
     }
     if (/^(estado|pagamento|meio de pagamento|forma de pagamento|envio|cliente|e-?mail|telefone|cpf|cnpj):/.test(t)) { buffer = []; continue; }
+    // Títulos de seção ("PRODUTOS", "Detalhes do pedido") não fazem parte do item
+    if (/^(produtos|itens|detalhes do pedido)$/.test(t)) { buffer = []; noEndereco = false; continue; }
     if (noEndereco) {
       // Endereço: nome, rua, cidade... até o telefone (não entram nos itens)
       if (/^\+?[\d\s().-]{10,}$/.test(texto)) noEndereco = false;

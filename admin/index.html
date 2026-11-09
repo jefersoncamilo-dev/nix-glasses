@@ -2800,7 +2800,7 @@
         translucido: ['Translucent', 'Translucent', ''], fosco: ['Matte', 'Matte', ''],
       };
       const MATERIAIS = /^(metal|acetato|injetado|nylon|tr ?90|policarbonato|madeira|titanio)$/;
-      const FORMATOS = /^(oculos|de|sol|premium|esportivo|mascara|hexagonal|redondo|oval|aviador|retangular|quadrado|maxi|gatinho|gato|arredondado|borboleta|geometrico|classico|oversized|shield|piloto|octogonal|grau|feminino|masculino|unissex)$/;
+      const FORMATOS = /^(oculos|de|sol|premium|polarizado|polarizada|esportivo|mascara|hexagonal|redondo|oval|aviador|retangular|quadrado|maxi|gatinho|gato|arredondado|borboleta|geometrico|classico|oversized|shield|piloto|octogonal|grau|feminino|masculino|unissex)$/;
       const semAcento = t => String(t || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
       const titulo = String(c.nome_fornecedor || '').trim();
       if (!titulo) return null;
@@ -4846,13 +4846,18 @@
 
     // Produtos já cadastrados que podem ser o item do pedido: mesmo código (de
     // qualquer cor) do mesmo fornecedor, ou de cadastro sem fornecedor.
+    // Sem código no pedido (Clush), vale o mesmo nome na loja do fornecedor, que já
+    // traz a cor ("Óculos de Sol Aviador Gold - Marrom Degradê/Dourado - Metal").
     function candidatosDoItem(item, produtos, fornecedor) {
       const codigo = normalizarCodigoForn(item.codigo);
-      if (!codigo) return [];
+      const nomeForn = (t) => semAcentoPf(t).replace(/[^a-z0-9]/g, '');
+      const descricao = nomeForn(item.descricao);
+      if (!codigo && !descricao) return [];
       const forn = String(fornecedor || '').trim().toLowerCase();
       return produtos.filter(p => {
         const pf = String(p.fornecedor || '').trim().toLowerCase();
         if (forn && pf && pf !== forn) return false;
+        if (!codigo) return nomeForn(p.nome_fornecedor) === descricao;
         return normalizarCodigoForn(p.codigo_fornecedor, true) === codigo || normalizarCodigoForn(p.codigo_fornecedor) === codigo;
       });
     }
@@ -4865,11 +4870,12 @@
         formato: String(dados.formato || ''), material: String(dados.material || ''), tipo: String(dados.tipo || ''), genero: String(dados.genero || ''),
         quantidade: String(Number(dados.quantidade) || 1), custo: Number.isFinite(custo) ? custo.toFixed(2).replace('.', ',') : '',
         foto: typeof dados.foto === 'string' && dados.foto.startsWith('data:image/') ? dados.foto : '',
-        oculos: dados.oculos !== false, cor: '', nome: '', sku: '', venda: '', codigoNovo: '',
+        oculos: dados.oculos !== false, cor: String(dados.cor || ''), nome: '', sku: '', venda: '', codigoNovo: '',
         nomeEditado: false, skuEditado: false, vendaEditada: false, acessorioNome: '', acessorioVenda: '', destino: '',
       };
       if (!item.oculos) {
-        if (!(custo > 0)) item.destino = 'ignorar';
+        // Brinde (R$ 0), taxa de gravação, frete: não entram no estoque
+        if (!(custo > 0) || /^(taxa|frete|servico|gravacao|personaliza)/.test(semAcentoPf(item.descricao))) item.destino = 'ignorar';
         else {
           const palavra = semAcentoPf(item.descricao).match(/estojo|flanela|sacola|cordao|case|limpa|spray|caixa|relogio|pulseira/);
           const conhecido = palavra && acessorios.find(a => semAcentoPf(a.nome).includes(palavra[0]));
@@ -4880,7 +4886,8 @@
         return item;
       }
       const candidatos = candidatosDoItem(item, produtos, fornecedor);
-      const mesmoCodigo = todos.filter(d => d.oculos !== false && normalizarCodigoForn(d.codigo) && normalizarCodigoForn(d.codigo) === normalizarCodigoForn(item.codigo)).length;
+      const chave = (d) => normalizarCodigoForn(d.codigo) || semAcentoPf(d.descricao).replace(/[^a-z0-9]/g, '');
+      const mesmoCodigo = todos.filter(d => d.oculos !== false && chave(d) && chave(d) === chave(item)).length;
       if (!candidatos.length) item.destino = 'novo';
       else if (candidatos.length === 1 && mesmoCodigo <= 1) item.destino = `repor:${candidatos[0].id}`;
       return item;

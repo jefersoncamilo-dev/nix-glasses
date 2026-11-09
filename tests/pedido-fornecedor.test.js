@@ -79,6 +79,20 @@ describe('leitura do pedido', () => {
     assert.equal(lerDescricao('Óculos de Sol Eco Wood • XFG2205 • Bambu • Polarizado • Unissex').genero, 'UNISSEX');
   });
 
+  it('lê o formato da Clush: sem código, com cor e material depois do hífen, tudo em maiúsculas', () => {
+    const d = lerDescricao('ÓCULOS DE SOL AVIADOR GOLD - MARROM DEGRADÊ/DOURADO - METAL');
+    assert.deepEqual([d.modelo, d.codigo, d.cor, d.material, d.formato], ['Aviador Gold', '', 'Marrom Degradê/Dourado', 'Metal', 'Aviador']);
+    const p = lerDescricao('ÓCULOS DE SOL PREMIUM POLARIZADO TIFF - CAMUFLADO - ACETATO');
+    assert.deepEqual([p.cor, p.material, p.tipo], ['Camuflado', 'Acetato', 'Polarizado']);
+    assert.equal(lerDescricao('ÓCULOS DE SOL PREMIUM HEXAGONAL SNAKE - PRETO DOURADO - METAL E ACETATO').material, 'Metal / Acetato');
+    const linhas = ['Pedido #56543', 'Data: 02/03/2026', 'PRODUTOS', 'TAXA DE GRAVAÇÃO - ENVIE O LOGO PELO', 'WHATSAPP X 1', 'R$ 50,00',
+      'ÓCULOS DE SOL OCTOGONAL ONCE -', 'PRETO/PRATA - ACETATO X2', 'R$ 39,80'].map((texto, i) => ({ texto, pagina: 1, y: 800 - i * 10 }));
+    const pedido = lerPedidoTexto(linhas);
+    assert.deepEqual(pedido.itens.map((i) => [i.descricao, i.quantidade, i.preco_unitario, i.oculos]), [
+      ['TAXA DE GRAVAÇÃO - ENVIE O LOGO PELO WHATSAPP', 1, 50, false], ['ÓCULOS DE SOL OCTOGONAL ONCE - PRETO/PRATA - ACETATO', 2, 19.9, true],
+    ]);
+  });
+
   it('separa os itens do texto, com custo unitário e sem o endereço', () => {
     const linhas = [
       'Pedido #14563', 'Data: 09/11/2025', 'Estado: Finalizado', 'Endereço de Envio:', 'Fulana', 'Rua X 1', 'Cidade, 00000', 'Brasil', '+5546999990000',
@@ -272,6 +286,20 @@ describe('painel: pedido do fornecedor', () => {
     assert.deepEqual(j(ctx.candidatosDoItem({ codigo: 'XFG976' }, produtos, 'tassia').map((p) => p.id)), [1, 2]);
     assert.deepEqual(j(ctx.candidatosDoItem({ codigo: 'XFG-50610' }, produtos, 'Tassia').map((p) => p.id)), [3]);
     assert.deepEqual(j(ctx.candidatosDoItem({ codigo: '' }, produtos, 'Tassia')), []);
+  });
+
+  it('sem código (Clush), acha pelo nome na loja do fornecedor e já traz a cor; taxa de gravação fica fora', () => {
+    const clush = [{ id: 9, nome: 'Nix Ptero Gold - Mocha Brown Gradient / Gold', codigo_sku: 'NIX-GOL-PTE-BRW-GLD', fornecedor: 'Clush', codigo_fornecedor: 'DJY8Z', nome_fornecedor: 'Óculos de Sol Aviador Gold - Marrom Degradê/Dourado - Metal', preco_venda: '139.90' }];
+    const d = { descricao: 'ÓCULOS DE SOL AVIADOR GOLD - MARROM DEGRADÊ/DOURADO - METAL', modelo: 'Aviador Gold', codigo: '', cor: 'Marrom Degradê/Dourado', formato: 'Aviador', quantidade: 2, preco_unitario: 39.9, oculos: true };
+    assert.equal(ctx.itemPedidoForn(d, [d], clush, [], 'Clush').destino, 'repor:9');
+    const outraCor = { ...d, descricao: 'ÓCULOS DE SOL AVIADOR GOLD - AZUL DEGRADÊ/DOURADO - METAL', cor: 'Azul Degradê/Dourado' };
+    const item = ctx.itemPedidoForn(outraCor, [outraCor], clush, [], 'Clush');
+    assert.equal(item.destino, 'novo');
+    assert.equal(item.cor, 'Azul Degradê/Dourado');
+    ctx.recalcularItensPedidoForn([item], clush, 'Clush');
+    assert.equal(item.nome, 'Nix Ptero Gold - Ocean Blue Gradient / Gold');
+    const taxa = ctx.itemPedidoForn({ descricao: 'TAXA DE GRAVAÇÃO - ENVIE O LOGO', quantidade: 1, preco_unitario: 50, oculos: false }, [], clush, [], 'Clush');
+    assert.equal(taxa.destino, 'ignorar');
   });
 
   it('sugere o destino: novo, reposição (um só igual) ou escolher; acessório; brinde fora', () => {
