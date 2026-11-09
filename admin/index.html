@@ -126,6 +126,7 @@
           <h3 class="text-lg font-semibold text-gray-900">Gerenciar Produtos</h3>
           <div class="flex flex-col sm:flex-row gap-2">
           <button type="button" data-abrir-fotos-sku class="w-full sm:w-auto justify-center bg-gray-100 hover:bg-gray-200 text-gray-700 px-4 py-2 rounded-lg font-medium transition-colors">Fotos por SKU</button>
+          <button id="btnConferenciaEstoque" type="button" class="w-full sm:w-auto justify-center bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg font-medium transition-colors" title="Conferir o estoque por pedido do fornecedor: vendido, baixa, encomenda ou esgotado">Conferência de estoque</button>
           <button id="btnAcertoEstoque" type="button" class="w-full sm:w-auto justify-center bg-white border border-red-300 hover:bg-red-50 text-red-700 px-4 py-2 rounded-lg font-medium transition-colors" title="Excluir produtos definitivamente, um ou vários">Acerto de estoque</button>
           <button id="btnAbrirPedidoFornecedor" type="button" class="w-full sm:w-auto justify-center bg-gray-100 hover:bg-gray-200 text-gray-700 px-4 py-2 rounded-lg font-medium transition-colors">Lançar pedido do fornecedor</button>
           <button id="btnAbrirLote" type="button" class="w-full sm:w-auto justify-center bg-gray-100 hover:bg-gray-200 text-gray-700 px-4 py-2 rounded-lg font-medium transition-colors">Cadastro em Lote</button>
@@ -136,6 +137,7 @@
           </div>
         </div>
 
+        <div id="produtosLista">
         <!-- Filtros -->
         <div class="bg-white rounded-xl border border-gray-200 p-4 mb-6 flex flex-col sm:flex-row sm:flex-wrap gap-3 sm:gap-4">
           <select id="filtroStatusAdmin" class="w-full sm:w-auto px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500">
@@ -241,6 +243,65 @@
             </div>
           </div>
           <p id="totalRelNota" class="hidden mt-3 text-sm text-gray-500"></p>
+        </div>
+        </div><!-- /produtosLista -->
+
+        <!-- Conferência de estoque: filtra por pedido do fornecedor e marca vendido, baixa,
+             Sob Encomenda ou esgotado. Mexe só nas peças da loja (as da maleta são do Acerto de Maleta). -->
+        <div id="conferenciaEstoque" class="hidden">
+          <div class="bg-emerald-50 border border-emerald-200 rounded-xl p-4 mb-4 flex flex-col sm:flex-row sm:items-start gap-3">
+            <div class="flex-1 min-w-0">
+              <p class="font-semibold text-emerald-900">Conferência de estoque</p>
+              <p class="text-sm text-emerald-800">Escolha o pedido do fornecedor, toque na foto para ampliar e conferir, marque os produtos e diga o que aconteceu: vendido, baixa do estoque, disponível para encomenda ou esgotado. Antes de gravar aparece o resumo.</p>
+            </div>
+            <button id="btnSairConferencia" type="button" class="shrink-0 bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 px-4 py-2 rounded-lg text-sm font-medium">Voltar para a lista</button>
+          </div>
+
+          <div class="bg-white rounded-xl border border-gray-200 p-4 mb-4 flex flex-col sm:flex-row sm:flex-wrap gap-3">
+            <label class="sr-only" for="confPedido">Pedido do fornecedor</label>
+            <select id="confPedido" class="w-full sm:w-auto sm:min-w-[260px] px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500">
+              <option value="">Todos os produtos (sem pedido)</option>
+            </select>
+            <label class="sr-only" for="confSituacao">Situação</label>
+            <select id="confSituacao" class="w-full sm:w-auto px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500">
+              <option value="">Todas as situações</option>
+              <option value="loja">Com peça na loja</option>
+              <option value="zerado">Sem peça na loja</option>
+              <option value="maleta">Com peça em maleta</option>
+              <option value="encomenda">Sob Encomenda</option>
+            </select>
+            <input type="search" id="confBusca" placeholder="Buscar por nome, SKU, cor ou código..." class="w-full sm:flex-1 sm:min-w-[200px] px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500">
+          </div>
+          <p id="confResumoPedido" class="text-sm text-gray-600 mb-3"></p>
+
+          <div class="bg-white rounded-xl border border-gray-200 overflow-hidden">
+            <div class="flex flex-wrap items-center gap-3 px-4 py-3 border-b border-gray-200 bg-gray-50">
+              <label class="inline-flex items-center gap-2 text-sm font-medium text-gray-700"><input type="checkbox" id="confMarcarTodos" class="h-5 w-5 accent-emerald-600"> Marcar todos da lista</label>
+              <span id="confContagem" class="text-sm text-gray-500">0 marcados</span>
+            </div>
+            <ul id="confLista" class="divide-y divide-gray-100"></ul>
+            <p id="confVazio" class="hidden p-8 text-center text-sm text-gray-500">Nenhum produto com esses filtros.</p>
+          </div>
+
+          <!-- Ações dos marcados: acompanha a rolagem -->
+          <div id="confBarra" class="hidden sticky bottom-0 z-30 mt-4 -mx-4 sm:mx-0 bg-white border-t sm:border border-gray-200 sm:rounded-xl shadow-lg p-3">
+            <p id="confBarraTexto" class="text-sm font-medium text-gray-800 mb-2">0 marcados</p>
+            <div class="grid grid-cols-2 lg:grid-cols-4 gap-2">
+              <button type="button" data-conf-acao="VENDIDO" class="bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-2 rounded-lg text-sm font-medium">Marcar como vendido</button>
+              <button type="button" data-conf-acao="BAIXA" class="bg-amber-500 hover:bg-amber-600 text-white px-3 py-2 rounded-lg text-sm font-medium">Baixar do estoque</button>
+              <button type="button" data-conf-acao="ENCOMENDA" class="bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 rounded-lg text-sm font-medium">Disponível para encomenda</button>
+              <button type="button" data-conf-acao="ESGOTADO" class="bg-gray-700 hover:bg-gray-800 text-white px-3 py-2 rounded-lg text-sm font-medium">Marcar como esgotado</button>
+            </div>
+          </div>
+
+          <!-- Histórico: vendas e baixas lançadas aqui -->
+          <div class="bg-white rounded-xl border border-gray-200 p-4 sm:p-6 mt-6">
+            <div class="flex flex-col sm:flex-row sm:items-baseline sm:justify-between gap-1 mb-3">
+              <h4 class="text-lg font-semibold text-gray-900">Vendas e baixas lançadas</h4>
+              <p id="confHistoricoTotais" class="text-sm text-gray-600"></p>
+            </div>
+            <ul id="confHistorico" class="divide-y divide-gray-100 text-sm"></ul>
+          </div>
         </div>
       </div>
 
@@ -966,6 +1027,56 @@
         <button id="btnConfirmarExclusao" type="button" disabled class="bg-red-600 hover:bg-red-700 disabled:opacity-40 disabled:cursor-not-allowed text-white px-4 py-2 rounded-lg font-medium">Excluir</button>
       </div>
     </div>
+  </div>
+
+  <!-- Conferência de estoque: resumo antes de gravar -->
+  <div id="modalConferencia" class="fixed inset-0 modal-overlay bg-black/50 hidden z-50 flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-labelledby="tituloConferencia">
+    <div class="bg-white rounded-2xl max-w-lg w-full max-h-[90vh] overflow-hidden flex flex-col">
+      <div class="flex items-center justify-between p-5 border-b border-gray-200">
+        <h3 id="tituloConferencia" class="text-xl font-bold text-gray-900">Conferência</h3>
+        <button id="fecharModalConferencia" type="button" class="p-2 text-gray-500 hover:text-gray-700 rounded-lg hover:bg-gray-100" aria-label="Fechar"><svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg></button>
+      </div>
+      <div class="p-5 overflow-y-auto flex-1">
+        <p id="resumoConferencia" class="text-sm text-gray-800 mb-3">Conferindo...</p>
+        <ul id="listaConferencia" class="divide-y divide-gray-100 border border-gray-200 rounded-lg mb-4 max-h-72 overflow-y-auto"></ul>
+        <fieldset id="depoisConferencia" class="hidden mb-4">
+          <legend class="text-sm font-medium text-gray-800 mb-2">Quando a peça acabar na loja, o produto fica:</legend>
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            <label class="flex items-start gap-2 p-3 border border-gray-300 rounded-lg cursor-pointer has-[:checked]:border-gray-800 has-[:checked]:bg-gray-50"><input type="radio" name="depoisConferencia" value="ESGOTADO" checked class="mt-0.5 accent-gray-800"><span class="text-sm"><strong>Esgotado</strong><br><span class="text-gray-500">Sai da vitrine</span></span></label>
+            <label class="flex items-start gap-2 p-3 border border-gray-300 rounded-lg cursor-pointer has-[:checked]:border-blue-600 has-[:checked]:bg-blue-50"><input type="radio" name="depoisConferencia" value="ENCOMENDA" class="mt-0.5 accent-blue-600"><span class="text-sm"><strong>Disponível para encomenda</strong><br><span class="text-gray-500">Fica na vitrine como Sob Encomenda (50% de sinal)</span></span></label>
+          </div>
+        </fieldset>
+        <div id="motivoConferenciaCaixa" class="hidden mb-4">
+          <label for="motivoConferencia" class="block text-sm font-medium text-gray-700 mb-1">Motivo (opcional)</label>
+          <input type="text" id="motivoConferencia" maxlength="200" autocomplete="off" placeholder="Ex.: lente riscada, brinde, quebrou na entrega" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500">
+        </div>
+        <div id="bloqueioConferencia" class="hidden bg-red-50 border border-red-200 rounded-lg p-3 mb-2 text-sm text-red-800">
+          <p id="textoBloqueioConferencia"></p>
+          <button id="btnTirarBloqueadosConferencia" type="button" class="mt-2 bg-white border border-red-300 hover:bg-red-100 text-red-700 px-3 py-1.5 rounded-lg text-sm font-medium">Tirar esses da lista e continuar</button>
+        </div>
+      </div>
+      <div class="flex justify-end gap-2 p-4 border-t border-gray-200">
+        <button id="btnCancelarConferencia" type="button" class="bg-gray-100 hover:bg-gray-200 text-gray-700 px-4 py-2 rounded-lg font-medium">Cancelar</button>
+        <button id="btnConfirmarConferencia" type="button" disabled class="bg-emerald-600 hover:bg-emerald-700 disabled:opacity-40 disabled:cursor-not-allowed text-white px-4 py-2 rounded-lg font-medium">Confirmar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Foto ampliada do produto (Conferência de estoque) -->
+  <div id="modalFotoConferencia" class="fixed inset-0 bg-black/90 hidden z-[60] flex flex-col" role="dialog" aria-modal="true" aria-labelledby="tituloFotoConferencia">
+    <div class="flex items-center justify-between gap-3 p-3 text-white">
+      <div class="min-w-0">
+        <p id="tituloFotoConferencia" class="font-semibold truncate"></p>
+        <p id="detalheFotoConferencia" class="text-sm text-white/70 truncate"></p>
+      </div>
+      <button id="fecharFotoConferencia" type="button" class="shrink-0 p-2 rounded-lg hover:bg-white/10" aria-label="Fechar foto"><svg class="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg></button>
+    </div>
+    <div class="relative flex-1 min-h-0 flex items-center justify-center px-2 pb-2">
+      <img id="imgFotoConferencia" alt="" class="max-w-full max-h-full object-contain rounded-lg bg-white">
+      <button id="fotoConferenciaAnterior" type="button" class="absolute left-2 top-1/2 -translate-y-1/2 w-11 h-11 rounded-full bg-white/20 hover:bg-white/30 text-white text-2xl leading-none" aria-label="Foto anterior">‹</button>
+      <button id="fotoConferenciaProxima" type="button" class="absolute right-2 top-1/2 -translate-y-1/2 w-11 h-11 rounded-full bg-white/20 hover:bg-white/30 text-white text-2xl leading-none" aria-label="Próxima foto">›</button>
+    </div>
+    <div id="miniFotosConferencia" class="flex justify-center gap-2 p-3"></div>
   </div>
 
   <!-- Modal Produto -->
@@ -5901,6 +6012,7 @@
               <p class="col-span-2 lg:col-span-7 text-xs text-gray-500" data-totais-status>Itens lançados: ${formatarMoeda(Number(p.valor))}. Os totais são os do rodapé do PDF do pedido.</p>
             </div>
           </div>
+          <div class="px-4 pb-2"><button type="button" data-conferir-pedido="${pedidosFornCache.indexOf(p)}" class="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded text-sm font-medium">Conferir estoque deste pedido</button></div>
           <div class="px-4 pb-4 text-sm text-gray-500" data-itens>Carregando...</div>
         </details>`).join('')
         : `<p class="text-sm text-gray-500">${pedidosFornCache.length ? 'Nenhum pedido encontrado.' : 'Nenhum pedido lançado ainda. Use Lançar pedido (ou o Cadastro em Lote com a coluna Pedido fornecedor).'}</p>`;
@@ -5928,6 +6040,13 @@
 
     const totaisDaCaixa = (caixa) => Object.fromEntries([...caixa.querySelectorAll('[data-total]')].map(el => [el.dataset.total, el.value]));
     document.getElementById('pfListaPedidos').addEventListener('click', (e) => {
+      const conferir = e.target.closest('[data-conferir-pedido]');
+      if (conferir) {
+        const p = pedidosFornCache[Number(conferir.dataset.conferirPedido)];
+        document.querySelector('.tab-btn[data-tab="produtos"]').click();
+        abrirConferenciaEstoque(p);
+        return;
+      }
       const btn = e.target.closest('[data-salvar-totais]');
       if (!btn) return;
       const caixa = btn.closest('[data-totais-pedido]');
@@ -6483,6 +6602,476 @@
         exclusao.salvando = false;
         mostrarToast(err.message, 'error');
         renderizarExclusao();
+      }
+    });
+
+    // ---------- Conferência de estoque (Produtos) ----------
+    // Lista os produtos (de um pedido do fornecedor ou todos), com foto que amplia,
+    // e grava em massa: vendido, baixa, Sob Encomenda ou esgotado. O servidor confere
+    // antes (resumo no modal) e de novo ao gravar; só mexe nas peças da loja.
+    const conf = {
+      ligado: false,
+      pedidos: [],          // pedidos do fornecedor lançados
+      pedido: null,         // pedido escolhido
+      doPedido: new Map(),  // produto_id -> peças que vieram no pedido escolhido
+      acessoriosPedido: 0,
+      marcados: new Set(),
+      qtd: new Map(),       // produto_id -> quantidade digitada
+      lista: [],
+      acao: '', depois: 'ESGOTADO', conferidos: [], bloqueados: [], salvando: false,
+    };
+    const ROTULO_ACAO_CONF = {
+      VENDIDO: { titulo: 'Marcar como vendido', botao: 'Confirmar venda', verbo: 'vendido' },
+      BAIXA: { titulo: 'Baixar do estoque', botao: 'Confirmar baixa', verbo: 'baixa' },
+      ENCOMENDA: { titulo: 'Disponível para encomenda', botao: 'Confirmar', verbo: 'encomenda' },
+      ESGOTADO: { titulo: 'Marcar como esgotado', botao: 'Confirmar', verbo: 'esgotado' },
+    };
+    const plConf = (n, um, varios) => `${n} ${n === 1 ? um : varios}`;
+    const semAcentoConf = (t) => String(t || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+
+    function fotosConf(p) {
+      const fotos = Array.isArray(p.fotos) ? p.fotos.filter(Boolean) : [];
+      return fotos.length ? fotos : (p.imagem_url ? [p.imagem_url] : []);
+    }
+
+    async function abrirConferenciaEstoque(pedido = null) {
+      conf.ligado = true;
+      if (modoAcertoEstoque) definirModoAcertoEstoque(false);
+      document.getElementById('produtosLista').classList.add('hidden');
+      document.getElementById('conferenciaEstoque').classList.remove('hidden');
+      document.getElementById('btnConferenciaEstoque').classList.add('ring-2', 'ring-emerald-300');
+      await carregarPedidosConferencia();
+      if (pedido) {
+        const k = conf.pedidos.findIndex(p => p.numero === pedido.numero && (p.fornecedor || '') === (pedido.fornecedor || ''));
+        document.getElementById('confPedido').value = k >= 0 ? String(k) : '';
+      }
+      await escolherPedidoConferencia();
+      document.getElementById('conferenciaEstoque').scrollIntoView({ block: 'start' });
+    }
+
+    function fecharConferenciaEstoque() {
+      conf.ligado = false;
+      conf.marcados.clear();
+      document.getElementById('conferenciaEstoque').classList.add('hidden');
+      document.getElementById('produtosLista').classList.remove('hidden');
+      document.getElementById('btnConferenciaEstoque').classList.remove('ring-2', 'ring-emerald-300');
+    }
+
+    async function carregarPedidosConferencia() {
+      const sel = document.getElementById('confPedido');
+      const atual = conf.pedido;
+      try {
+        const res = await fetchAdmin('/api/admin/pedidos-fornecedor');
+        if (!res.ok) throw new Error();
+        conf.pedidos = await res.json();
+      } catch {
+        conf.pedidos = [];
+      }
+      sel.innerHTML = '<option value="">Todos os produtos (sem pedido)</option>' + conf.pedidos.map((p, k) =>
+        `<option value="${k}">Pedido ${escapeHtml(p.numero)} · ${escapeHtml(p.fornecedor || 'sem fornecedor')}${p.data_compra ? ' · ' + escapeHtml(formatarDia(p.data_compra)) : ''} · ${plConf(Number(p.pecas) || 0, 'peça', 'peças')}</option>`).join('');
+      if (atual) {
+        const k = conf.pedidos.findIndex(p => p.numero === atual.numero && (p.fornecedor || '') === (atual.fornecedor || ''));
+        if (k >= 0) sel.value = String(k);
+      }
+    }
+
+    async function escolherPedidoConferencia() {
+      const k = document.getElementById('confPedido').value;
+      conf.pedido = k === '' ? null : conf.pedidos[Number(k)] || null;
+      conf.doPedido = new Map();
+      conf.acessoriosPedido = 0;
+      conf.marcados.clear();
+      if (conf.pedido) {
+        document.getElementById('confResumoPedido').textContent = 'Carregando os itens do pedido...';
+        try {
+          const q = new URLSearchParams({ numero: conf.pedido.numero, fornecedor: conf.pedido.fornecedor || '' });
+          const res = await fetchAdmin(`/api/admin/pedidos-fornecedor/itens?${q}`);
+          if (!res.ok) throw new Error();
+          for (const i of await res.json()) {
+            if (i.tipo === 'acessorio') { conf.acessoriosPedido++; continue; }
+            if (i.id === null || i.id === undefined) continue;
+            conf.doPedido.set(Number(i.id), (conf.doPedido.get(Number(i.id)) || 0) + (Number(i.quantidade) || 0));
+          }
+        } catch {
+          mostrarToast('Erro ao carregar os itens do pedido', 'error');
+        }
+      }
+      renderizarConferencia();
+      carregarHistoricoConferencia();
+    }
+
+    function filtrarConferencia() {
+      const situacao = document.getElementById('confSituacao').value;
+      const busca = semAcentoConf(document.getElementById('confBusca').value).trim();
+      return todosProdutos.filter(p => {
+        if (conf.pedido && !conf.doPedido.has(Number(p.id))) return false;
+        const enc = p.disponibilidade === 'SOB_ENCOMENDA';
+        const loja = enc ? 0 : Number(p.estoque) || 0;
+        if (situacao === 'loja' && !(loja > 0)) return false;
+        if (situacao === 'zerado' && (enc || loja > 0)) return false;
+        if (situacao === 'maleta' && !(Number(p.em_maleta) > 0)) return false;
+        if (situacao === 'encomenda' && !enc) return false;
+        if (busca && ![p.nome, p.codigo_sku, p.cor_armacao, p.codigo_fornecedor, p.nome_fornecedor, p.fornecedor].some(v => semAcentoConf(v).includes(busca))) return false;
+        return true;
+      });
+    }
+
+    function situacaoConf(p) {
+      if (p.disponibilidade === 'SOB_ENCOMENDA') return '<span class="px-2 py-0.5 text-xs font-medium rounded-full bg-blue-100 text-blue-700">SOB ENCOMENDA</span>';
+      return `<span class="px-2 py-0.5 text-xs font-medium rounded-full ${statusClass(p.status)}">${escapeHtml(ROTULO_STATUS_RELATORIO[p.status] || p.status)}</span>`;
+    }
+
+    function renderizarConferencia() {
+      if (!conf.ligado) return;
+      const existentes = new Set(todosProdutos.map(p => Number(p.id)));
+      for (const id of [...conf.marcados]) if (!existentes.has(id)) conf.marcados.delete(id);
+      const lista = filtrarConferencia();
+      conf.lista = lista;
+      const resumo = document.getElementById('confResumoPedido');
+      if (conf.pedido) {
+        const pecas = [...conf.doPedido.values()].reduce((t, n) => t + n, 0);
+        resumo.innerHTML = `Pedido <strong>${escapeHtml(conf.pedido.numero)}</strong> · ${escapeHtml(conf.pedido.fornecedor || 'sem fornecedor')}: ${plConf(conf.doPedido.size, 'produto', 'produtos')}, ${plConf(pecas, 'peça comprada', 'peças compradas')}${conf.acessoriosPedido ? ` (os ${plConf(conf.acessoriosPedido, 'acessório', 'acessórios')} do pedido ficam em Acessórios)` : ''}.`;
+      } else {
+        resumo.textContent = `${plConf(lista.length, 'produto', 'produtos')} na lista. Escolha um pedido do fornecedor para ver só o que veio nele.`;
+      }
+      document.getElementById('confVazio').classList.toggle('hidden', lista.length > 0);
+      document.getElementById('confLista').innerHTML = lista.map(p => {
+        const id = Number(p.id);
+        const enc = p.disponibilidade === 'SOB_ENCOMENDA';
+        const loja = enc ? 0 : Math.max(0, Number(p.estoque) || 0);
+        const maleta = Number(p.em_maleta) || 0;
+        const marcado = conf.marcados.has(id);
+        const qtd = Math.min(Math.max(1, conf.qtd.get(id) || 1), Math.max(1, loja));
+        const fotos = fotosConf(p);
+        const veio = conf.doPedido.get(id);
+        return `
+        <li class="flex items-start sm:items-center gap-3 px-3 sm:px-4 py-3 ${marcado ? 'bg-emerald-50' : ''}" data-conf-linha="${id}">
+          <input type="checkbox" data-conf-marcar="${id}" class="mt-6 sm:mt-0 h-5 w-5 shrink-0 accent-emerald-600" aria-label="Marcar ${escapeHtml(p.nome)}"${marcado ? ' checked' : ''}>
+          <button type="button" data-conf-foto="${id}" class="relative shrink-0 w-20 h-20 sm:w-24 sm:h-24 rounded-lg overflow-hidden bg-gray-100 border border-gray-200 group" title="Ampliar foto" aria-label="Ampliar foto de ${escapeHtml(p.nome)}"${fotos.length ? '' : ' disabled'}>
+            ${fotos.length ? `<img src="${escapeHtml(fotos[0])}" alt="" loading="lazy" class="w-full h-full object-cover" onerror="imgFallback(this)">` : '<span class="text-xs text-gray-400">Sem foto</span>'}
+            ${fotos.length ? `<span class="absolute bottom-1 right-1 bg-black/70 text-white rounded-md px-1 py-0.5 text-[10px] font-medium flex items-center gap-0.5"><svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M21 21l-4.35-4.35M11 8v6m-3-3h6m5 0a8 8 0 11-16 0 8 8 0 0116 0z"/></svg>${fotos.length > 1 ? fotos.length : ''}</span>` : ''}
+          </button>
+          <div class="flex-1 min-w-0">
+            <p class="font-medium text-gray-900 text-sm sm:text-base leading-snug">${escapeHtml(p.nome)}</p>
+            <p class="text-xs sm:text-sm text-gray-500">${escapeHtml(p.codigo_sku)}${p.tamanho ? ` • Tam. ${escapeHtml(p.tamanho)}` : ''}${p.cor_armacao ? ` • ${escapeHtml(p.cor_armacao)}` : ''}</p>
+            ${p.fornecedor || p.codigo_fornecedor ? `<p class="text-xs text-gray-400">${escapeHtml(p.fornecedor || '-')}${p.codigo_fornecedor ? ' • Cód. ' + escapeHtml(p.codigo_fornecedor) : ''}</p>` : ''}
+            <div class="flex flex-wrap items-center gap-x-2 gap-y-1 mt-1 text-xs">
+              ${situacaoConf(p)}
+              <span class="text-gray-700"><strong>${loja}</strong> na loja</span>
+              ${maleta ? `<span class="text-yellow-700">${maleta} em maleta</span>` : ''}
+              ${veio ? `<span class="text-gray-500">veio ${veio} no pedido</span>` : ''}
+              <span class="text-gray-500">${formatarMoeda(p.preco_venda)}</span>
+            </div>
+          </div>
+          <label class="shrink-0 text-center text-xs text-gray-500 ${loja > 1 ? '' : 'invisible'}">Qtd
+            <input type="number" data-conf-qtd="${id}" min="1" max="${loja}" step="1" value="${qtd}" inputmode="numeric" class="block mt-1 w-16 px-2 py-1.5 border border-gray-300 rounded-lg text-sm text-center focus:outline-none focus:ring-2 focus:ring-emerald-500"${loja > 1 ? '' : ' tabindex="-1"'}>
+          </label>
+        </li>`;
+      }).join('');
+      atualizarBarraConferencia();
+    }
+
+    function atualizarBarraConferencia() {
+      const n = conf.marcados.size;
+      const txt = n === 1 ? '1 marcado' : `${n} marcados`;
+      document.getElementById('confContagem').textContent = txt;
+      document.getElementById('confBarraTexto').textContent = `${txt}: o que aconteceu com ${n === 1 ? 'ele' : 'eles'}?`;
+      document.getElementById('confBarra').classList.toggle('hidden', n === 0);
+      const ids = conf.lista.map(p => Number(p.id));
+      const naLista = ids.filter(id => conf.marcados.has(id)).length;
+      const todos = document.getElementById('confMarcarTodos');
+      todos.checked = ids.length > 0 && naLista === ids.length;
+      todos.indeterminate = naLista > 0 && naLista < ids.length;
+    }
+
+    async function carregarHistoricoConferencia() {
+      const ul = document.getElementById('confHistorico');
+      const tot = document.getElementById('confHistoricoTotais');
+      const q = conf.pedido ? '?' + new URLSearchParams({ numero: conf.pedido.numero, fornecedor: conf.pedido.fornecedor || '' }) : '';
+      try {
+        const res = await fetchAdmin(`/api/admin/estoque/movimentos${q}`);
+        if (!res.ok) throw new Error();
+        const data = await res.json();
+        const t = data.totais || {};
+        tot.textContent = data.movimentos.length
+          ? `${plConf(t.vendidas || 0, 'peça vendida', 'peças vendidas')} (${formatarMoeda(t.valor_vendido || 0)}) · ${plConf(t.baixadas || 0, 'peça baixada', 'peças baixadas')}`
+          : '';
+        const ROT = { VENDIDO: ['Vendido', 'bg-emerald-100 text-emerald-800'], BAIXA: ['Baixa', 'bg-amber-100 text-amber-800'], ENCOMENDA: ['Sob Encomenda', 'bg-blue-100 text-blue-700'], ESGOTADO: ['Esgotado', 'bg-gray-200 text-gray-800'] };
+        ul.innerHTML = data.movimentos.length ? data.movimentos.map(m => {
+          const [rot, cls] = ROT[m.tipo] || [m.tipo, 'bg-gray-100 text-gray-700'];
+          const qtd = Number(m.quantidade) || 0;
+          const depois = m.depois === 'ENCOMENDA' ? ' → ficou Sob Encomenda' : m.depois === 'ESGOTADO' && qtd ? ' → esgotado' : '';
+          const quando = String(m.criado_em || '').replace(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}).*/, '$3/$2/$1 $4:$5');
+          return `<li class="py-2 flex flex-wrap items-baseline gap-x-2">
+            <span class="px-2 py-0.5 text-xs font-medium rounded-full ${cls}">${escapeHtml(rot)}</span>
+            <span class="font-medium text-gray-900">${escapeHtml(m.nome)}</span>
+            <span class="text-gray-500">${escapeHtml(m.codigo_sku)}</span>
+            ${qtd ? `<span class="text-gray-700">${plConf(qtd, 'peça', 'peças')}${m.tipo === 'VENDIDO' ? ` · ${formatarMoeda(Math.round(Number(m.preco_venda) * 100) * qtd / 100)}` : ''}</span>` : ''}
+            <span class="text-gray-500">${escapeHtml(depois)}${m.motivo ? ` · ${escapeHtml(m.motivo)}` : ''}</span>
+            <span class="text-xs text-gray-400 sm:ml-auto">${escapeHtml(quando)}${m.usuario ? ` · ${escapeHtml(m.usuario)}` : ''}${m.pedido_fornecedor && !conf.pedido ? ` · pedido ${escapeHtml(m.pedido_fornecedor)}` : ''}</span>
+          </li>`;
+        }).join('') : '<li class="py-2 text-gray-500">Nada lançado ainda' + (conf.pedido ? ' para os produtos deste pedido.' : '.') + '</li>';
+      } catch {
+        ul.innerHTML = '<li class="py-2 text-red-600">Erro ao carregar o histórico.</li>';
+      }
+    }
+
+    document.getElementById('btnConferenciaEstoque').addEventListener('click', () => conf.ligado ? fecharConferenciaEstoque() : abrirConferenciaEstoque());
+    document.getElementById('btnSairConferencia').addEventListener('click', fecharConferenciaEstoque);
+    document.getElementById('confPedido').addEventListener('change', escolherPedidoConferencia);
+    document.getElementById('confSituacao').addEventListener('change', renderizarConferencia);
+    document.getElementById('confBusca').addEventListener('input', renderizarConferencia);
+    document.getElementById('confMarcarTodos').addEventListener('change', (e) => {
+      conf.lista.forEach(p => e.target.checked ? conf.marcados.add(Number(p.id)) : conf.marcados.delete(Number(p.id)));
+      renderizarConferencia();
+    });
+    const confLista = document.getElementById('confLista');
+    confLista.addEventListener('change', (e) => {
+      const cb = e.target.closest('[data-conf-marcar]');
+      if (cb) {
+        const id = Number(cb.dataset.confMarcar);
+        if (cb.checked) conf.marcados.add(id); else conf.marcados.delete(id);
+        cb.closest('li').classList.toggle('bg-emerald-50', cb.checked);
+        atualizarBarraConferencia();
+        return;
+      }
+      const q = e.target.closest('[data-conf-qtd]');
+      if (q) {
+        const id = Number(q.dataset.confQtd);
+        const max = Number(q.max) || 1;
+        const v = Math.min(max, Math.max(1, Math.round(Number(q.value) || 1)));
+        q.value = v;
+        conf.qtd.set(id, v);
+        // Mexeu na quantidade = quer esse produto
+        if (!conf.marcados.has(id)) {
+          conf.marcados.add(id);
+          const cbx = confLista.querySelector(`[data-conf-marcar="${id}"]`);
+          if (cbx) { cbx.checked = true; cbx.closest('li').classList.add('bg-emerald-50'); }
+          atualizarBarraConferencia();
+        }
+      }
+    });
+    confLista.addEventListener('click', (e) => {
+      const b = e.target.closest('[data-conf-foto]');
+      if (b) abrirFotoConferencia(Number(b.dataset.confFoto));
+    });
+
+    // Foto ampliada: todas as fotos do produto, com setas, miniaturas, teclado e deslizar
+    const fotoConf = { fotos: [], i: 0 };
+    const modalFotoConf = document.getElementById('modalFotoConferencia');
+    function abrirFotoConferencia(id) {
+      const p = todosProdutos.find(x => Number(x.id) === id);
+      if (!p) return;
+      fotoConf.fotos = fotosConf(p);
+      if (!fotoConf.fotos.length) return;
+      fotoConf.i = 0;
+      document.getElementById('tituloFotoConferencia').textContent = p.nome;
+      document.getElementById('detalheFotoConferencia').textContent = [p.codigo_sku, p.cor_armacao, p.codigo_fornecedor ? `Cód. ${p.codigo_fornecedor}` : ''].filter(Boolean).join(' • ');
+      modalFotoConf.classList.remove('hidden');
+      mostrarFotoConferencia();
+    }
+    function mostrarFotoConferencia() {
+      const n = fotoConf.fotos.length;
+      const img = document.getElementById('imgFotoConferencia');
+      img.onerror = () => imgFallback(img);
+      img.src = fotoConf.fotos[fotoConf.i];
+      img.alt = `Foto ${fotoConf.i + 1} de ${n}`;
+      document.getElementById('fotoConferenciaAnterior').classList.toggle('hidden', n < 2);
+      document.getElementById('fotoConferenciaProxima').classList.toggle('hidden', n < 2);
+      document.getElementById('miniFotosConferencia').innerHTML = n < 2 ? '' : fotoConf.fotos.map((url, k) =>
+        `<button type="button" data-foto-conf="${k}" class="w-14 h-14 rounded-md overflow-hidden border-2 ${k === fotoConf.i ? 'border-white' : 'border-transparent opacity-60'}" aria-label="Foto ${k + 1}"><img src="${escapeHtml(url)}" alt="" class="w-full h-full object-cover bg-white"></button>`).join('');
+    }
+    function passarFotoConferencia(d) {
+      const n = fotoConf.fotos.length;
+      if (n < 2) return;
+      fotoConf.i = (fotoConf.i + d + n) % n;
+      mostrarFotoConferencia();
+    }
+    const fecharFotoConferencia = () => modalFotoConf.classList.add('hidden');
+    document.getElementById('fecharFotoConferencia').addEventListener('click', fecharFotoConferencia);
+    document.getElementById('fotoConferenciaAnterior').addEventListener('click', () => passarFotoConferencia(-1));
+    document.getElementById('fotoConferenciaProxima').addEventListener('click', () => passarFotoConferencia(1));
+    document.getElementById('miniFotosConferencia').addEventListener('click', (e) => {
+      const b = e.target.closest('[data-foto-conf]');
+      if (b) { fotoConf.i = Number(b.dataset.fotoConf); mostrarFotoConferencia(); }
+    });
+    modalFotoConf.addEventListener('click', (e) => {
+      if (e.target === modalFotoConf || e.target === document.getElementById('imgFotoConferencia').parentElement) fecharFotoConferencia();
+    });
+    let toqueFotoConf = null;
+    modalFotoConf.addEventListener('touchstart', (e) => { toqueFotoConf = e.touches[0].clientX; }, { passive: true });
+    modalFotoConf.addEventListener('touchend', (e) => {
+      if (toqueFotoConf === null) return;
+      const dx = e.changedTouches[0].clientX - toqueFotoConf;
+      toqueFotoConf = null;
+      if (Math.abs(dx) > 40) passarFotoConferencia(dx < 0 ? 1 : -1);
+    });
+    document.addEventListener('keydown', (e) => {
+      if (modalFotoConf.classList.contains('hidden')) return;
+      if (e.key === 'Escape') fecharFotoConferencia();
+      else if (e.key === 'ArrowLeft') passarFotoConferencia(-1);
+      else if (e.key === 'ArrowRight') passarFotoConferencia(1);
+    });
+
+    // Modal de resumo: confere no servidor e só grava com tudo liberado
+    const modalConf = document.getElementById('modalConferencia');
+    const btnConfirmarConf = document.getElementById('btnConfirmarConferencia');
+
+    function itensConferencia(ids) {
+      return ids.map(id => ({ id, quantidade: conf.qtd.get(id) || 1 }));
+    }
+
+    function corpoConferencia(ids) {
+      return {
+        acao: conf.acao,
+        depois: conf.depois,
+        itens: itensConferencia(ids),
+        motivo: document.getElementById('motivoConferencia').value.trim(),
+        pedido_fornecedor: conf.pedido ? conf.pedido.numero : '',
+        fornecedor: conf.pedido ? conf.pedido.fornecedor || '' : '',
+      };
+    }
+
+    function renderizarModalConferencia(data) {
+      const rot = ROTULO_ACAO_CONF[conf.acao];
+      conf.conferidos = data.itens || [];
+      conf.bloqueados = conf.conferidos.filter(i => i.bloqueios.length);
+      const t = data.totais || {};
+      const vendido = conf.acao === 'VENDIDO';
+      document.getElementById('listaConferencia').innerHTML = conf.conferidos.map(i => `
+        <li class="px-3 py-2 text-sm flex gap-3 ${i.bloqueios.length ? 'bg-red-50' : ''}">
+          ${i.imagem_url ? `<img src="${escapeHtml(i.imagem_url)}" alt="" class="w-12 h-12 shrink-0 rounded object-cover bg-gray-100" onerror="imgFallback(this)">` : ''}
+          <div class="min-w-0">
+            <p class="font-medium text-gray-900">${escapeHtml(i.nome)}${i.tamanho ? ` (Tam. ${escapeHtml(i.tamanho)})` : ''} <span class="text-gray-500 font-normal">• ${escapeHtml(i.codigo_sku)}</span></p>
+            ${i.quantidade ? `<p class="text-gray-700">${vendido ? 'Vende' : 'Sai'} ${plConf(i.quantidade, 'peça', 'peças')} da loja (tinha ${i.estoque})${vendido ? ` · ${formatarMoeda(i.valor_venda)}` : ''}</p>` : ''}
+            ${i.resultado ? `<p class="text-emerald-700">${escapeHtml(i.resultado)}</p>` : ''}
+            ${i.bloqueios.map(b => `<p class="text-red-700">Não pode: ${escapeHtml(b)}</p>`).join('')}
+            ${i.avisos.map(a => `<p class="text-amber-700">Atenção: ${escapeHtml(a)}</p>`).join('')}
+          </div>
+        </li>`).join('');
+      const n = conf.conferidos.length;
+      let resumo = `${plConf(n, 'produto', 'produtos')} marcado${n === 1 ? '' : 's'}.`;
+      if (vendido) resumo = `Venda de <strong>${plConf(t.pecas || 0, 'peça', 'peças')}</strong> (${formatarMoeda(t.valor_venda || 0)} pelo preço de venda), em ${plConf(t.produtos || 0, 'produto', 'produtos')}:`;
+      else if (conf.acao === 'BAIXA') resumo = `Baixa de <strong>${plConf(t.pecas || 0, 'peça', 'peças')}</strong> da loja, em ${plConf(t.produtos || 0, 'produto', 'produtos')}:`;
+      else if (conf.acao === 'ENCOMENDA') resumo = `Voltam para a vitrine como <strong>Sob Encomenda</strong>:`;
+      else if (conf.acao === 'ESGOTADO') resumo = `Ficam <strong>esgotados</strong> (saem da vitrine)${t.pecas ? `; ${plConf(t.pecas, 'peça da loja vira', 'peças da loja viram')} baixa` : ''}:`;
+      document.getElementById('resumoConferencia').innerHTML = resumo;
+      // A escolha esgotado/encomenda só aparece se alguma peça acabar
+      const zera = conf.conferidos.some(i => !i.bloqueios.length && i.depois);
+      document.getElementById('depoisConferencia').classList.toggle('hidden', !((conf.acao === 'VENDIDO' || conf.acao === 'BAIXA') && zera));
+      const bloq = conf.bloqueados.length;
+      document.getElementById('bloqueioConferencia').classList.toggle('hidden', !bloq);
+      document.getElementById('textoBloqueioConferencia').textContent = `${plConf(bloq, 'produto não pode', 'produtos não podem')} agora (em vermelho). Nada é gravado enquanto ${bloq === 1 ? 'ele estiver' : 'eles estiverem'} na lista.`;
+      document.getElementById('btnTirarBloqueadosConferencia').classList.toggle('hidden', bloq === n);
+      btnConfirmarConf.textContent = rot.botao;
+      atualizarBotaoConferencia();
+    }
+
+    function atualizarBotaoConferencia() {
+      const mudam = conf.conferidos.filter(i => !i.bloqueios.length && !i.nada).length;
+      btnConfirmarConf.disabled = conf.salvando || !mudam || conf.bloqueados.length > 0;
+    }
+
+    async function conferirConferencia() {
+      const ids = conf.conferidos.length ? conf.conferidos.map(i => Number(i.id)) : [...conf.marcados];
+      document.getElementById('resumoConferencia').textContent = 'Conferindo...';
+      btnConfirmarConf.disabled = true;
+      try {
+        const res = await fetchAdmin('/api/admin/estoque/conferencia/conferir', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(corpoConferencia(ids)),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(res.status === 403 ? 'Seu usuário não tem acesso a esta tela.' : (data.error || 'Erro ao conferir'));
+        if (!(data.itens || []).length) {
+          document.getElementById('resumoConferencia').textContent = 'Esses produtos já não existem (a lista mudou). Atualize a tela.';
+          return;
+        }
+        renderizarModalConferencia(data);
+      } catch (err) {
+        document.getElementById('resumoConferencia').textContent = err.message;
+      }
+    }
+
+    function abrirModalConferencia(acao) {
+      if (!conf.marcados.size) return;
+      conf.acao = acao;
+      conf.depois = 'ESGOTADO';
+      conf.conferidos = [];
+      conf.bloqueados = [];
+      conf.salvando = false;
+      document.querySelector('input[name="depoisConferencia"][value="ESGOTADO"]').checked = true;
+      document.getElementById('tituloConferencia').textContent = ROTULO_ACAO_CONF[acao].titulo;
+      document.getElementById('motivoConferencia').value = '';
+      document.getElementById('motivoConferenciaCaixa').classList.toggle('hidden', !(acao === 'BAIXA' || acao === 'ESGOTADO'));
+      document.getElementById('depoisConferencia').classList.add('hidden');
+      document.getElementById('bloqueioConferencia').classList.add('hidden');
+      document.getElementById('listaConferencia').innerHTML = '';
+      modalConf.classList.remove('hidden');
+      conferirConferencia();
+    }
+
+    function fecharModalConferencia() {
+      if (conf.salvando) return;
+      modalConf.classList.add('hidden');
+    }
+
+    document.getElementById('confBarra').addEventListener('click', (e) => {
+      const b = e.target.closest('[data-conf-acao]');
+      if (b) abrirModalConferencia(b.dataset.confAcao);
+    });
+    document.getElementById('fecharModalConferencia').addEventListener('click', fecharModalConferencia);
+    document.getElementById('btnCancelarConferencia').addEventListener('click', fecharModalConferencia);
+    modalConf.addEventListener('click', (e) => { if (e.target === modalConf) fecharModalConferencia(); });
+    document.querySelectorAll('input[name="depoisConferencia"]').forEach(r => r.addEventListener('change', () => {
+      conf.depois = r.value;
+      conferirConferencia();
+    }));
+    document.getElementById('btnTirarBloqueadosConferencia').addEventListener('click', () => {
+      const fora = new Set(conf.bloqueados.map(i => Number(i.id)));
+      fora.forEach(id => conf.marcados.delete(id));
+      conf.conferidos = conf.conferidos.filter(i => !fora.has(Number(i.id)));
+      renderizarConferencia();
+      conferirConferencia();
+    });
+
+    btnConfirmarConf.addEventListener('click', async () => {
+      const ids = conf.conferidos.filter(i => !i.nada).map(i => Number(i.id));
+      if (!ids.length) return;
+      conf.salvando = true;
+      atualizarBotaoConferencia();
+      btnConfirmarConf.textContent = 'Gravando...';
+      try {
+        const res = await fetchAdmin('/api/admin/estoque/conferencia', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(corpoConferencia(ids)),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (res.status === 409 && data.itens) {
+          // Algo mudou desde a conferência (ex.: peça foi para uma maleta): mostra de novo
+          conf.salvando = false;
+          renderizarModalConferencia(data);
+          mostrarToast(data.error, 'error');
+          return;
+        }
+        if (!res.ok) throw new Error(data.error || 'Erro ao gravar');
+        conf.salvando = false;
+        modalConf.classList.add('hidden');
+        ids.forEach(id => { conf.marcados.delete(id); conf.qtd.delete(id); });
+        const t = data.totais || {};
+        const msg = {
+          VENDIDO: `Venda lançada: ${plConf(t.pecas || 0, 'peça', 'peças')} (${formatarMoeda(t.valor_venda || 0)})`,
+          BAIXA: `Baixa lançada: ${plConf(t.pecas || 0, 'peça', 'peças')}`,
+          ENCOMENDA: `${plConf(t.produtos || 0, 'produto disponível', 'produtos disponíveis')} para encomenda`,
+          ESGOTADO: `${plConf(t.produtos || 0, 'produto marcado', 'produtos marcados')} como esgotado`,
+        }[conf.acao];
+        mostrarToast(msg);
+        await carregarProdutos();
+        renderizarConferencia();
+        carregarHistoricoConferencia();
+      } catch (err) {
+        conf.salvando = false;
+        mostrarToast(err.message, 'error');
+        atualizarBotaoConferencia();
+        btnConfirmarConf.textContent = ROTULO_ACAO_CONF[conf.acao].botao;
       }
     });
 
