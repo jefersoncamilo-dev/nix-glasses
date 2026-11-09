@@ -340,6 +340,31 @@
               </div>
             </div>
             <p id="pfStatus" class="text-sm text-gray-600 mt-3" role="status"></p>
+            <details id="pfTotaisBloco" class="mt-3 border-t border-gray-100 pt-3">
+              <summary class="cursor-pointer text-sm font-medium text-gray-700">Totais do pedido (frete, desconto, subtotal e total do rodapé do PDF)</summary>
+              <div class="grid grid-cols-2 lg:grid-cols-6 gap-3 mt-2">
+              <label class="block text-sm col-span-2">
+                <span class="font-medium text-gray-700">Frete (forma de envio)</span>
+                <input type="text" id="pfFreteDescricao" maxlength="120" placeholder="Ex.: Jadlog Econômico" class="mt-1 w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500">
+              </label>
+              <label class="block text-sm ">
+                <span class="font-medium text-gray-700">Frete</span>
+                <input type="text" id="pfFrete" inputmode="decimal" placeholder="0,00" class="mt-1 w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500">
+              </label>
+              <label class="block text-sm ">
+                <span class="font-medium text-gray-700">Desconto</span>
+                <input type="text" id="pfDesconto" inputmode="decimal" placeholder="0,00" class="mt-1 w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500">
+              </label>
+              <label class="block text-sm ">
+                <span class="font-medium text-gray-700">Subtotal</span>
+                <input type="text" id="pfSubtotal" inputmode="decimal" placeholder="0,00" class="mt-1 w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500">
+              </label>
+              <label class="block text-sm ">
+                <span class="font-medium text-gray-700">Total pago</span>
+                <input type="text" id="pfTotal" inputmode="decimal" placeholder="0,00" class="mt-1 w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500">
+              </label>
+              </div>
+            </details>
           </div>
 
           <div id="pfResumo" class="hidden sticky top-0 z-10 bg-white/95 backdrop-blur rounded-xl border border-gray-200 p-3 mb-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
@@ -366,6 +391,7 @@
             </div>
             <input type="search" id="pfBuscaPedidos" class="w-full sm:w-72 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500" placeholder="Buscar por nº ou fornecedor...">
           </div>
+          <div id="pfTotaisGerais" class="hidden bg-white rounded-xl border border-gray-200 p-4 mb-4"></div>
           <div id="pfListaPedidos" class="space-y-3"></div>
         </div>
 
@@ -4983,12 +5009,14 @@
         }
       });
       if (!erros.size && !produtosLote.length && !listaAcessorios.length) erros.set(-1, 'Nenhum item para lançar');
+      const totais = lerTotaisDigitados(cabecalho.totais);
+      if (totais.erro) erros.set(-1, totais.erro);
       if (erros.size) return { erros };
       const tirar = ({ _item, ...resto }) => resto;
       return {
         corpo: {
           fornecedor: String(cabecalho.fornecedor || '').trim(), numero: String(cabecalho.numero || '').trim(), data: String(cabecalho.data || '').trim(),
-          produtos: produtosLote.map(tirar), acessorios: listaAcessorios.map(tirar),
+          produtos: produtosLote.map(tirar), acessorios: listaAcessorios.map(tirar), totais: totais.totais,
         },
         origem: { produtos: produtosLote.map(p => p._item), acessorios: listaAcessorios.map(a => a._item) },
       };
@@ -4999,7 +5027,37 @@
         fornecedor: document.getElementById('pfFornecedor').value,
         numero: document.getElementById('pfNumero').value,
         data: document.getElementById('pfData').value,
+        totais: {
+          frete_descricao: document.getElementById('pfFreteDescricao').value,
+          frete: document.getElementById('pfFrete').value,
+          desconto: document.getElementById('pfDesconto').value,
+          subtotal: document.getElementById('pfSubtotal').value,
+          total: document.getElementById('pfTotal').value,
+        },
       };
+    }
+
+    // Totais digitados ("20,45", "- R$ 26,80", vazio) -> { totais } ou { erro }
+    function lerTotaisDigitados(t) {
+      const totais = { frete_descricao: String((t && t.frete_descricao) || '').trim() };
+      for (const [campo, rotulo] of [['frete', 'Frete'], ['desconto', 'Desconto'], ['subtotal', 'Subtotal'], ['total', 'Total']]) {
+        const texto = String((t && t[campo]) ?? '').replace('-', '').trim();
+        if (!texto) { totais[campo] = null; continue; }
+        const v = lerPreco(texto);
+        if (!Number.isFinite(v)) return { erro: `${rotulo} do pedido inválido` };
+        totais[campo] = v;
+      }
+      return { totais };
+    }
+
+    const valorCampo = (v) => (v === null || v === undefined || v === '' ? '' : Number(v).toFixed(2).replace('.', ','));
+
+    function preencherTotaisPedidoForn(t = {}) {
+      document.getElementById('pfFreteDescricao').value = t.frete_descricao || '';
+      document.getElementById('pfFrete').value = valorCampo(t.frete);
+      document.getElementById('pfDesconto').value = valorCampo(t.desconto);
+      document.getElementById('pfSubtotal').value = valorCampo(t.subtotal);
+      document.getElementById('pfTotal').value = valorCampo(t.total);
     }
 
     function opcoesDestinoPedidoForn(item, candidatos) {
@@ -5121,6 +5179,7 @@
       itensPedidoForn = [];
       pedidoFornLido = null;
       ['pfNumero', 'pfData'].forEach(id => { document.getElementById(id).value = ''; });
+      preencherTotaisPedidoForn();
       document.getElementById('pfStatus').textContent = '';
       renderizarPedidoForn();
     });
@@ -5144,6 +5203,8 @@
         pedidoFornLido = dados;
         if (dados.numero) document.getElementById('pfNumero').value = dados.numero;
         if (dados.data) document.getElementById('pfData').value = dados.data;
+        preencherTotaisPedidoForn(dados);
+        document.getElementById('pfTotaisBloco').open = true;
         const fornecedor = document.getElementById('pfFornecedor').value;
         itensPedidoForn = dados.itens.map(d => itemPedidoForn(d, dados.itens, todosProdutos, acessoriosCache, fornecedor));
         const soma = dados.itens.reduce((s, i) => s + Number(i.preco_total || 0), 0);
@@ -5220,6 +5281,7 @@
         itensPedidoForn = [];
         pedidoFornLido = null;
         ['pfNumero', 'pfData'].forEach(id => { document.getElementById(id).value = ''; });
+        preencherTotaisPedidoForn();
         document.getElementById('pfStatus').textContent = '';
         await carregarProdutos();
         renderizarPedidoForn();
@@ -5280,21 +5342,130 @@
       }
     }
 
+    // Total pago no pedido: o do rodapé, se foi informado; senão os itens lançados
+    function totalPagoPedidoForn(p) {
+      return p.total !== null && p.total !== undefined ? Number(p.total) : Number(p.valor) || 0;
+    }
+
+    // Somas dos pedidos da lista: geral e por fornecedor
+    function somarPedidosForn(lista) {
+      const somar = (ps) => ({
+        pedidos: ps.length,
+        pecas: ps.reduce((s, p) => s + (Number(p.pecas) || 0), 0),
+        subtotal: ps.reduce((s, p) => s + (p.subtotal !== null && p.subtotal !== undefined ? Number(p.subtotal) : Number(p.valor) || 0), 0),
+        frete: ps.reduce((s, p) => s + (Number(p.frete) || 0), 0),
+        desconto: ps.reduce((s, p) => s + (Number(p.desconto) || 0), 0),
+        total: ps.reduce((s, p) => s + totalPagoPedidoForn(p), 0),
+        semTotais: ps.filter(p => p.total === null || p.total === undefined).length,
+      });
+      const fornecedores = new Map();
+      lista.forEach(p => {
+        const f = String(p.fornecedor || '').trim() || 'Sem fornecedor';
+        const chave = f.toLowerCase();
+        if (!fornecedores.has(chave)) fornecedores.set(chave, { fornecedor: f, pedidos: [] });
+        fornecedores.get(chave).pedidos.push(p);
+      });
+      return {
+        geral: somar(lista),
+        porFornecedor: [...fornecedores.values()].map(f => ({ fornecedor: f.fornecedor, ...somar(f.pedidos) })).sort((a, b) => b.total - a.total),
+      };
+    }
+
+    function renderizarTotaisGeraisForn(lista) {
+      const caixa = document.getElementById('pfTotaisGerais');
+      caixa.classList.toggle('hidden', !lista.length);
+      if (!lista.length) return;
+      const { geral, porFornecedor } = somarPedidosForn(lista);
+      const linha = (rotulo, t, forte) => `<tr class="${forte ? 'font-semibold text-gray-900' : 'text-gray-700'}">
+        <td class="py-1.5 pr-3">${rotulo}</td><td class="py-1.5 text-right">${t.pedidos}</td><td class="py-1.5 text-right">${t.pecas}</td>
+        <td class="py-1.5 text-right">${formatarMoeda(t.subtotal)}</td><td class="py-1.5 text-right">${formatarMoeda(t.frete)}</td>
+        <td class="py-1.5 text-right">${t.desconto ? `- ${formatarMoeda(t.desconto)}` : formatarMoeda(0)}</td><td class="py-1.5 text-right">${formatarMoeda(t.total)}</td></tr>`;
+      caixa.innerHTML = `<p class="font-semibold text-gray-900 mb-2">Total geral${lista.length !== pedidosFornCache.length ? ' (pedidos da busca)' : ''}</p>
+        <div class="overflow-x-auto"><table class="w-full min-w-[560px] text-sm"><thead class="text-xs text-gray-500 uppercase"><tr>
+          <th class="py-1 text-left">Fornecedor</th><th class="py-1 text-right">Pedidos</th><th class="py-1 text-right">Peças</th><th class="py-1 text-right">Subtotal</th>
+          <th class="py-1 text-right">Frete</th><th class="py-1 text-right">Desconto</th><th class="py-1 text-right">Total pago</th></tr></thead>
+          <tbody class="divide-y divide-gray-100">${porFornecedor.length > 1 ? porFornecedor.map(f => linha(escapeHtml(f.fornecedor), f, false)).join('') : ''}${linha(porFornecedor.length > 1 ? 'Todos' : escapeHtml(porFornecedor[0].fornecedor), geral, true)}</tbody></table></div>
+        ${geral.semTotais ? `<p class="text-xs text-amber-700 mt-2">${geral.semTotais} pedido(s) ainda sem os totais do rodapé: nesses, conta o valor dos itens lançados, sem frete nem desconto. Abra o pedido e preencha (ou leia do PDF).</p>` : ''}`;
+    }
+
     function renderizarPedidosForn() {
       const busca = semAcentoPf(document.getElementById('pfBuscaPedidos').value).trim();
       const lista = pedidosFornCache.filter(p => !busca || semAcentoPf(`${p.numero} ${p.fornecedor}`).includes(busca));
+      renderizarTotaisGeraisForn(lista);
       document.getElementById('pfListaPedidos').innerHTML = lista.length ? lista.map((p, k) => `
         <details class="bg-white rounded-xl border border-gray-200" data-pedido-forn="${pedidosFornCache.indexOf(p)}">
           <summary class="cursor-pointer p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1">
             <span><strong class="text-gray-900">Pedido ${escapeHtml(p.numero)}</strong> <span class="text-gray-500">· ${escapeHtml(p.fornecedor || 'sem fornecedor')} · ${dataBr(p.data_compra)}</span></span>
-            <span class="text-sm text-gray-700">${Number(p.pecas)} peça(s) · ${formatarMoeda(Number(p.valor))} · ${Number(p.novos)} novo(s) · ${Number(p.reposicoes)} reposição(ões)${Number(p.acessorios) ? ` · ${Number(p.acessorios)} acessório(s)` : ''}</span>
+            <span class="text-sm text-gray-700 sm:text-right">${Number(p.pecas)} peça(s) · ${Number(p.novos)} novo(s) · ${Number(p.reposicoes)} reposição(ões)${Number(p.acessorios) ? ` · ${Number(p.acessorios)} acessório(s)` : ''}<br>
+              ${p.total !== null && p.total !== undefined
+                ? `Subtotal ${formatarMoeda(Number(p.subtotal ?? p.valor))} · Frete ${formatarMoeda(Number(p.frete) || 0)} · Desconto ${p.desconto ? `- ${formatarMoeda(Number(p.desconto))}` : formatarMoeda(0)} · <strong>Total ${formatarMoeda(Number(p.total))}</strong>`
+                : `Itens ${formatarMoeda(Number(p.valor))} · <span class="text-amber-700">sem frete/desconto/total</span>`}</span>
           </summary>
+          <div class="px-4 pb-2">
+            <div class="grid grid-cols-2 lg:grid-cols-7 gap-2 items-end p-3 bg-gray-50 rounded-lg" data-totais-pedido="${pedidosFornCache.indexOf(p)}">
+              <label class="block text-xs text-gray-500 col-span-2">Frete (forma de envio)<input data-total="frete_descricao" value="${escapeHtml(p.frete_descricao || '')}" maxlength="120" class="mt-1 w-full px-2 py-1.5 border border-gray-300 rounded text-sm"></label>
+              ${[['frete', 'Frete'], ['desconto', 'Desconto'], ['subtotal', 'Subtotal'], ['total', 'Total pago']].map(([c, r]) => `<label class="block text-xs text-gray-500">${r}<input data-total="${c}" value="${valorCampo(p[c])}" inputmode="decimal" placeholder="0,00" class="mt-1 w-full px-2 py-1.5 border border-gray-300 rounded text-sm"></label>`).join('')}
+              <div class="flex gap-2 col-span-2 lg:col-span-1">
+                <button type="button" data-salvar-totais class="flex-1 px-3 py-1.5 bg-orange-500 hover:bg-orange-600 text-white rounded text-sm font-medium">Salvar</button>
+                <label class="flex-1 text-center px-3 py-1.5 bg-white border border-gray-300 hover:bg-gray-100 rounded text-sm font-medium cursor-pointer" title="Lê frete, desconto, subtotal e total do PDF do pedido">PDF<input type="file" accept="application/pdf,.pdf" data-ler-totais class="sr-only"></label>
+              </div>
+              <p class="col-span-2 lg:col-span-7 text-xs text-gray-500" data-totais-status>Itens lançados: ${formatarMoeda(Number(p.valor))}. Os totais são os do rodapé do PDF do pedido.</p>
+            </div>
+          </div>
           <div class="px-4 pb-4 text-sm text-gray-500" data-itens>Carregando...</div>
         </details>`).join('')
         : `<p class="text-sm text-gray-500">${pedidosFornCache.length ? 'Nenhum pedido encontrado.' : 'Nenhum pedido lançado ainda. Use Lançar pedido (ou o Cadastro em Lote com a coluna Pedido fornecedor).'}</p>`;
     }
 
     document.getElementById('pfBuscaPedidos').addEventListener('input', renderizarPedidosForn);
+
+    async function salvarTotaisPedidoForn(caixa, totaisTexto) {
+      const p = pedidosFornCache[Number(caixa.dataset.totaisPedido)];
+      const status = caixa.querySelector('[data-totais-status]');
+      const t = lerTotaisDigitados(totaisTexto);
+      if (t.erro) { status.innerHTML = `<span class="text-red-600">${escapeHtml(t.erro)}</span>`; return; }
+      const res = await fetchAdmin('/api/admin/pedidos-fornecedor/totais', {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ fornecedor: p.fornecedor || '', numero: p.numero, totais: t.totais }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) { status.innerHTML = `<span class="text-red-600">${escapeHtml(data.error || 'Erro ao salvar')}</span>`; return; }
+      Object.assign(p, { frete: data.frete, frete_descricao: data.frete_descricao, desconto: data.desconto, subtotal: data.subtotal, total: data.total });
+      mostrarToast(`Totais do pedido ${p.numero} salvos`);
+      renderizarPedidosForn();
+      const aberto = document.querySelector(`[data-pedido-forn="${caixa.dataset.totaisPedido}"]`);
+      if (aberto) aberto.open = true;
+    }
+
+    const totaisDaCaixa = (caixa) => Object.fromEntries([...caixa.querySelectorAll('[data-total]')].map(el => [el.dataset.total, el.value]));
+    document.getElementById('pfListaPedidos').addEventListener('click', (e) => {
+      const btn = e.target.closest('[data-salvar-totais]');
+      if (!btn) return;
+      const caixa = btn.closest('[data-totais-pedido]');
+      salvarTotaisPedidoForn(caixa, totaisDaCaixa(caixa));
+    });
+    // PDF de um pedido já lançado: só os totais do rodapé (os itens não mudam)
+    document.getElementById('pfListaPedidos').addEventListener('change', async (e) => {
+      const input = e.target.closest('[data-ler-totais]');
+      if (!input || !input.files[0]) return;
+      const caixa = input.closest('[data-totais-pedido]');
+      const p = pedidosFornCache[Number(caixa.dataset.totaisPedido)];
+      const status = caixa.querySelector('[data-totais-status]');
+      status.textContent = 'Lendo o PDF...';
+      try {
+        const fd = new FormData();
+        fd.append('pdf', input.files[0]);
+        input.value = '';
+        const res = await fetchAdmin('/api/admin/pedidos-fornecedor/ler', { method: 'POST', body: fd });
+        const dados = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(dados.error || 'Não foi possível ler o PDF');
+        if (dados.numero && String(dados.numero).toLowerCase() !== String(p.numero).toLowerCase()
+          && !confirm(`Este PDF é do pedido ${dados.numero}, não do ${p.numero}. Usar os totais mesmo assim?`)) { status.textContent = ''; return; }
+        await salvarTotaisPedidoForn(caixa, { frete_descricao: dados.frete_descricao, frete: valorCampo(dados.frete), desconto: valorCampo(dados.desconto), subtotal: valorCampo(dados.subtotal), total: valorCampo(dados.total) });
+      } catch (err) {
+        status.innerHTML = `<span class="text-red-600">${escapeHtml(err.message)}</span>`;
+      }
+    });
     document.getElementById('pfListaPedidos').addEventListener('toggle', async (e) => {
       const det = e.target.closest('[data-pedido-forn]');
       if (!det || !det.open || det.dataset.carregado) return;

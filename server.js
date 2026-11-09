@@ -1746,6 +1746,54 @@ async function startServer() {
   }
 
   // ---------- Pedido do fornecedor ----------
+  // Totais do rodapé do pedido: valores em reais (vazio = não informado) e a
+  // descrição do frete. -> { totais } ou { erro }
+  function lerTotaisPedido(t) {
+    const b = t && typeof t === 'object' ? t : {};
+    const totais = { frete_descricao: textoCurto(b.frete_descricao, 120) };
+    for (const [campo, rotulo] of [['frete', 'Frete'], ['desconto', 'Desconto'], ['subtotal', 'Subtotal'], ['total', 'Total']]) {
+      const v = b[campo];
+      if (v === undefined || v === null || v === '') { totais[campo] = null; continue; }
+      // Aceita 20.45, "20,45", "- R$ 1.234,56"
+      let texto = String(v).replace(/R\$|-|\s/gi, '');
+      if (texto.includes(',')) texto = texto.replace(/\./g, '').replace(',', '.');
+      const n = typeof v === 'number' ? Math.abs(v) : lerPrecoLote(texto);
+      if (!Number.isFinite(n) || n >= 1e8) return { erro: `${rotulo} inválido` };
+      totais[campo] = Math.round(n * 100) / 100;
+    }
+    return { totais };
+  }
+
+  async function salvarTotaisPedido(db, fornecedor, numero, data, totais) {
+    const { rows } = await db.query(
+      `INSERT INTO pedidos_fornecedor (fornecedor, numero, data_compra, frete, frete_descricao, desconto, subtotal, total)
+       VALUES ($1, $2, $3::date, $4, $5, $6, $7, $8)
+       ON CONFLICT ((lower(fornecedor)), (lower(numero))) DO UPDATE SET
+         data_compra = COALESCE(EXCLUDED.data_compra, pedidos_fornecedor.data_compra),
+         frete = EXCLUDED.frete, frete_descricao = EXCLUDED.frete_descricao, desconto = EXCLUDED.desconto,
+         subtotal = EXCLUDED.subtotal, total = EXCLUDED.total, updated_at = CURRENT_TIMESTAMP
+       RETURNING fornecedor, numero, frete::float, frete_descricao, desconto::float, subtotal::float, total::float`,
+      [fornecedor, numero, data || null, totais.frete, totais.frete_descricao, totais.desconto, totais.subtotal, totais.total]
+    );
+    return rows[0];
+  }
+
+  // Grava (ou corrige) os totais de um pedido já lançado
+  async function handleTotaisPedidoFornecedor(req, res) {
+    const b = req.body || {};
+    const numero = textoCurto(b.numero, 60);
+    const fornecedor = textoCurto(b.fornecedor, 120);
+    if (!numero) return res.status(400).json({ error: 'Informe o número do pedido' });
+    const t = lerTotaisPedido(b.totais);
+    if (t.erro) return res.status(400).json({ error: t.erro });
+    try {
+      res.json(await salvarTotaisPedido(req.db, fornecedor, numero, null, t.totais));
+    } catch (err) {
+      console.error(err);
+      res.status(500).json({ error: 'Erro ao salvar os totais do pedido' });
+    }
+  }
+
   // Lê o PDF do pedido (número, data, itens com código, quantidade, custo e foto).
   // Não grava nada: o painel mostra os itens para conferir e depois lança.
   async function handleLerPedidoFornecedor(req, res) {
@@ -1785,6 +1833,8 @@ async function startServer() {
     if (listaAcessorios.length && !req.admin.dono && !req.admin.permissoes.includes('acessorios')) {
       return res.status(403).json({ error: 'Seu usuário não tem acesso a Acessórios: tire os acessórios do pedido ou peça acesso ao dono' });
     }
+    const totaisPedido = b.totais === undefined ? null : lerTotaisPedido(b.totais);
+    if (totaisPedido && totaisPedido.erro) erros.push({ campo: 'totais', mensagem: totaisPedido.erro });
     if (erros.length) return res.status(400).json({ error: erros[0].mensagem, erros });
 
     const produtos = linhas.map((linha, i) => {
@@ -1852,8 +1902,9 @@ async function startServer() {
         );
         acessoriosGravados.push({ ...r.rows[0], quantidade: a.quantidade, novo: a.id === null });
       }
+      const totais = totaisPedido ? await salvarTotaisPedido(client, fornecedor, numero, data, totaisPedido.totais) : null;
       await client.query('COMMIT');
-      res.status(201).json({ produtos: criados, repostos, ignorados, acessorios: acessoriosGravados });
+      res.status(201).json({ produtos: criados, repostos, ignorados, acessorios: acessoriosGravados, totais });
     } catch (err) {
       if (client) await client.query('ROLLBACK').catch(() => {});
       console.error(err);
@@ -1876,15 +1927,20 @@ async function startServer() {
   async function handleListPedidosFornecedor(req, res) {
     try {
       const { rows } = await req.db.query(
-        `SELECT fornecedor, pedido_fornecedor AS numero, to_char(min(data_compra), 'YYYY-MM-DD') AS data_compra,
-                sum(quantidade)::int AS pecas, round(sum(quantidade * preco_custo), 2)::float AS valor,
-                count(*) FILTER (WHERE origem = 'CADASTRO')::int AS novos,
-                count(*) FILTER (WHERE origem = 'REPOSICAO')::int AS reposicoes,
-                count(*) FILTER (WHERE tipo = 'acessorio')::int AS acessorios,
-                min(created_at) AS lancado_em
-         FROM (${COMPRAS_COM_PEDIDO}) c
-         GROUP BY fornecedor, pedido_fornecedor
-         ORDER BY min(data_compra) DESC, min(created_at) DESC
+        `SELECT g.*, t.frete::float AS frete, COALESCE(t.frete_descricao, '') AS frete_descricao,
+                t.desconto::float AS desconto, t.subtotal::float AS subtotal, t.total::float AS total
+         FROM (
+           SELECT fornecedor, pedido_fornecedor AS numero, to_char(min(data_compra), 'YYYY-MM-DD') AS data_compra,
+                  sum(quantidade)::int AS pecas, round(sum(quantidade * preco_custo), 2)::float AS valor,
+                  count(*) FILTER (WHERE origem = 'CADASTRO')::int AS novos,
+                  count(*) FILTER (WHERE origem = 'REPOSICAO')::int AS reposicoes,
+                  count(*) FILTER (WHERE tipo = 'acessorio')::int AS acessorios,
+                  min(created_at) AS lancado_em
+           FROM (${COMPRAS_COM_PEDIDO}) c
+           GROUP BY fornecedor, pedido_fornecedor
+         ) g
+         LEFT JOIN pedidos_fornecedor t ON lower(t.fornecedor) = lower(g.fornecedor) AND lower(t.numero) = lower(g.numero)
+         ORDER BY g.data_compra DESC, g.lancado_em DESC
          LIMIT 500`
       );
       res.json(rows);
@@ -3118,6 +3174,7 @@ async function startServer() {
       if (escopo === 'tudo') {
         const tabelas = ['produtos', 'compras_fornecedor', 'maleta_pecas', 'acertos', 'pedidos', 'clientes', 'encomendas'];
         if (acessorios === true) tabelas.push('acessorios', 'compras_acessorio');
+        tabelas.push('pedidos_fornecedor');
         await client.query(`TRUNCATE ${tabelas.join(', ')} RESTART IDENTITY`);
         // Sem produtos, a única imagem que ainda serve é a logo
         await client.query('DELETE FROM imagens WHERE id IS DISTINCT FROM $1', [logo]);
@@ -3784,6 +3841,7 @@ async function startServer() {
   app.post('/api/admin/pedidos-fornecedor/ler', exigirArea('produtos'), uploadPdfPedido, handleLerPedidoFornecedor);
   app.post('/api/admin/pedidos-fornecedor', exigirArea('produtos'), handleLancarPedidoFornecedor);
   app.get('/api/admin/pedidos-fornecedor', exigirArea('produtos', 'metricas'), handleListPedidosFornecedor);
+  app.put('/api/admin/pedidos-fornecedor/totais', exigirArea('produtos'), handleTotaisPedidoFornecedor);
   app.get('/api/admin/pedidos-fornecedor/itens', exigirArea('produtos', 'metricas'), handleItensPedidoFornecedor);
   app.get('/api/admin/compras/produtos', exigirArea('produtos', 'metricas'), handleComprasPorProduto);
   app.get('/api/admin/produtos/:id/compras', exigirArea('produtos'), handleListCompras);

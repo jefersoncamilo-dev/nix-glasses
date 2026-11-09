@@ -106,7 +106,7 @@ function lerDescricao(descricao) {
 // Item = descrição (uma ou mais linhas) que termina em "xN", seguida do valor da
 // linha ("R$33,80" = total das N peças).
 function lerPedidoTexto(linhas) {
-  const pedido = { numero: '', data: '', itens: [], subtotal: null, desconto: null, frete: null, total: null };
+  const pedido = { numero: '', data: '', itens: [], subtotal: null, desconto: null, frete: null, frete_descricao: '', total: null };
   let buffer = [];
   let noEndereco = false;
   for (const linha of linhas) {
@@ -123,6 +123,11 @@ function lerPedidoTexto(linhas) {
       const campo = t.startsWith('subtotal') ? 'subtotal' : t.startsWith('total') ? 'total' : t.startsWith('desconto') ? 'desconto' : 'frete';
       if (Number.isFinite(valor) && pedido[campo] === null) pedido[campo] = valor;
       else if (campo === 'frete' && pedido.frete === null && /gr[aá]tis/i.test(texto)) pedido.frete = 0;
+      // "Frete (Nuvem Envio - Jadlog Econômico): R$20,45" -> "Nuvem Envio - Jadlog Econômico"
+      if (campo === 'frete' && !pedido.frete_descricao) {
+        const desc = /^frete\s*\((.*)\)\s*:/i.exec(texto);
+        if (desc) pedido.frete_descricao = desc[1].replace(/\s+/g, ' ').trim().slice(0, 120);
+      }
       buffer = [];
       noEndereco = false;
       continue;
