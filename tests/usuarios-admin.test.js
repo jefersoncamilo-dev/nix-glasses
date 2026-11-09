@@ -97,6 +97,10 @@ describe('usuários do painel admin', () => {
       ['POST', '/api/admin/usuarios', { nome: 'Eu', login: 'eu-mesmo', senha: 'senha-qualquer', permissoes: ['config'] }],
       ['GET', '/api/admin/zerar'],
       ['POST', '/api/admin/zerar', { confirmacao: 'ZERAR', escopo: 'tudo' }],
+      // Zerar um cadastro é só do dono, mesmo para quem tem a tela (pedidos, clientes)
+      ['GET', '/api/admin/zerar/pedidos'],
+      ['POST', '/api/admin/zerar/pedidos', { confirmacao: 'ZERAR' }],
+      ['POST', '/api/admin/zerar/clientes', { confirmacao: 'ZERAR' }],
     ];
     for (const [m, p, json] of bloqueadas) {
       const res = await chamar(srv, m, p, { token: t, json });

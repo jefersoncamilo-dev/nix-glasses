@@ -3518,6 +3518,266 @@ async function startServer() {
     };
   }
 
+  // ---------- Zerar um cadastro (Configurações > Zerar um cadastro) ----------
+  // Cada botão apaga uma tabela inteira desta loja (req.db): produtos, clientes,
+  // pedidos, acertos, encomendas ou acessórios. Só o dono, com a palavra ZERAR.
+  // Antes de apagar o servidor confere de novo, dentro da transação, as mesmas
+  // proteções do Acerto de estoque e do Excluir de vez: se algum item está numa
+  // maleta com cliente ou num pedido aberto, nada é apagado e a resposta diz o
+  // que fazer antes. GET mostra a contagem, o que sai, o que fica e os avisos.
+  const MAX_BLOQUEADOS_MOSTRADOS = 20;
+
+  async function todosOsIds(db, tabela, bloquear) {
+    const { rows } = await db.query(`SELECT id FROM ${tabela} ORDER BY id ${bloquear ? 'FOR UPDATE' : ''}`);
+    return rows.map((r) => Number(r.id));
+  }
+
+  // Junta os avisos repetidos (um por item) em uma linha só, com a contagem
+  function resumirAvisos(itens, regras) {
+    const avisos = [];
+    for (const [teste, texto] of regras) {
+      const n = itens.filter((i) => i.avisos.some((a) => teste.test(a))).length;
+      if (n) avisos.push(texto(n));
+    }
+    return avisos;
+  }
+
+  const bloqueadosDe = (itens) => itens.filter((i) => i.bloqueios.length)
+    .map((i) => ({ id: i.id, titulo: i.titulo, bloqueios: i.bloqueios }));
+
+  // Totais do pedido do fornecedor que ficaram sem nenhuma compra (produto ou acessório)
+  const APAGAR_TOTAIS_SEM_COMPRA = `
+    DELETE FROM pedidos_fornecedor t
+    WHERE NOT EXISTS (SELECT 1 FROM compras_fornecedor c WHERE lower(c.pedido_fornecedor) = lower(t.numero))
+      AND NOT EXISTS (SELECT 1 FROM compras_acessorio c WHERE lower(c.pedido_fornecedor) = lower(t.numero))`;
+
+  const plural = (n, um, varios) => `${n} ${n === 1 ? um : varios}`;
+
+  const CADASTROS_ZERAR = {
+    produtos: {
+      rotulo: 'produtos',
+      async conferir(db, bloquear) {
+        const ids = await todosOsIds(db, 'produtos', bloquear);
+        const conf = ids.length ? await conferirExclusao(db, ids, bloquear) : { produtos: [] };
+        const itens = conf.produtos.map((p) => ({ ...p, titulo: [p.codigo_sku, p.nome].filter(Boolean).join(' ') }));
+        const { rows: [x] } = await db.query(`
+          SELECT (SELECT COUNT(*) FROM compras_fornecedor)::int AS compras,
+                 (SELECT COALESCE(SUM(estoque), 0) FROM produtos)::int AS pecas,
+                 (SELECT COUNT(*) FROM encomendas WHERE produto_id IS NOT NULL)::int AS encomendas`);
+        const sai = [
+          plural(ids.length, 'produto', 'produtos') + ` (${plural(x.pecas, 'peça', 'peças')} no estoque da loja)`,
+          'as fotos deles',
+          plural(x.compras, 'compra do fornecedor', 'compras do fornecedor') + ' (histórico de reposição e os pedidos do fornecedor que ficarem vazios)',
+          'o Top 10 das Métricas',
+        ];
+        const fica = ['Pedidos, acertos e encomendas antigos (guardam nome, SKU e preço)', 'Clientes, acessórios, logo e configurações da loja'];
+        const avisos = [];
+        if (x.encomendas) avisos.push(`${plural(x.encomendas, 'encomenda está ligada', 'encomendas estão ligadas')} a produto. Elas continuam, com o modelo e o SKU copiados.`);
+        avisos.push('Os números (ids) dos produtos não voltam a 1, para não se misturar com pedidos antigos.');
+        return { total: ids.length, itens, sai, fica, avisos };
+      },
+      async apagar(db, req) {
+        const logo = idDaImagem((await lojaDaEmpresa(req.empresa)).logo);
+        const fotos = await db.query('SELECT DISTINCT unnest(fotos || ARRAY[imagem_url]) AS url FROM produtos');
+        const ids = fotos.rows.map((r) => idDaImagem(r.url)).filter((id) => id && id !== logo);
+        // compras_fornecedor e maleta_pecas saem junto (ON DELETE CASCADE)
+        const r = await db.query('DELETE FROM produtos');
+        if (ids.length) await db.query('DELETE FROM imagens WHERE id = ANY($1)', [ids]);
+        await db.query(APAGAR_TOTAIS_SEM_COMPRA);
+        return r.rowCount;
+      },
+    },
+    clientes: {
+      rotulo: 'clientes',
+      async conferir(db, bloquear) {
+        const ids = await todosOsIds(db, 'clientes', bloquear);
+        const itens = ids.length ? await EXCLUSOES.clientes.conferir(db, ids, bloquear) : [];
+        const avisos = resumirAvisos(itens, [
+          [/antigos continuam/, (n) => `${plural(n, 'cliente tem', 'clientes têm')} pedidos ou encomendas antigos: eles continuam, como "sem conta" (com nome e telefone).`],
+        ]);
+        return {
+          total: ids.length, itens,
+          sai: [plural(ids.length, 'conta de cliente', 'contas de clientes') + ' (e-mail e senha da vitrine)'],
+          fica: ['Pedidos, encomendas e acertos (com nome e telefone copiados)', 'Produtos, estoque e acessórios'],
+          avisos: [...avisos, 'Quem quiser comprar logada de novo cria outra conta.'],
+        };
+      },
+      apagar: async (db) => (await db.query('DELETE FROM clientes')).rowCount,
+    },
+    pedidos: {
+      rotulo: 'pedidos',
+      async conferir(db, bloquear) {
+        const { rows } = await db.query(
+          `SELECT pe.id, pe.nome, pe.status,
+                  (SELECT COUNT(*)::int FROM maleta_pecas mp WHERE mp.pedido_id = pe.id) AS pecas_em_maleta
+           FROM pedidos pe ORDER BY pe.id ${bloquear ? 'FOR UPDATE' : ''}`
+        );
+        const itens = rows.map((p) => ({
+          id: p.id,
+          titulo: `Pedido #${p.id} ${p.nome || ''}`.trim(),
+          bloqueios: p.pecas_em_maleta
+            ? [`${plural(p.pecas_em_maleta, 'peça está', 'peças estão')} na maleta com a cliente. Faça o acerto da maleta antes (ou use Métricas > Limpar testes, que devolve as peças ao estoque).`]
+            : [],
+          avisos: [],
+        }));
+        const { rows: [x] } = await db.query(`
+          SELECT (SELECT COUNT(*) FROM pedidos WHERE status IN ${PEDIDO_ABERTO})::int AS abertos,
+                 (SELECT COUNT(*) FROM pedidos WHERE status = 'ENTREGUE')::int AS entregues,
+                 (SELECT COUNT(*) FROM encomendas WHERE pedido_id IS NOT NULL)::int AS encomendas,
+                 (SELECT COUNT(*) FROM acertos WHERE pedido_id IS NOT NULL)::int AS acertos`);
+        const avisos = [];
+        if (x.abertos) avisos.push(`${plural(x.abertos, 'pedido está', 'pedidos estão')} em aberto (novo ou em andamento) e some${x.abertos === 1 ? '' : 'm'} também.`);
+        if (x.entregues) avisos.push(`Peças e acessórios que saíram do estoque em ${plural(x.entregues, 'pedido entregue', 'pedidos entregues')} não voltam sozinhos.`);
+        if (x.encomendas) avisos.push(`${plural(x.encomendas, 'encomenda veio', 'encomendas vieram')} de pedido: continua${x.encomendas === 1 ? '' : 'm'}, só sem o número do pedido.`);
+        if (x.acertos) avisos.push(`${plural(x.acertos, 'acerto é', 'acertos são')} de pedido: continua${x.acertos === 1 ? '' : 'm'}, só sem o número do pedido.`);
+        avisos.push('A numeração dos pedidos volta a 1.');
+        return {
+          total: rows.length, itens,
+          sai: [plural(rows.length, 'pedido', 'pedidos') + ' da vitrine (itens, fechamento, descontos e acessórios lançados neles)'],
+          fica: ['Produtos e estoque, clientes, encomendas e acertos', 'O Top 10 das Métricas (para zerar, use Métricas > Limpar testes)'],
+          avisos,
+        };
+      },
+      async apagar(db) {
+        await db.query('UPDATE produtos SET pedido_condicional_id = NULL WHERE pedido_condicional_id IS NOT NULL');
+        const r = await db.query('DELETE FROM pedidos');
+        await db.query(`SELECT setval(pg_get_serial_sequence('pedidos', 'id'), 1, false)`);
+        return r.rowCount;
+      },
+    },
+    acertos: {
+      rotulo: 'acertos',
+      async conferir(db, bloquear) {
+        const ids = await todosOsIds(db, 'acertos', bloquear);
+        const { rows: [x] } = await db.query(
+          `SELECT COALESCE(SUM(cardinality(comprados)), 0)::int AS vendidas FROM acertos`);
+        const avisos = [];
+        if (x.vendidas) avisos.push(`${plural(x.vendidas, 'peça vendida', 'peças vendidas')} nesses acertos não volta${x.vendidas === 1 ? '' : 'm'} para o estoque. Se eram testes, confira o estoque em Produtos > Editar em estoque.`);
+        avisos.push('A numeração dos acertos volta a 1.');
+        return {
+          total: ids.length, itens: [],
+          sai: [plural(ids.length, 'acerto de maleta', 'acertos de maleta') + ' (histórico do que foi comprado e devolvido)'],
+          fica: ['Produtos e estoque como estão agora', 'Pedidos, clientes, encomendas e maletas abertas'],
+          avisos,
+        };
+      },
+      async apagar(db) {
+        const r = await db.query('DELETE FROM acertos');
+        await db.query(`SELECT setval(pg_get_serial_sequence('acertos', 'id'), 1, false)`);
+        return r.rowCount;
+      },
+    },
+    encomendas: {
+      rotulo: 'encomendas',
+      async conferir(db, bloquear) {
+        const ids = await todosOsIds(db, 'encomendas', bloquear);
+        const itens = ids.length ? await EXCLUSOES.encomendas.conferir(db, ids, bloquear) : [];
+        const { rows: [x] } = await db.query(`SELECT COALESCE(SUM(sinal_pago), 0) AS sinais FROM encomendas`);
+        const avisos = resumirAvisos(itens, [
+          [/Ainda está em aberto/, (n) => `${plural(n, 'encomenda ainda está', 'encomendas ainda estão')} em aberto (aguardando, em trânsito ou pronta).`],
+        ]);
+        if (Number(x.sinais) > 0) avisos.push(`${formatarReais(x.sinais)} de sinal registrado some junto.`);
+        avisos.push('A numeração das encomendas volta a 1.');
+        return {
+          total: ids.length, itens,
+          sai: [plural(ids.length, 'encomenda', 'encomendas') + ' (com status, sinal e observações)'],
+          fica: ['Produtos, pedidos e clientes'],
+          avisos,
+        };
+      },
+      async apagar(db) {
+        const r = await db.query('DELETE FROM encomendas');
+        await db.query(`SELECT setval(pg_get_serial_sequence('encomendas', 'id'), 1, false)`);
+        return r.rowCount;
+      },
+    },
+    acessorios: {
+      rotulo: 'acessórios',
+      async conferir(db, bloquear) {
+        const ids = await todosOsIds(db, 'acessorios', bloquear);
+        const itens = ids.length ? await EXCLUSOES.acessorios.conferir(db, ids, bloquear) : [];
+        const { rows: [x] } = await db.query(`
+          SELECT (SELECT COALESCE(SUM(estoque), 0) FROM acessorios)::int AS unidades,
+                 (SELECT COUNT(*) FROM compras_acessorio)::int AS compras`);
+        const avisos = [];
+        if (x.unidades) avisos.push(`Ainda tem ${x.unidades} un. em estoque, que somem junto.`);
+        avisos.push('Pedidos já entregues continuam com o acessório lançado (nome e preço ficam neles).');
+        return {
+          total: ids.length, itens,
+          sai: [plural(ids.length, 'acessório', 'acessórios') + ` e ${plural(x.compras, 'compra', 'compras')} de acessório do fornecedor`],
+          fica: ['Produtos, pedidos e clientes'],
+          avisos,
+        };
+      },
+      async apagar(db) {
+        // compras_acessorio sai junto (ON DELETE CASCADE)
+        const r = await db.query('DELETE FROM acessorios');
+        await db.query(APAGAR_TOTAIS_SEM_COMPRA);
+        return r.rowCount;
+      },
+    },
+  };
+
+  function previaCadastro(c) {
+    const bloqueados = bloqueadosDe(c.itens);
+    return {
+      total: c.total,
+      sai: c.sai, fica: c.fica, avisos: c.avisos,
+      bloqueados: bloqueados.slice(0, MAX_BLOQUEADOS_MOSTRADOS),
+      total_bloqueados: bloqueados.length,
+      pode_zerar: c.total > 0 && bloqueados.length === 0,
+    };
+  }
+
+  function cadastroDaRota(req, res) {
+    const tipo = Object.prototype.hasOwnProperty.call(CADASTROS_ZERAR, req.params.cadastro) && CADASTROS_ZERAR[req.params.cadastro];
+    if (!tipo) res.status(404).json({ error: 'Cadastro desconhecido' });
+    return tipo;
+  }
+
+  async function handlePreviaZerarCadastro(req, res) {
+    const tipo = cadastroDaRota(req, res);
+    if (!tipo) return;
+    try {
+      res.json({ cadastro: req.params.cadastro, ...previaCadastro(await tipo.conferir(req.db, false)) });
+    } catch (err) {
+      console.error(err);
+      res.status(500).json({ error: `Erro ao conferir ${tipo.rotulo}` });
+    }
+  }
+
+  async function handleZerarCadastro(req, res) {
+    const tipo = cadastroDaRota(req, res);
+    if (!tipo) return;
+    if ((req.body || {}).confirmacao !== CONFIRMACAO_ZERAR) {
+      return res.status(400).json({ error: `Digite ${CONFIRMACAO_ZERAR} para confirmar` });
+    }
+    let client;
+    try {
+      client = await req.db.connect();
+      await client.query('BEGIN');
+      const previa = previaCadastro(await tipo.conferir(client, true));
+      if (previa.total_bloqueados) {
+        await client.query('ROLLBACK');
+        const n = previa.total_bloqueados;
+        return res.status(409).json({
+          error: `${n} ${n === 1 ? 'item impede' : 'itens impedem'} zerar ${tipo.rotulo} agora. Nada foi apagado.`,
+          cadastro: req.params.cadastro, ...previa,
+        });
+      }
+      const apagados = await tipo.apagar(client, req);
+      await client.query('COMMIT');
+      console.log(`[${req.empresa.slug}] zerar ${req.params.cadastro}: ${apagados} apagado(s) por ${req.admin && req.admin.u}`);
+      res.json({ cadastro: req.params.cadastro, apagados, agora: await contarDadosDeTeste(req.db) });
+    } catch (err) {
+      if (client) await client.query('ROLLBACK').catch(() => {});
+      console.error(err);
+      res.status(500).json({ error: 'Erro ao zerar. Nada foi apagado.' });
+    } finally {
+      if (client) client.release();
+    }
+  }
+
   async function handleMetrics(req, res) {
     try {
       // Peças = estoque na loja + peças em maletas. Produto Sob Encomenda ainda não
@@ -3910,6 +4170,8 @@ async function startServer() {
   app.delete('/api/admin/loja/logo', exigirArea('config'), handleDeleteLogo);
   app.get('/api/admin/zerar', soDono, handleContagemZerar);
   app.post('/api/admin/zerar', soDono, handleZerarDados);
+  app.get('/api/admin/zerar/:cadastro', soDono, handlePreviaZerarCadastro);
+  app.post('/api/admin/zerar/:cadastro', soDono, handleZerarCadastro);
   app.get('/api/admin/clientes', exigirArea('clientes'), handleListClientes);
   app.get('/api/admin/pedidos', exigirArea('pedidos', 'acerto', 'clientes'), handleListPedidos);
   app.get('/api/admin/clientes/:id/perfil', exigirArea('clientes'), handlePerfilCliente);
