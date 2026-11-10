@@ -17,7 +17,7 @@ function extrairFuncao(nome) {
   }
 }
 const ctx = vm.createContext({});
-vm.runInContext(`${extrairFuncao('sincronizarMaleta')}\nthis.sincronizarMaleta = sincronizarMaleta;`, ctx);
+vm.runInContext(`${extrairFuncao('precoDe')}\n${extrairFuncao('precoAntes')}\n${extrairFuncao('sincronizarMaleta')}\nthis.sincronizarMaleta = sincronizarMaleta;`, ctx);
 const copia = (v) => JSON.parse(JSON.stringify(v));
 
 describe('vitrine: maleta sincronizada com o catálogo', () => {

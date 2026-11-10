@@ -329,7 +329,7 @@ describe('painel: cálculo e filtros dos pedidos', () => {
 
     const els = {};
     const el = (id) => (els[id] ||= { innerHTML: '', textContent: '', value: '', disabled: false, classList: { add() {}, remove() {} } });
-    const f = carregar('admin/index.html', ['escapeHtml', 'intencaoItemPedido', 'etiquetaIntencao', 'itensCobradosFechamento', 'calcularFechamentoPedido', 'lerDescontoFechamento', 'renderizarFechamento'], {
+    const f = carregar('admin/index.html', ['escapeHtml', 'intencaoItemPedido', 'precoNormalDoItem', 'etiquetaIntencao', 'itensCobradosFechamento', 'calcularFechamentoPedido', 'lerDescontoFechamento', 'renderizarFechamento'], {
       formatarMoeda, document: { getElementById: el }, todosProdutos: [],
       acessoriosCache: [{ id: 1, nome: PAYLOAD, preco_venda: '5.00', estoque: 1, ativo: true }],
       fechamento: {
@@ -344,7 +344,7 @@ describe('painel: cálculo e filtros dos pedidos', () => {
 });
 
 describe('vitrine: intenção de cada item no carrinho', () => {
-  const FUNCOES = ['escapeHtml', 'calcularSinal', 'itemEhEncomenda', 'resumoMaleta', 'definirIntencao', 'textoGuiaCatalogo', 'anuncioPorId', 'atualizarGuias', 'atualizarBarraMaleta', 'atualizarMaletaUI', 'montarTextoWhatsapp'];
+  const FUNCOES = ['escapeHtml', 'calcularSinal', 'precoDe', 'precoAntes', 'itemEhEncomenda', 'resumoMaleta', 'definirIntencao', 'textoGuiaCatalogo', 'anuncioPorId', 'atualizarGuias', 'atualizarBarraMaleta', 'atualizarMaletaUI', 'montarTextoWhatsapp'];
   function vitrine(itens) {
     const el = () => ({ innerHTML: '', textContent: '', classList: { add() {}, remove() {} } });
     const els = { maletaVazia: el(), maletaItens: el(), maletaFormulario: el(), maletaFooter: el(), maletaTotal: el(), maletaSinal: el() };
