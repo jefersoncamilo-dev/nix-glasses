@@ -1554,6 +1554,79 @@ async function startServer() {
     }
   }
 
+  // Editar produto: inclui cores novas no modelo do produto. Cada cor nova vira um produto
+  // com os dados do produto editado (preços, especificações, fornecedor, promoção), nome
+  // "<nome do modelo> - <cor>", SKU "<código do modelo>-<COR>", a foto da cor como capa e as
+  // fotos 2 a 4 do produto. Sem código do modelo, o SKU do produto passa a ser o código.
+  async function handleAdicionarCores(req, res) {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id) || id < 1) return res.status(404).json({ error: 'Produto não encontrado' });
+    const cores = lerCores(req.body.cores);
+    if (!cores) return res.status(400).json({ error: 'Cores inválidas (cada cor uma vez, com a quantidade em peças)' });
+    let client;
+    try {
+      client = await req.db.connect();
+      await client.query('BEGIN');
+      const atual = await client.query('SELECT * FROM produtos WHERE id = $1 FOR UPDATE', [id]);
+      const p = atual.rows[0];
+      if (!p) {
+        await client.query('ROLLBACK');
+        return res.status(404).json({ error: 'Produto não encontrado' });
+      }
+      const corAtual = String(p.cor_armacao || '').trim();
+      if (!corAtual) {
+        await client.query('ROLLBACK');
+        return res.status(400).json({ error: 'Preencha a cor deste produto antes de incluir outras cores' });
+      }
+      if (String(p.tamanho || '').trim()) {
+        await client.query('ROLLBACK');
+        return res.status(400).json({ error: 'Produto com tamanho: inclua as cores pelo cadastro de cada tamanho' });
+      }
+      const grade = String(p.grade || '').trim() || textoCurto(p.codigo_sku, 100);
+      if (!String(p.grade || '').trim()) await client.query('UPDATE produtos SET grade = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2', [grade, id]);
+      // Cores que o modelo já tem não entram de novo
+      const irmaos = await client.query(`SELECT lower(COALESCE(cor_armacao, '')) AS cor FROM produtos WHERE grade = $1 OR id = $2`, [grade, id]);
+      const jaTem = new Set(irmaos.rows.map((r) => r.cor.trim()));
+      const repetida = cores.find((c) => jaTem.has(c.cor.toLowerCase()));
+      if (repetida) {
+        await client.query('ROLLBACK');
+        return res.status(400).json({ error: `O modelo já tem a cor ${repetida.cor}` });
+      }
+      const sufixo = ` - ${corAtual}`;
+      const nomeBase = textoCurto(req.body.nome_modelo, 255)
+        || (p.nome.endsWith(sufixo) ? p.nome.slice(0, -sufixo.length) : p.nome);
+      const fotosProduto = fotosDoProduto(p);
+      const skusUsados = new Set((await client.query('SELECT codigo_sku FROM produtos WHERE codigo_sku LIKE $1', [`${grade}-%`])).rows.map((r) => r.codigo_sku));
+      const criados = [];
+      for (const [i, c] of cores.entries()) {
+        let sku = `${grade}-${skuDaCor(c.cor)}`;
+        for (let n = 2; skusUsados.has(sku); n++) sku = `${grade}-${skuDaCor(c.cor)}-${n}`;
+        skusUsados.add(sku);
+        const fotoCor = (req.fotosCores || [])[i];
+        const fotos = organizarFotos([fotoCor ? await salvarImagem(client, fotoCor) : fotosProduto[0] || null, ...[1, 2, 3].map((j) => fotosProduto[j] || null)]);
+        const result = await client.query(
+          `INSERT INTO produtos (nome, codigo_sku, preco_custo, preco_venda, imagem_url, fotos, disponibilidade, formato, estilo, cor_armacao, fornecedor, codigo_fornecedor, link_fornecedor,
+                                 diametro_cm, ponte_cm, largura_total_cm, material, tipo, nome_curto, genero, estoque, tamanho, grade, nome_fornecedor, anuncio_id)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, '', $22, $23, $24)
+           RETURNING *`,
+          [`${nomeBase} - ${c.cor}`, sku, p.preco_custo, p.preco_venda, fotos[0] || null, fotos, p.disponibilidade, p.formato, p.estilo, c.cor, p.fornecedor, p.codigo_fornecedor, p.link_fornecedor,
+            p.diametro_cm, p.ponte_cm, p.largura_total_cm, p.material || '', p.tipo || '', p.nome_curto || '', p.genero || '', c.estoque, grade, p.nome_fornecedor || '', p.anuncio_id ?? null]
+        );
+        await registrarCompraCadastro(client, result.rows[0], { quantidade: c.estoque || 1 });
+        criados.push(...(await recalcularStatus(client, [result.rows[0].id])));
+      }
+      await client.query('COMMIT');
+      res.status(201).json({ grade, produtos: criados });
+    } catch (err) {
+      if (client) await client.query('ROLLBACK').catch(() => {});
+      console.error(err);
+      if (err.code === '23505') return res.status(400).json({ error: 'SKU já cadastrado (alguma cor já existe com esse código)' });
+      res.status(500).json({ error: 'Erro ao incluir as cores' });
+    } finally {
+      if (client) client.release();
+    }
+  }
+
   async function handleUpdateProduto(req, res) {
     const { id } = req.params;
     const { nome, codigo_sku, sku, preco_custo, preco_venda, status, disponibilidade, formato, estilo, cor_armacao } = req.body;
@@ -4268,6 +4341,7 @@ async function startServer() {
   app.get('/api/admin/fornecedores/reposicao', exigirArea('metricas', 'produtos'), handleResumoFornecedores);
   app.post('/api/produtos', exigirArea('produtos'), uploadImagem, handleCreateProduto);
   app.put('/api/produtos/:id', exigirArea('produtos'), uploadImagem, handleUpdateProduto);
+  app.post('/api/produtos/:id/cores', exigirArea('produtos'), uploadImagem, handleAdicionarCores);
   app.post('/api/admin/acerto', exigirArea('acerto'), handleAcerto);
   app.get('/api/admin/acertos', exigirArea('acerto', 'metricas'), handleListAcertos);
   app.post('/api/config/whatsapp', exigirArea('config'), handlePostWhatsapp);
