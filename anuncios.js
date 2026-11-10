@@ -41,6 +41,10 @@ async function criarTabela(client) {
     ADD COLUMN IF NOT EXISTS anuncio_id INTEGER REFERENCES anuncios(id) ON DELETE SET NULL
   `);
   await client.query('CREATE INDEX IF NOT EXISTS produtos_anuncio_idx ON produtos (anuncio_id) WHERE anuncio_id IS NOT NULL');
+  // Preço promocional (vazio = a promoção só põe o selo). Só vale com a promoção ativa e
+  // abaixo do preço de venda: a vitrine mostra o preço riscado e o promocional, e o pedido,
+  // a venda da conferência e as métricas de vendas usam o promocional.
+  await client.query('ALTER TABLE produtos ADD COLUMN IF NOT EXISTS preco_promocional DECIMAL(10,2)');
 }
 
 function texto(v, max) {
@@ -62,6 +66,24 @@ function lerAnuncioId(v) {
   if (v === null || v === '' || v === 'null' || v === '0' || v === 0) return null;
   const n = Number(v);
   return Number.isInteger(n) && n > 0 ? n : false;
+}
+
+// Valor do campo preco_promocional do produto: undefined (não mexe), null (sem preço
+// promocional) ou o valor em reais (até 2 casas). false = inválido.
+function lerPrecoPromocional(v) {
+  if (v === undefined) return undefined;
+  if (v === null || v === '' || v === 'null') return null;
+  const n = typeof v === 'number' ? v : (typeof v === 'string' && /^\s*\d+([.,]\d{1,2})?\s*$/.test(v) ? Number(v.trim().replace(',', '.')) : NaN);
+  if (!Number.isFinite(n) || n < 0 || n >= 1e6) return false;
+  return n > 0 ? Math.round(n * 100) / 100 : null;
+}
+
+// SQL do preço promocional que vale agora (NULL quando não vale): promoção ativa e preço
+// promocional abaixo do preço de venda. p = alias da tabela produtos.
+function sqlPrecoPromocional(p = 'p') {
+  return `CASE WHEN ${p}.preco_promocional > 0 AND ${p}.preco_promocional < ${p}.preco_venda
+            AND EXISTS (SELECT 1 FROM anuncios a_pp WHERE a_pp.id = ${p}.anuncio_id AND a_pp.ativo)
+          THEN ${p}.preco_promocional END`;
 }
 
 // Valor de popup_inicial: 'nenhum', 'provador' ou o id do anúncio (número)
@@ -281,4 +303,4 @@ function criarHandlers({ salvarImagem, idDaImagem, detectarTipoImagem }) {
   return { publico, listar, criar, atualizar, excluir, escolherPopup };
 }
 
-module.exports = { criarTabela, criarHandlers, lerAnuncioId, lerPopup, BOTAO_PADRAO, CHAVE_POPUP };
+module.exports = { criarTabela, criarHandlers, lerAnuncioId, lerPrecoPromocional, sqlPrecoPromocional, lerPopup, BOTAO_PADRAO, CHAVE_POPUP };

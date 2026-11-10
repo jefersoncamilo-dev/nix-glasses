@@ -11,6 +11,8 @@
 // não puder (sem peça, quantidade maior que a loja, última peça de um pedido
 // aberto), nada é gravado (409). Cada ação vira uma linha em movimentos_estoque.
 
+const { sqlPrecoPromocional } = require('./anuncios');
+
 const ACOES = ['VENDIDO', 'BAIXA', 'ENCOMENDA', 'ESGOTADO'];
 const DEPOIS = ['ESGOTADO', 'ENCOMENDA'];
 const MAX_ITENS = 500;
@@ -84,9 +86,11 @@ function criarHandlers({ recalcularStatus, textoCurto }) {
   async function conferir(db, pedido, bloquear = false) {
     const ids = pedido.itens.map((i) => i.id);
     const produtos = (await db.query(
-      `SELECT id, nome, codigo_sku, tamanho, estoque, disponibilidade, preco_venda::float AS preco_venda,
+      // Em promoção com preço promocional, a venda vale pelo preço promocional
+      `SELECT id, nome, codigo_sku, tamanho, estoque, disponibilidade,
+              COALESCE(${sqlPrecoPromocional('p')}, preco_venda)::float AS preco_venda,
               preco_custo::float AS preco_custo, imagem_url
-       FROM produtos WHERE id = ANY($1) ORDER BY id ${bloquear ? 'FOR UPDATE' : ''}`, [ids]
+       FROM produtos p WHERE id = ANY($1) ORDER BY id ${bloquear ? 'FOR UPDATE' : ''}`, [ids]
     )).rows;
     const maletas = new Map((await db.query(
       `SELECT produto_id, COUNT(*)::int AS pecas, array_agg(DISTINCT pedido_id) FILTER (WHERE pedido_id IS NOT NULL) AS pedidos

@@ -1402,6 +1402,11 @@
                 <img id="promocaoSelo" alt="" class="hidden w-10 h-10 object-contain flex-none">
               </div>
               <p id="promocaoAviso" class="text-xs text-gray-500 mt-1">O selo da promoção aparece no canto da foto na vitrine. Vale para todas as cores e tamanhos do modelo.</p>
+              <div class="mt-3">
+                <label for="preco_promocional" class="block text-sm font-medium text-gray-700 mb-1">Preço promocional (R$)</label>
+                <input type="number" step="0.01" min="0" id="preco_promocional" inputmode="decimal" class="w-full sm:w-48 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500" placeholder="Ex: 99.90">
+                <p id="precoPromocionalAviso" class="text-xs text-gray-500 mt-1">Na vitrine aparece o preço de venda riscado e este preço em destaque. O pedido e a venda usam este preço. Deixe vazio para só mostrar o selo.</p>
+              </div>
             </div>
           </div>
         </div>
@@ -2651,6 +2656,12 @@
     }
 
     // Etiqueta da promoção na lista de produtos (o nome vem de Configurações > POP Anúncio)
+    // Preço promocional que vale: com promoção e menor que o preço de venda
+    function temPrecoPromocional(p) {
+      const promo = Number(p && p.preco_promocional);
+      return !!(p && p.anuncio_id) && promo > 0 && promo < Number(p.preco_venda);
+    }
+
     function htmlPromocaoProduto(p) {
       if (!p.anuncio_id) return '';
       const a = typeof anuncioPorId === 'function' ? anuncioPorId(p.anuncio_id) : null;
@@ -2771,7 +2782,10 @@
             ${escapeHtml(p.formato || '-')} ${p.estilo ? '• ' + escapeHtml(p.estilo) : ''} ${p.cor_armacao ? '• ' + escapeHtml(p.cor_armacao) : ''}
           </td>
           <td class="px-4 sm:px-6 py-4">
-            <p class="text-gray-900 font-medium text-sm sm:text-base">${formatarMoeda(p.preco_venda)}</p>
+            ${temPrecoPromocional(p)
+              ? `<p class="text-xs text-gray-400 line-through">${formatarMoeda(p.preco_venda)}</p>
+                 <p class="text-pink-700 font-semibold text-sm sm:text-base" data-preco-promocional title="Preço promocional">${formatarMoeda(p.preco_promocional)}</p>`
+              : `<p class="text-gray-900 font-medium text-sm sm:text-base">${formatarMoeda(p.preco_venda)}</p>`}
             <p class="text-xs sm:text-sm text-gray-500">Custo: ${formatarMoeda(p.preco_custo)}</p>
             ${htmlUltimaCompra(p)}
           </td>
@@ -3746,6 +3760,21 @@
         return mostrarToast('Escolha qual promoção vale para este produto (ou desmarque PROMOÇÃO)', 'error');
       }
       formData.append('anuncio_id', anuncioId);
+      // Preço promocional: só com PROMOÇÃO marcada; vazio = só o selo
+      const precoPromo = anuncioId ? document.getElementById('preco_promocional').value.trim().replace(',', '.') : '';
+      if (precoPromo) {
+        const promo = Number(precoPromo);
+        const venda = Number(document.getElementById('preco_venda').value);
+        if (!Number.isFinite(promo) || promo <= 0) {
+          document.getElementById('preco_promocional').focus();
+          return mostrarToast('Preço promocional inválido', 'error');
+        }
+        if (Number.isFinite(venda) && promo >= venda) {
+          document.getElementById('preco_promocional').focus();
+          return mostrarToast('O preço promocional precisa ser menor que o preço de venda', 'error');
+        }
+      }
+      formData.append('preco_promocional', precoPromo);
       if (!id && nichoPainel() === 'roupas') {
         const grade = lerGradeFormulario();
         if (grade === null) return mostrarToast('Confira os tamanhos: cada um uma vez, com a quantidade em número', 'error');
@@ -4538,6 +4567,12 @@
       return i && (i.intencao === 'COMPRA' || i.intencao === 'CONDICIONAL') ? i.intencao : 'CONDICIONAL';
     }
 
+    // Item pedido em promoção: o preço de antes, riscado, ao lado do preço cobrado
+    function precoNormalDoItem(i) {
+      const normal = Number(i && i.preco_normal);
+      return normal > Number(i.preco) ? `<span class="text-xs text-gray-400 line-through mr-1" title="Preço sem a promoção">${formatarMoeda(normal)}</span>` : '';
+    }
+
     function etiquetaIntencao(intencao) {
       const base = 'ml-1 px-2 py-0.5 text-xs font-medium rounded-full';
       if (intencao === 'COMPRA') return `<span class="${base} bg-purple-100 text-purple-700">COMPRA DIRETA</span>`;
@@ -4609,7 +4644,7 @@
                   ${etiquetaIntencao(intencaoItemPedido(i))}
                   ${nota(i)}
                 </span>
-                <span class="text-gray-900 whitespace-nowrap">${formatarMoeda(Number(i.preco))}</span>
+                <span class="text-gray-900 whitespace-nowrap text-right">${precoNormalDoItem(i)}${formatarMoeda(Number(i.preco))}</span>
               </li>`).join('')}
             ${extras.map(e => `
               <li class="py-2 flex justify-between gap-3 text-sm">
@@ -4898,7 +4933,7 @@
         return `
           <li class="px-3 py-2 flex items-center justify-between gap-3 text-sm">
             <span class="min-w-0">${escapeHtml(i.nome)} ${etiquetaIntencao(intencao)}<span class="block">${controle}</span></span>
-            <span class="whitespace-nowrap ${intencao === 'COMPRA' && removidos.has(pid) ? 'line-through text-gray-400' : 'text-gray-900'}">${formatarMoeda(Number(i.preco))}</span>
+            <span class="whitespace-nowrap ${intencao === 'COMPRA' && removidos.has(pid) ? 'line-through text-gray-400' : 'text-gray-900'}">${precoNormalDoItem(i)}${formatarMoeda(Number(i.preco))}</span>
           </li>`;
       }).join('');
 
@@ -6832,6 +6867,7 @@
     function preencherPromocaoProduto(produto) {
       const id = produto && produto.anuncio_id ? String(produto.anuncio_id) : '';
       document.getElementById('promocaoMarcada').checked = !!id;
+      document.getElementById('preco_promocional').value = id && produto.preco_promocional != null ? Number(produto.preco_promocional).toFixed(2) : '';
       preencherOpcoesPromocao(id);
       // A lista pode ter mudado em Configurações: relê sem travar o formulário
       carregarAnuncios().then(() => {

@@ -193,7 +193,7 @@ describe('Provador: desenharOculos', () => {
 });
 
 describe('Provador: botão nos detalhes do produto', () => {
-  const FUNCOES = ['escapeHtml', 'fotosDoProduto', 'fotoProvador', 'provadorLigado', 'indiceCircular', 'ehSobEncomenda', 'calcularSinal',
+  const FUNCOES = ['escapeHtml', 'fotosDoProduto', 'fotoProvador', 'provadorLigado', 'indiceCircular', 'ehSobEncomenda', 'calcularSinal', 'precoDe', 'precoAntes',
     'etiquetaProduto', 'especificacoesProduto', 'renderizarDetalhes', 'ordemTamanho', 'agruparCards', 'variaPorCor', 'coresCard', 'botoesCor', 'promocaoDoGrupo', 'htmlSeloPromocao', 'nomeModelo', 'grupoDoProduto', 'botoesTamanho'];
 
   function detalhesDe(produto, LOJA) {

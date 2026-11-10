@@ -1089,9 +1089,15 @@ function montarPedido(produtos, contato, intencoes = new Map()) {
   const centavos = v => Math.round(Number(v) * 100);
   const itens = produtos.map(p => {
     const encomenda = p.disponibilidade === 'SOB_ENCOMENDA';
-    const preco = centavos(p.preco_venda) / 100;
+    // Em promoção com preço promocional, o pedido cobra o promocional e guarda o preço de
+    // antes (preco_normal) para o painel mostrar o desconto
+    const normal = centavos(p.preco_venda) / 100;
+    const promo = p.preco_promocional === null || p.preco_promocional === undefined ? null : centavos(p.preco_promocional) / 100;
+    const preco = promo !== null && promo > 0 && promo < normal ? promo : normal;
     const intencao = encomenda ? 'ENCOMENDA' : intencoes.get(p.id) === 'COMPRA' ? 'COMPRA' : 'CONDICIONAL';
-    return { produto_id: p.id, nome: p.nome, codigo_sku: p.codigo_sku, preco, encomenda, sinal: encomenda ? Math.round(preco * 50) / 100 : 0, intencao };
+    const item = { produto_id: p.id, nome: p.nome, codigo_sku: p.codigo_sku, preco, encomenda, sinal: encomenda ? Math.round(preco * 50) / 100 : 0, intencao };
+    if (preco < normal) item.preco_normal = normal;
+    return item;
   });
   const soma = (lista, campo) => lista.reduce((t, i) => t + centavos(i[campo]), 0) / 100;
   const prova = itens.filter(i => i.intencao === 'CONDICIONAL');
@@ -1387,7 +1393,8 @@ async function startServer() {
       const result = await req.db.query(
         `SELECT p.id, p.nome, p.nome_curto, p.codigo_sku, p.preco_venda, p.imagem_url, p.fotos, p.status, p.disponibilidade, p.formato, p.estilo, p.cor_armacao,
                 p.diametro_cm, p.ponte_cm, p.largura_total_cm, p.material, p.tipo, p.genero, p.tamanho, p.grade,
-                CASE WHEN a.ativo THEN p.anuncio_id END AS anuncio_id
+                CASE WHEN a.ativo THEN p.anuncio_id END AS anuncio_id,
+                ${anuncios.sqlPrecoPromocional('p')} AS preco_promocional
          FROM produtos p
          LEFT JOIN anuncios a ON a.id = p.anuncio_id
          WHERE p.status IN ('DISPONIVEL', 'CONDICIONAL')
@@ -1409,7 +1416,7 @@ async function startServer() {
         `SELECT p.id, p.nome, p.nome_curto, p.codigo_sku, p.preco_custo, p.preco_venda, p.imagem_url, p.fotos, p.status, p.disponibilidade,
                 p.formato, p.estilo, p.cor_armacao, p.diametro_cm, p.ponte_cm, p.largura_total_cm, p.material, p.tipo, p.genero, p.tamanho, p.grade,
                 p.fornecedor, p.codigo_fornecedor, p.nome_fornecedor, p.link_fornecedor, p.vezes_em_maleta, p.pedido_condicional_id,
-                p.estoque, p.anuncio_id, COALESCE(mp.pedidos, '{}') AS maletas, COALESCE(cardinality(mp.pedidos), 0)::int AS em_maleta,
+                p.estoque, p.anuncio_id, p.preco_promocional, COALESCE(mp.pedidos, '{}') AS maletas, COALESCE(cardinality(mp.pedidos), 0)::int AS em_maleta,
                 to_char(uc.data_compra, 'YYYY-MM-DD') AS ultima_compra, uc.preco_custo AS custo_ultima_compra,
                 ca.preco_custo AS custo_compra_anterior, COALESCE(nc.total, 0)::int AS total_compras
          FROM produtos p
@@ -1478,6 +1485,13 @@ async function startServer() {
     // Promoção (Configurações > POP Anúncio): vale para todos os tamanhos/cores do cadastro
     const anuncioId = anuncios.lerAnuncioId(req.body.anuncio_id);
     if (anuncioId === false) return res.status(400).json({ error: 'Promoção inválida' });
+    // Preço promocional: só com a promoção marcada, e menor que o preço de venda
+    let precoPromocional = anuncios.lerPrecoPromocional(req.body.preco_promocional);
+    if (precoPromocional === false) return res.status(400).json({ error: 'Preço promocional inválido' });
+    if (!anuncioId) precoPromocional = null;
+    if (precoPromocional && !(precoPromocional < Number(preco_venda))) {
+      return res.status(400).json({ error: 'O preço promocional precisa ser menor que o preço de venda' });
+    }
     // Roupas: com a grade de tamanhos, cada tamanho vira um produto com o seu estoque,
     // SKU "<SKU>-<tamanho>", nome "<nome> - <tamanho>", as mesmas fotos e grade = SKU
     // (o código do modelo, que junta os tamanhos num card só na vitrine).
@@ -1527,12 +1541,12 @@ async function startServer() {
           : fotosComuns;
         const result = await client.query(
           `INSERT INTO produtos (nome, codigo_sku, preco_custo, preco_venda, imagem_url, fotos, disponibilidade, formato, estilo, cor_armacao, fornecedor, codigo_fornecedor, link_fornecedor,
-                                 diametro_cm, ponte_cm, largura_total_cm, material, tipo, nome_curto, genero, estoque, tamanho, grade, nome_fornecedor, anuncio_id)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25)
+                                 diametro_cm, ponte_cm, largura_total_cm, material, tipo, nome_curto, genero, estoque, tamanho, grade, nome_fornecedor, anuncio_id, preco_promocional)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26)
            RETURNING *`,
           [peca.nome, peca.sku, preco_custo, preco_venda, fotos[0] || null, fotos, disponibilidade, formato, estilo, peca.cor || cor_armacao, fornecedor, codigoFornecedor, linkFornecedor,
             e.diametro_cm ?? null, e.ponte_cm ?? null, e.largura_total_cm ?? null, e.material || '', e.tipo || '', e.nome_curto || '', e.genero || '',
-            peca.estoque, e.tamanho || '', e.grade || '', nomeFornecedor, anuncioId ?? null]
+            peca.estoque, e.tamanho || '', e.grade || '', nomeFornecedor, anuncioId ?? null, precoPromocional ?? null]
         );
         // A compra do cadastro conta ao menos 1 peça (o custo fica registrado mesmo sem estoque)
         await registrarCompraCadastro(client, result.rows[0], { quantidade: peca.estoque || 1 });
@@ -1606,11 +1620,11 @@ async function startServer() {
         const fotos = organizarFotos([fotoCor ? await salvarImagem(client, fotoCor) : fotosProduto[0] || null, ...[1, 2, 3].map((j) => fotosProduto[j] || null)]);
         const result = await client.query(
           `INSERT INTO produtos (nome, codigo_sku, preco_custo, preco_venda, imagem_url, fotos, disponibilidade, formato, estilo, cor_armacao, fornecedor, codigo_fornecedor, link_fornecedor,
-                                 diametro_cm, ponte_cm, largura_total_cm, material, tipo, nome_curto, genero, estoque, tamanho, grade, nome_fornecedor, anuncio_id)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, '', $22, $23, $24)
+                                 diametro_cm, ponte_cm, largura_total_cm, material, tipo, nome_curto, genero, estoque, tamanho, grade, nome_fornecedor, anuncio_id, preco_promocional)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, '', $22, $23, $24, $25)
            RETURNING *`,
           [`${nomeBase} - ${c.cor}`, sku, p.preco_custo, p.preco_venda, fotos[0] || null, fotos, p.disponibilidade, p.formato, p.estilo, c.cor, p.fornecedor, p.codigo_fornecedor, p.link_fornecedor,
-            p.diametro_cm, p.ponte_cm, p.largura_total_cm, p.material || '', p.tipo || '', p.nome_curto || '', p.genero || '', c.estoque, grade, p.nome_fornecedor || '', p.anuncio_id ?? null]
+            p.diametro_cm, p.ponte_cm, p.largura_total_cm, p.material || '', p.tipo || '', p.nome_curto || '', p.genero || '', c.estoque, grade, p.nome_fornecedor || '', p.anuncio_id ?? null, p.preco_promocional ?? null]
         );
         await registrarCompraCadastro(client, result.rows[0], { quantidade: c.estoque || 1 });
         criados.push(...(await recalcularStatus(client, [result.rows[0].id])));
@@ -1654,6 +1668,10 @@ async function startServer() {
     const mexeNoEstoque = status !== undefined || estoque !== null;
     const anuncioId = anuncios.lerAnuncioId(req.body.anuncio_id);
     if (anuncioId === false) return res.status(400).json({ error: 'Promoção inválida' });
+    // Preço promocional: desmarcar a promoção também tira o preço promocional
+    let precoPromocional = anuncios.lerPrecoPromocional(req.body.preco_promocional);
+    if (precoPromocional === false) return res.status(400).json({ error: 'Preço promocional inválido' });
+    if (anuncioId === null) precoPromocional = null;
 
     let client;
     try {
@@ -1687,6 +1705,10 @@ async function startServer() {
       if (anuncioId !== undefined) {
         fields.push(`anuncio_id = $${paramCount++}`);
         values.push(anuncioId);
+      }
+      if (precoPromocional !== undefined) {
+        fields.push(`preco_promocional = $${paramCount++}`);
+        values.push(precoPromocional);
       }
       // addField pula undefined, mas null (medida apagada) precisa entrar
       for (const [campo, valor] of Object.entries(espec)) {
@@ -1730,6 +1752,11 @@ async function startServer() {
 
       const query = `UPDATE produtos SET ${fields.join(', ')} WHERE id = $${paramCount} RETURNING *`;
       let result = await client.query(query, values);
+      const promo = result.rows[0].preco_promocional;
+      if (promo !== null && promo !== undefined && !(Number(promo) < Number(result.rows[0].preco_venda))) {
+        await client.query('ROLLBACK');
+        return res.status(400).json({ error: 'O preço promocional precisa ser menor que o preço de venda' });
+      }
       if (mexeNoEstoque) {
         // O formulário reenvia o status de sempre: só um status diferente mexe nas peças
         if (status !== undefined && status !== anterior.rows[0].status) await aplicarStatusManual(client, result.rows[0].id, status);
@@ -1753,10 +1780,18 @@ async function startServer() {
       }
 
       // A promoção vale para o modelo inteiro (todos os tamanhos e cores do mesmo código)
+      // (e o preço promocional junto)
       if (anuncioId !== undefined && grade) {
         await client.query(
           'UPDATE produtos SET anuncio_id = $1, updated_at = CURRENT_TIMESTAMP WHERE grade = $2 AND id <> $3 AND anuncio_id IS DISTINCT FROM $1',
           [anuncioId, grade, result.rows[0].id]
+        );
+      }
+      if (precoPromocional !== undefined && grade) {
+        await client.query(
+          `UPDATE produtos SET preco_promocional = $1, updated_at = CURRENT_TIMESTAMP
+           WHERE grade = $2 AND id <> $3 AND preco_promocional IS DISTINCT FROM $1`,
+          [precoPromocional, grade, result.rows[0].id]
         );
       }
 
@@ -2315,10 +2350,10 @@ async function startServer() {
       await client.query('BEGIN');
 
       const result = await client.query(
-        `UPDATE produtos
+        `UPDATE produtos p
          SET vezes_em_maleta = vezes_em_maleta + 1
          WHERE id = ANY($1)
-         RETURNING id, nome, codigo_sku, preco_venda, disponibilidade, vezes_em_maleta`,
+         RETURNING id, nome, codigo_sku, preco_venda, ${anuncios.sqlPrecoPromocional('p')} AS preco_promocional, disponibilidade, vezes_em_maleta`,
         [idsOk]
       );
 
