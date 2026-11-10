@@ -20,6 +20,9 @@ const CAMPOS_TEXTO = {
 //   geral: só os campos comuns.
 // Bancos de antes do nicho seguem o loja_oculos ('1' = oculos, '0' = geral).
 // loja.oculos continua existindo (= nicho oculos) para quem só lê ele.
+// Provador Virtual (loja_provador): chave de Configurações > Dados da loja, ligada por
+// padrão. Desligada, a vitrine esconde o card, o pop-up e o botão "Provar virtualmente";
+// as fotos (inclusive a foto 4 do provador) continuam salvas para religar depois.
 const NICHOS = ['oculos', 'roupas', 'geral'];
 
 // Textos de hoje da Nix Glasses: a empresa padrão continua igual sem mexer em nada.
@@ -38,6 +41,7 @@ const PADRAO_NIX = {
   ].join('\n\n'),
   nicho: 'oculos',
   oculos: true,
+  provador: true,
 };
 
 // Textos de partida de uma loja de roupas (só onde a empresa não escreveu os seus).
@@ -62,6 +66,7 @@ function lojaPadrao(empresa) {
     sobre: 'Trabalhamos com o sistema de maleta: você escolhe os produtos, recebe em casa e finaliza o pedido pelo WhatsApp.',
     nicho: 'geral',
     oculos: false,
+    provador: true,
   };
 }
 
@@ -92,6 +97,7 @@ function montarLoja(empresa, linhas) {
     if (v) loja[campo] = v;
   }
   loja.oculos = loja.nicho === 'oculos';
+  loja.provador = salvo.get('loja_provador') !== '0';
   loja.logo = salvo.get('loja_logo') || '';
   return loja;
 }
@@ -118,7 +124,7 @@ function renderizarPagina(html, loja) {
       .join('') + fecha
   );
   out = out.replace(/\salt="NIX"/g, ` alt="${escapeHtml(loja.marca)}"`);
-  const publico = { nome: loja.nome, marca: loja.marca, oculos: loja.oculos, nicho: loja.nicho };
+  const publico = { nome: loja.nome, marca: loja.marca, oculos: loja.oculos, nicho: loja.nicho, provador: loja.provador !== false };
   return out.replace('</head>', `  <script>window.LOJA = ${jsonParaScript(publico)};</script>\n</head>`);
 }
 

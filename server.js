@@ -3175,6 +3175,11 @@ async function startServer() {
       if (!nicho) return res.status(400).json({ error: 'Tipo de loja inválido' });
     }
     if (nicho) pares.push(['loja_nicho', nicho], ['loja_oculos', nicho === 'oculos' ? '1' : '0']);
+    // Provador Virtual ligado/desligado (só esconde da vitrine; as fotos ficam)
+    if (corpo.provador !== undefined) {
+      if (typeof corpo.provador !== 'boolean') return res.status(400).json({ error: 'Campo "provador" inválido' });
+      pares.push(['loja_provador', corpo.provador ? '1' : '0']);
+    }
     try {
       await salvarConfiguracoes(req.db, pares);
       cacheLoja.delete(req.empresa.slug);

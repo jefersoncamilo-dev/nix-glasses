@@ -1008,6 +1008,12 @@
 
     // Foto exclusiva do Provador Virtual (a foto 4 do cadastro). O visitante não a vê na
     // vitrine; sem ela, o óculos não entra no provador (nada de usar a capa no lugar).
+    // Provador Virtual ligado: só em loja de óculos e com a chave de Configurações ligada.
+    // Desligado, somem o card do topo, o pop-up e o botão "Provar virtualmente".
+    function provadorLigado(loja = globalThis.LOJA) {
+      return loja?.oculos !== false && loja?.provador !== false;
+    }
+
     function fotoProvador(p) {
       return p && typeof p.foto_provador === 'string' && p.foto_provador ? p.foto_provador : null;
     }
@@ -1468,7 +1474,7 @@
             <!-- Ações: "Adicionar à Maleta" é o botão principal (sólido); o provador fica logo abaixo, como apoio -->
             <div class="mt-auto flex flex-col gap-2">
               <button type="button" onclick="toggleMaleta(${id}); renderizarDetalhes()" aria-pressed="${jaNaMaleta}"${falteTamanho ? ' disabled' : ''} class="btn btn-lg btn-maleta w-full ${jaNaMaleta ? 'btn-na-maleta' : 'btn-destaque'}">${textoBotao}</button>
-              ${fotoProvador(produto) && globalThis.LOJA?.oculos !== false ? `<button type="button" onclick="abrirProvador(${id})" class="btn btn-secundario w-full">Provar virtualmente</button>` : ''}
+              ${fotoProvador(produto) && provadorLigado() ? `<button type="button" onclick="abrirProvador(${id})" class="btn btn-secundario w-full">Provar virtualmente</button>` : ''}
             </div>
             ${especificacoes.length || produto.estilo ? `
             <details data-detalhes-tecnicos class="detalhes-tecnicos mt-4 rounded-xl border border-gray-200"${detalhes.tecnicosAbertos ? ' open' : ''} ontoggle="if (detalhes) detalhes.tecnicosAbertos = this.open">
@@ -1712,6 +1718,7 @@
     }
 
     async function abrirProvador(produtoId) {
+      if (!provadorLigado()) return;
       const produto = produtos.find(p => p.id === produtoId);
       const foto = fotoProvador(produto);
       if (!foto) return;
@@ -2478,13 +2485,13 @@
     const popupProvador = document.getElementById('popupProvador');
     let popupProvadorAgendado = false;
 
-    function devePopupProvador(largura, oculos, temModelo) {
-      return largura < 768 && oculos !== false && temModelo;
+    function devePopupProvador(largura, ligado, temModelo) {
+      return largura < 768 && ligado !== false && temModelo;
     }
 
     function agendarPopupProvador() {
       if (popupProvadorAgendado) return;
-      const pode = devePopupProvador(window.innerWidth, globalThis.LOJA?.oculos, !!produtoParaProvadorTopo(produtos));
+      const pode = devePopupProvador(window.innerWidth, provadorLigado(), !!produtoParaProvadorTopo(produtos));
       if (!pode) return;
       popupProvadorAgendado = true;
       setTimeout(abrirPopupProvador, 1200);
@@ -2602,8 +2609,8 @@
     }, 2000);
     // O card inteiro do Provador Virtual convida o clique (o botão continua sendo o alvo do teclado)
     document.getElementById('bannerProvador').addEventListener('click', e => { if (!e.target.closest('#abrirProvadorTopo')) abrirProvadorTopo(); });
-    // Loja que não é de óculos: sem provador, o topo leva direto à coleção
-    if (globalThis.LOJA?.oculos === false) {
+    // Loja que não é de óculos ou com o Provador Virtual desligado: o topo leva direto à coleção
+    if (!provadorLigado()) {
       document.getElementById('bannerProvador').classList.add('hidden');
       document.getElementById('heroColecao').classList.remove('hidden');
     }
