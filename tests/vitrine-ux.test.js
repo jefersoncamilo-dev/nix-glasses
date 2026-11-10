@@ -114,7 +114,7 @@ describe('vitrine: botão Voltar fecha o modal', () => {
 // ---------- Card do produto ----------
 
 const VITRINE = ['ordemTamanho', 'agruparCards', 'grupoDoProduto', 'variaPorCor', 'coresCard', 'botoesCor', 'promocaoDoGrupo', 'htmlSeloPromocao', 'nomeModelo', 'tamanhosCard', 'botaoGrupoCard', 'escapeHtml', 'fotosDoProduto', 'fotoProvador', 'indiceCircular', 'ehSobEncomenda', 'calcularSinal', 'passaFiltroStatus', 'etiquetaProduto',
-  'nomeCard', 'tagsCard', 'botaoMaletaCard', 'atualizarCardMaleta', 'passaFiltroGenero', 'renderizarCatalogo', 'toggleMaleta'];
+  'nomeCard', 'tagsCard', 'botaoMaletaCard', 'atualizarCardMaleta', 'passaFiltroGenero', 'ordemDisponibilidade', 'ordenarCardsVitrine', 'renderizarCatalogo', 'toggleMaleta'];
 
 function elemento() {
   return { innerHTML: '', value: '', dataset: {}, classList: { add() {}, remove() {}, toggle() {} } };
