@@ -1246,10 +1246,10 @@
               <label for="tamanho" class="block text-sm font-medium text-gray-700 mb-1">Tamanho</label>
               <input type="text" id="tamanho" name="tamanho" maxlength="20" placeholder="Ex: P, M, 38, Único" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500">
             </div>
-            <div data-so-nicho="roupas" class="hidden sm:col-span-2">
+            <div class="sm:col-span-2">
               <label for="grade" class="block text-sm font-medium text-gray-700 mb-1">Código do modelo</label>
               <input type="text" id="grade" name="grade" maxlength="100" placeholder="Ex: VEST-FLORAL" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500">
-              <p class="text-xs text-gray-500 mt-1">Produtos com o mesmo código aparecem num card só na vitrine, com os botões de tamanho.</p>
+              <p class="text-xs text-gray-500 mt-1">Opcional. Produtos com o mesmo código aparecem num card só na vitrine, com os botões de tamanho ou as fotos de cada cor. Para pôr mais uma cor num modelo já cadastrado, cadastre a cor nova com o mesmo código.</p>
             </div>
             </div>
           </fieldset>
@@ -1261,6 +1261,14 @@
             <label for="gradeOutros" class="block text-sm font-medium text-gray-700 mt-3 mb-1">Outros tamanhos</label>
             <input type="text" id="gradeOutros" placeholder="Ex: 36:2, 38:1, 40:3 ou Único:5" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500">
             <p id="gradeResumo" class="text-xs text-gray-600 mt-2"></p>
+          </fieldset>
+          <!-- Produto novo com várias cores: um produto por cor, cada um com a sua foto e o seu estoque -->
+          <fieldset id="coresProduto" class="hidden md:col-span-2 border border-gray-200 rounded-lg p-4">
+            <legend class="px-1 text-sm font-semibold text-gray-800">Cores e quantidades</legend>
+            <p class="text-xs text-gray-500 mb-3">Para um modelo com várias cores: inclua cada cor com a foto dela e a quantidade de peças que tem (0 = cadastrada, mas esgotada). Cada cor vira um produto com o seu estoque e SKU próprio (ex.: NIX-010-PRETO); na vitrine o modelo aparece num card só e o cliente escolhe a cor pela foto. A foto da cor é a capa; as fotos 2 a 4 lá embaixo valem para todas as cores. Sem cores, é um produto só, como sempre.</p>
+            <div id="listaCores" class="space-y-2"></div>
+            <button type="button" id="btnAdicionarCor" class="mt-3 inline-flex items-center gap-1 px-3 py-2 border border-orange-300 text-orange-700 rounded-lg text-sm font-medium hover:bg-orange-50">+ Adicionar cor</button>
+            <p id="coresResumo" class="text-xs text-gray-600 mt-2"></p>
           </fieldset>
           <div>
             <label for="estoque" class="block text-sm font-medium text-gray-700 mb-1">Estoque (peças na loja) *</label>
@@ -3007,6 +3015,89 @@
     document.getElementById('gradeTamanhos').addEventListener('input', atualizarResumoGrade);
     document.getElementById('codigo_sku').addEventListener('input', atualizarResumoGrade);
 
+    // ---------- Cores do produto novo: [{ cor, estoque, file }] ----------
+    let coresForm = [];
+    const MAX_CORES = 20;
+
+    function desenharCores() {
+      const lista = document.getElementById('listaCores');
+      lista.innerHTML = coresForm.map((c, i) => `
+        <div data-cor-linha="${i}" class="flex items-center gap-2">
+          <label class="relative shrink-0 w-14 h-14 rounded-lg border-2 border-dashed border-gray-300 bg-gray-50 overflow-hidden cursor-pointer flex items-center justify-center text-gray-400 hover:border-orange-400" title="Foto da cor">
+            ${c.file ? `<img data-cor-foto src="" alt="Foto da cor" class="w-full h-full object-cover">` : '<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z"/></svg><span class="sr-only">Escolher foto da cor</span>'}
+            <input type="file" accept="image/*" data-cor-arquivo="${i}" class="hidden">
+          </label>
+          <input type="text" data-cor-nome="${i}" maxlength="100" placeholder="Cor (ex.: Preto)" aria-label="Nome da cor ${i + 1}" class="flex-1 min-w-0 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500">
+          <input type="number" data-cor-estoque="${i}" min="0" step="1" placeholder="Qtd" aria-label="Quantidade da cor ${i + 1}" class="w-20 shrink-0 px-2 py-2 border border-gray-300 rounded-lg text-center focus:outline-none focus:ring-2 focus:ring-orange-500">
+          <button type="button" data-cor-remover="${i}" class="shrink-0 w-9 h-9 flex items-center justify-center rounded-lg text-gray-500 hover:text-red-600 hover:bg-red-50" aria-label="Tirar a cor ${i + 1}">✕</button>
+        </div>`).join('');
+      coresForm.forEach((c, i) => {
+        lista.querySelector(`[data-cor-nome="${i}"]`).value = c.cor;
+        lista.querySelector(`[data-cor-estoque="${i}"]`).value = c.estoque;
+        const img = lista.querySelector(`[data-cor-linha="${i}"] [data-cor-foto]`);
+        if (img) img.src = URL.createObjectURL(c.file);
+      });
+      document.getElementById('btnAdicionarCor').classList.toggle('hidden', coresForm.length >= MAX_CORES);
+      atualizarResumoCores();
+    }
+
+    // Cores preenchidas -> [{ cor, estoque, file }]. Linha toda em branco não entra.
+    // null = alguma cor sem nome, quantidade inválida ou cor repetida.
+    function lerCoresFormulario() {
+      const cores = [];
+      const vistos = new Set();
+      for (const c of coresForm) {
+        const cor = String(c.cor || '').trim();
+        const qtd = String(c.estoque ?? '').trim();
+        if (!cor && !qtd && !c.file) continue;
+        const estoque = qtd === '' ? 0 : Number(qtd);
+        if (!cor || !Number.isInteger(estoque) || estoque < 0 || vistos.has(cor.toLowerCase())) return null;
+        vistos.add(cor.toLowerCase());
+        cores.push({ cor, estoque, file: c.file || null });
+      }
+      return cores;
+    }
+
+    function atualizarResumoCores() {
+      const cores = lerCoresFormulario();
+      const resumo = document.getElementById('coresResumo');
+      const sku = document.getElementById('codigo_sku').value.trim() || 'SKU';
+      const skuCor = (cor) => cor.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase().replace(/[^A-Z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'COR';
+      if (cores === null) resumo.textContent = 'Confira as cores: cada cor com nome, uma vez só, e a quantidade em número.';
+      else if (!cores.length) resumo.textContent = '';
+      else {
+        const semFoto = cores.filter(c => !c.file).length;
+        resumo.textContent = `Vai cadastrar ${cores.length} cor(es), ${cores.reduce((t, c) => t + c.estoque, 0)} peça(s): ${cores.map(c => `${sku}-${skuCor(c.cor)} (${c.estoque})`).join(', ')}. O estoque e a cor lá de cima não valem: cada cor usa os seus.${semFoto ? ` ${semFoto} cor(es) sem foto usam a foto 1.` : ''}`;
+      }
+    }
+
+    document.getElementById('btnAdicionarCor').addEventListener('click', () => {
+      if (coresForm.length >= MAX_CORES) return;
+      coresForm.push({ cor: '', estoque: '', file: null });
+      desenharCores();
+      document.querySelector(`[data-cor-nome="${coresForm.length - 1}"]`)?.focus();
+    });
+    document.getElementById('listaCores').addEventListener('input', (e) => {
+      const i = Number(e.target.dataset.corNome ?? e.target.dataset.corEstoque);
+      if (!coresForm[i]) return;
+      if (e.target.dataset.corNome !== undefined) coresForm[i].cor = e.target.value;
+      else if (e.target.dataset.corEstoque !== undefined) coresForm[i].estoque = e.target.value;
+      atualizarResumoCores();
+    });
+    document.getElementById('listaCores').addEventListener('change', (e) => {
+      const i = Number(e.target.dataset.corArquivo);
+      if (e.target.dataset.corArquivo === undefined || !coresForm[i]) return;
+      const file = e.target.files && e.target.files[0];
+      if (file) { coresForm[i].file = file; desenharCores(); }
+    });
+    document.getElementById('listaCores').addEventListener('click', (e) => {
+      const botao = e.target.closest('[data-cor-remover]');
+      if (!botao) return;
+      coresForm.splice(Number(botao.dataset.corRemover), 1);
+      desenharCores();
+    });
+    document.getElementById('codigo_sku').addEventListener('input', atualizarResumoCores);
+
     // Modal Produto
     function abrirModal(produto = null) {
       aplicarNichoPainel();
@@ -3058,6 +3149,10 @@
       // A grade de tamanhos só no cadastro de uma roupa nova (na edição, cada tamanho é um produto)
       document.getElementById('gradeTamanhos').classList.toggle('hidden', !!produto || nichoPainel() !== 'roupas');
       atualizarResumoGrade();
+      // As cores também só no cadastro novo (na edição, cada cor é um produto)
+      coresForm = [];
+      desenharCores();
+      document.getElementById('coresProduto').classList.toggle('hidden', !!produto);
       atualizarAvisoSinal();
       atualizarAbrirLink();
       document.getElementById('importarStatus').textContent = 'Preenche nome fornec., custo, código, link e as especificações da descrição (medidas, material, formato...). Confira antes de salvar.';
@@ -3504,6 +3599,17 @@
         if (grade === null) return mostrarToast('Confira os tamanhos: cada um uma vez, com a quantidade em número', 'error');
         if (grade.length) formData.append('tamanhos', JSON.stringify(grade));
       }
+      if (!id) {
+        const cores = lerCoresFormulario();
+        if (cores === null) return mostrarToast('Confira as cores: cada cor com nome, uma vez só, e a quantidade em número', 'error');
+        if (cores.length && formData.has('tamanhos')) return mostrarToast('Cadastre por tamanhos ou por cores, não os dois de uma vez', 'error');
+        if (cores.length) {
+          formData.append('cores', JSON.stringify(cores.map(c => ({ cor: c.cor, estoque: c.estoque }))));
+          for (const [i, c] of cores.entries()) {
+            if (c.file) formData.append(`foto_cor_${i + 1}`, await prepararImagem(c.file));
+          }
+        }
+      }
       for (let i = 0; i < MAX_FOTOS; i++) {
         const file = slotsFotos[i]?.file;
         if (file) formData.append(`foto${i + 1}`, await prepararImagem(file));
@@ -3520,7 +3626,7 @@
           throw new Error(err.error || 'Erro ao salvar');
         }
         const salvo = await res.json().catch(() => ({}));
-        mostrarToast(id ? 'Produto atualizado!' : Array.isArray(salvo.produtos) ? `${salvo.produtos.length} tamanhos cadastrados!` : 'Produto criado!');
+        mostrarToast(id ? 'Produto atualizado!' : Array.isArray(salvo.produtos) ? `${salvo.produtos.length} ${formData.has('cores') ? 'cores' : 'tamanhos'} cadastrad${formData.has('cores') ? 'a' : 'o'}s!` : 'Produto criado!');
         // Produto novo importado do fornecedor: a foto principal vai para o computador como <SKU>.jpg
         const foto = !id && imagemImportada;
         const skuFoto = document.getElementById('codigo_sku').value.trim();

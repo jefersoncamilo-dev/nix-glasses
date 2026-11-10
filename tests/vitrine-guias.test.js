@@ -18,7 +18,7 @@ function extrairFuncao(nome) {
   }
 }
 
-const FUNCOES = ['ehSobEncomenda', 'passaFiltroStatus', 'contagemFiltros', 'textoGuiaCatalogo'];
+const FUNCOES = ['ehSobEncomenda', 'passaFiltroStatus', 'ordemTamanho', 'agruparCards', 'contagemFiltros', 'textoGuiaCatalogo'];
 const ctx = vm.createContext({ NICHO: 'oculos' });
 vm.runInContext(`${FUNCOES.map(extrairFuncao).join('\n')}\n${FUNCOES.map((f) => `this.${f} = ${f};`).join('\n')}`, ctx);
 

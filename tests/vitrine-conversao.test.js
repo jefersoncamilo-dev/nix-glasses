@@ -29,7 +29,7 @@ const formatarMoeda = (v) => new Intl.NumberFormat('pt-BR', { style: 'currency',
 
 describe('vitrine: detalhes do produto', () => {
   const FUNCOES = ['escapeHtml', 'fotosDoProduto', 'fotoProvador', 'indiceCircular', 'ehSobEncomenda', 'calcularSinal',
-    'etiquetaProduto', 'especificacoesProduto', 'renderizarDetalhes', 'ordemTamanho', 'agruparCards', 'nomeModelo', 'grupoDoProduto', 'botoesTamanho'];
+    'etiquetaProduto', 'especificacoesProduto', 'renderizarDetalhes', 'ordemTamanho', 'agruparCards', 'variaPorCor', 'coresCard', 'botoesCor', 'nomeModelo', 'grupoDoProduto', 'botoesTamanho'];
 
   function detalhesDe(produto, detalhes = {}, itens = []) {
     const detalhesConteudo = { innerHTML: '' };
