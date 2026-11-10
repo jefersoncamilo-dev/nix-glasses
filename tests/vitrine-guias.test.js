@@ -57,7 +57,7 @@ describe('vitrine: atalhos e pílulas de filtro', () => {
     assert.doesNotMatch(hero, /data-passo/);
     assert.match(html, /getElementById\('abrirProvadorTopo'\)\.addEventListener\('click', abrirProvadorTopo\)/);
     // loja que não é de óculos: some o banner e fica o atalho para a coleção
-    assert.match(html, /LOJA\?\.oculos === false\) \{\s*document\.getElementById\('bannerProvador'\)\.classList\.add\('hidden'\);\s*document\.getElementById\('heroColecao'\)\.classList\.remove\('hidden'\)/);
+    assert.match(html, /if \(!provadorLigado\(\)\) \{\s*document\.getElementById\('bannerProvador'\)\.classList\.add\('hidden'\);\s*document\.getElementById\('heroColecao'\)\.classList\.remove\('hidden'\)/);
     // as pílulas do catálogo continuam com os três filtros
     for (const filtro of ['""', '"DISPONIVEL"', '"SOB_ENCOMENDA"']) assert.match(html, new RegExp(`data-filtro=${filtro}`));
   });

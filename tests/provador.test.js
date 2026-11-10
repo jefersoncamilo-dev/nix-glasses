@@ -193,12 +193,13 @@ describe('Provador: desenharOculos', () => {
 });
 
 describe('Provador: botão nos detalhes do produto', () => {
-  const FUNCOES = ['escapeHtml', 'fotosDoProduto', 'fotoProvador', 'indiceCircular', 'ehSobEncomenda', 'calcularSinal',
+  const FUNCOES = ['escapeHtml', 'fotosDoProduto', 'fotoProvador', 'provadorLigado', 'indiceCircular', 'ehSobEncomenda', 'calcularSinal',
     'etiquetaProduto', 'especificacoesProduto', 'renderizarDetalhes', 'ordemTamanho', 'agruparCards', 'variaPorCor', 'coresCard', 'botoesCor', 'promocaoDoGrupo', 'htmlSeloPromocao', 'nomeModelo', 'grupoDoProduto', 'botoesTamanho'];
 
-  function detalhesDe(produto) {
+  function detalhesDe(produto, LOJA) {
     const detalhesConteudo = { innerHTML: '' };
     const ctx = carregar(FUNCOES, {
+      LOJA,
       produtos: [produto],
       NICHO: 'oculos', rotulos: { formato: 'Formato da lente', formatos: 'Todos os formatos', material: 'Material', tipo: 'Tipo' }, ORDEM_TAMANHOS: [],
       maleta: { itens: [] },
@@ -223,6 +224,12 @@ describe('Provador: botão nos detalhes do produto', () => {
   it('não aparece sem a foto 4, mesmo com foto de capa (sem usar a capa no lugar)', () => {
     assert.doesNotMatch(detalhesDe({ ...base, fotos: ['/imagens/aaa'], imagem_url: '/imagens/aaa', foto_provador: null }), /Provar virtualmente/);
     assert.doesNotMatch(detalhesDe({ ...base, fotos: [], imagem_url: null }), /Provar virtualmente/);
+  });
+
+  it('não aparece com o Provador Virtual desligado em Configurações (a foto 4 continua no produto)', () => {
+    const produto = { ...base, fotos: ['/imagens/aaa'], imagem_url: '/imagens/aaa', foto_provador: '/imagens/ppp' };
+    assert.doesNotMatch(detalhesDe(produto, { oculos: true, provador: false }), /Provar virtualmente/);
+    assert.match(detalhesDe(produto, { oculos: true, provador: true }), /Provar virtualmente/);
   });
 
   it('o título do provador entra por textContent (sem innerHTML com o nome do produto)', () => {

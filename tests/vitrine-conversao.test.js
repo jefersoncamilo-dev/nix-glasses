@@ -28,7 +28,7 @@ function carregar(funcoes, globais = {}) {
 const formatarMoeda = (v) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v).replace(/\u00a0/g, ' ');
 
 describe('vitrine: detalhes do produto', () => {
-  const FUNCOES = ['escapeHtml', 'fotosDoProduto', 'fotoProvador', 'indiceCircular', 'ehSobEncomenda', 'calcularSinal',
+  const FUNCOES = ['escapeHtml', 'fotosDoProduto', 'fotoProvador', 'provadorLigado', 'indiceCircular', 'ehSobEncomenda', 'calcularSinal',
     'etiquetaProduto', 'especificacoesProduto', 'renderizarDetalhes', 'ordemTamanho', 'agruparCards', 'variaPorCor', 'coresCard', 'botoesCor', 'promocaoDoGrupo', 'htmlSeloPromocao', 'nomeModelo', 'grupoDoProduto', 'botoesTamanho'];
 
   function detalhesDe(produto, detalhes = {}, itens = []) {

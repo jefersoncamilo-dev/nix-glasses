@@ -70,7 +70,7 @@ describe('tipo de loja (nicho)', () => {
     assert.equal(salvo.body.nicho, 'roupas');
     assert.equal(salvo.body.oculos, false);
     const pagina = await (await fetch(srv.url('/'))).text();
-    assert.match(pagina, /window\.LOJA = \{[^}]*"oculos":false,"nicho":"roupas"\}/);
+    assert.match(pagina, /window\.LOJA = \{[^}]*"oculos":false,"nicho":"roupas"[,}]/);
     // O campo antigo (oculos: true/false) continua valendo
     const oculos = await api('PUT', '/api/admin/loja', { oculos: true });
     assert.equal(oculos.body.nicho, 'oculos');

@@ -955,6 +955,18 @@
               </select>
               <p class="text-xs text-gray-500 mt-1">Troca os campos do cadastro e da vitrine. Óculos: provador virtual e medidas da armação. Roupas: tamanhos (cada um com o seu estoque), cor, tecido e categoria.</p>
             </div>
+            <!-- Provador Virtual ligado/desligado (só loja de óculos). Desligado, a vitrine
+                 esconde o card do topo, o pop-up e o botão "Provar virtualmente"; as fotos,
+                 inclusive a foto 4 do provador, continuam salvas para religar depois. -->
+            <div data-so-nicho="oculos">
+              <label class="flex items-start gap-3 cursor-pointer">
+                <input type="checkbox" id="loja_provador" class="mt-1 h-4 w-4 accent-orange-500">
+                <span>
+                  <span class="block text-sm font-medium text-gray-700">Provador Virtual ligado</span>
+                  <span class="block text-xs text-gray-500 mt-0.5">Desligado, some da vitrine o card do Provador Virtual, o pop-up e o botão "Provar virtualmente" nos detalhes. As fotos (inclusive a foto 4 do provador) continuam salvas: é só ligar de novo.</span>
+                </span>
+              </label>
+            </div>
           </div>
           <button id="btnSalvarLoja" class="mt-6 bg-orange-500 hover:bg-orange-600 text-white px-6 py-2 rounded-lg font-medium transition-colors">Salvar dados da loja</button>
         </div>
@@ -5469,6 +5481,8 @@
     function preencherLoja(loja) {
       document.querySelectorAll('[data-campo-loja]').forEach(el => { el.value = loja[el.dataset.campoLoja] || ''; });
       document.getElementById('loja_nicho').value = loja.nicho || (loja.oculos ? 'oculos' : 'geral');
+      document.getElementById('loja_provador').checked = loja.provador !== false;
+      if (globalThis.LOJA) globalThis.LOJA.provador = loja.provador !== false;
       // O cadastro de produtos acompanha o tipo de loja salvo
       if (globalThis.LOJA && loja.nicho && globalThis.LOJA.nicho !== loja.nicho) {
         globalThis.LOJA.nicho = loja.nicho;
@@ -5496,6 +5510,8 @@
 
     document.getElementById('btnSalvarLoja').addEventListener('click', async () => {
       const corpo = { nicho: document.getElementById('loja_nicho').value };
+      // A chave só vale para loja de óculos (nos outros tipos fica escondida e não muda)
+      if (corpo.nicho === 'oculos') corpo.provador = document.getElementById('loja_provador').checked;
       document.querySelectorAll('[data-campo-loja]').forEach(el => { corpo[el.dataset.campoLoja] = el.value; });
       try {
         await respostaLoja(await fetchAdmin('/api/admin/loja', {
@@ -6597,7 +6613,7 @@
       // Pop-up da tela inicial: nenhum, o Provador Virtual (só lojas de óculos) ou um anúncio
       const select = document.getElementById('popupInicial');
       const opcoes = [['nenhum', 'Nenhum pop-up']];
-      if (nichoPainel() === 'oculos' || popupInicialAdmin === 'provador') opcoes.push(['provador', 'Provador Virtual (só no celular)']);
+      if (nichoPainel() === 'oculos' || popupInicialAdmin === 'provador') opcoes.push(['provador', `Provador Virtual (só no celular)${globalThis.LOJA?.provador === false ? ' (desligado)' : ''}`]);
       for (const a of anunciosAdmin) opcoes.push([String(a.id), `Anúncio: ${a.nome}${a.ativo ? '' : ' (inativo)'}${a.imagem_url ? '' : ' (sem imagem)'}`]);
       select.innerHTML = opcoes.map(([v, t]) => `<option value="${escapeHtml(v)}">${escapeHtml(t)}</option>`).join('');
       select.value = String(popupInicialAdmin);
