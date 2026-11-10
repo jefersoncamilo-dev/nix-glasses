@@ -185,6 +185,32 @@ describe('painel (admin/index.html) escapa dados de produto', () => {
     semInjecao(tbody.innerHTML);
   });
 
+  it('nas vendas das métricas', async () => {
+    const els = {};
+    const el = (id) => (els[id] = els[id] || elemento());
+    el('periodoVendas').value = 'mes';
+    const ctx = carregar('admin/index.html', ['escapeHtml', 'carregarVendas'], {
+      fetchAdmin: async () => ({
+        ok: true,
+        json: async () => ({
+          inicio: null, fim: null, metricas_desde: null,
+          totais: { vendas: 1, pecas: 1, acessorios: 0, faturamento: 100, custo: 50, lucro: 50, ticket_medio: 100 },
+          canais: [{ chave: 'PEDIDO', rotulo: PAYLOAD, vendas: 1, pecas: 1, faturamento: 100, lucro: 50 }],
+          mais_vendidos: [{ produto_id: 7, nome: PAYLOAD, codigo_sku: PAYLOAD, foto: `x" onerror="alert(1)`, pecas: 1, valor: 100 }],
+          ultimas: [{ canal: PAYLOAD, data: '2026-11-09T12:00:00.000Z', descricao: PAYLOAD, pecas: 1, acessorios: 0, valor: 100, itens: [PAYLOAD] }],
+        }),
+      }),
+      document: { getElementById: el },
+      formatarMoeda,
+      encodeURIComponent,
+      Date,
+      ROTULO_CANAL_VENDA: {},
+      console,
+    });
+    await ctx.carregarVendas();
+    for (const id of ['tabelaVendasCanais', 'listaMaisVendidos', 'listaUltimasVendas']) semInjecao(els[id].innerHTML);
+  });
+
   it('nas listas do acerto', () => {
     const compradosList = elemento();
     const devolvidosList = elemento();
