@@ -78,7 +78,7 @@ function semInjecao(html) {
 describe('vitrine (index.html) escapa dados de produto', () => {
   for (const disponibilidade of ['PRONTA_ENTREGA', 'SOB_ENCOMENDA']) it(`no catálogo (${disponibilidade})`, () => {
     const catalogoGrid = elemento();
-    const ctx = carregar('index.html', ['ordemTamanho', 'agruparCards', 'nomeModelo', 'tamanhosCard', 'botaoGrupoCard', 'escapeHtml', 'fotosDoProduto', 'fotoProvador', 'indiceCircular', 'ehSobEncomenda', 'calcularSinal', 'passaFiltroStatus', 'etiquetaProduto', 'nomeCard', 'tagsCard', 'botaoMaletaCard', 'passaFiltroGenero', 'renderizarCatalogo'], {
+    const ctx = carregar('index.html', ['ordemTamanho', 'agruparCards', 'variaPorCor', 'coresCard', 'botoesCor', 'nomeModelo', 'tamanhosCard', 'botaoGrupoCard', 'escapeHtml', 'fotosDoProduto', 'fotoProvador', 'indiceCircular', 'ehSobEncomenda', 'calcularSinal', 'passaFiltroStatus', 'etiquetaProduto', 'nomeCard', 'tagsCard', 'botaoMaletaCard', 'passaFiltroGenero', 'renderizarCatalogo'], {
       NICHO: 'oculos', rotulos: { formato: 'Formato da lente', formatos: 'Todos os formatos', material: 'Material', tipo: 'Tipo' }, ORDEM_TAMANHOS: [], filtroTamanho: { value: '' },
       produtos: [produtoMalicioso({ disponibilidade })],
       maleta: { itens: [] },
@@ -97,7 +97,7 @@ describe('vitrine (index.html) escapa dados de produto', () => {
 
   it('nos detalhes do produto (carrossel e miniaturas)', () => {
     const detalhesConteudo = elemento();
-    const ctx = carregar('index.html', ['ordemTamanho', 'agruparCards', 'nomeModelo', 'grupoDoProduto', 'botoesTamanho', 'escapeHtml', 'fotosDoProduto', 'fotoProvador', 'indiceCircular', 'ehSobEncomenda', 'calcularSinal', 'etiquetaProduto', 'especificacoesProduto', 'renderizarDetalhes'], {
+    const ctx = carregar('index.html', ['ordemTamanho', 'agruparCards', 'variaPorCor', 'coresCard', 'botoesCor', 'nomeModelo', 'grupoDoProduto', 'botoesTamanho', 'escapeHtml', 'fotosDoProduto', 'fotoProvador', 'indiceCircular', 'ehSobEncomenda', 'calcularSinal', 'etiquetaProduto', 'especificacoesProduto', 'renderizarDetalhes'], {
       NICHO: 'oculos', rotulos: { formato: 'Formato da lente', formatos: 'Todos os formatos', material: 'Material', tipo: 'Tipo' }, ORDEM_TAMANHOS: [], filtroTamanho: { value: '' },
       produtos: [produtoMalicioso()],
       maleta: { itens: [] },

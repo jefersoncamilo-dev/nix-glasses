@@ -189,7 +189,7 @@ const ORDEM = HTML.match(/const ORDEM_TAMANHOS = \[.*\];/)[0];
 
 function vitrine(nicho, produtos) {
   const ctx = vm.createContext({ NICHO: nicho, produtos, maleta: { itens: [] }, Number, String });
-  const funcoes = ['ordemTamanho', 'ordenarTamanhos', 'agruparCards', 'grupoDoProduto', 'nomeModelo', 'escapeHtml', 'ehSobEncomenda', 'botaoGrupoCard', 'tamanhosCard'];
+  const funcoes = ['ordemTamanho', 'ordenarTamanhos', 'agruparCards', 'grupoDoProduto', 'variaPorCor', 'nomeModelo', 'escapeHtml', 'ehSobEncomenda', 'botaoGrupoCard', 'tamanhosCard'];
   vm.runInContext(`${ORDEM}\n${funcoes.map((f) => extrairFuncao(HTML, f)).join('\n')}\n${funcoes.map((f) => `this.${f} = ${f};`).join('\n')}`, ctx);
   return ctx;
 }
@@ -214,9 +214,11 @@ describe('roupas: vitrine', () => {
     assert.equal(ctx.nomeModelo({ nome: 'Blusa', tamanho: '' }), 'Blusa');
   });
 
-  it('nas outras lojas cada produto continua sendo um card', () => {
+  it('nas outras lojas o código do modelo também junta os produtos; sem ele, cada produto é um card', () => {
     const ctx = vitrine('oculos', pecas);
-    assert.equal(ctx.agruparCards(pecas).length, pecas.length);
+    assert.equal(ctx.agruparCards(pecas).length, 3);
+    const avulsos = pecas.map((p) => ({ ...p, grade: '' }));
+    assert.equal(ctx.agruparCards(avulsos).length, pecas.length);
     assert.equal(ctx.tamanhosCard([pecas[0]]).length, 0);
   });
 

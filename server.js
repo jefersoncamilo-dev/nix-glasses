@@ -151,6 +151,9 @@ const TAMANHO_MAX_IMAGEM = 8 * 1024 * 1024; // 8 MB (fotos da câmera do celular
 const MAX_FOTOS = 4;
 // foto1..foto4 são as posições do formulário; `imagem` é o campo antigo (= foto1).
 const CAMPOS_FOTO = Array.from({ length: MAX_FOTOS }, (_, i) => `foto${i + 1}`);
+// Cores do cadastro (um produto por cor): a foto de cada cor vem em foto_cor_1, foto_cor_2...
+const MAX_CORES = 20;
+const CAMPOS_FOTO_COR = Array.from({ length: MAX_CORES }, (_, i) => `foto_cor_${i + 1}`);
 
 function detectarTipoImagem(buf) {
   if (!buf || buf.length < 12) return null;
@@ -162,7 +165,7 @@ function detectarTipoImagem(buf) {
 
 const upload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: TAMANHO_MAX_IMAGEM, files: MAX_FOTOS },
+  limits: { fileSize: TAMANHO_MAX_IMAGEM, files: MAX_FOTOS + MAX_CORES },
   fileFilter: (req, file, cb) => {
     if (TIPOS_IMAGEM.has(file.mimetype)) return cb(null, true);
     const err = new Error('Formato de imagem não suportado. Use JPG, PNG ou WEBP.');
@@ -202,6 +205,7 @@ function idDaImagem(url) {
 const camposUpload = upload.fields([
   { name: 'imagem', maxCount: 1 },
   ...CAMPOS_FOTO.map((name) => ({ name, maxCount: 1 })),
+  ...CAMPOS_FOTO_COR.map((name) => ({ name, maxCount: 1 })),
 ]);
 
 // Converte erros do upload em 400 com JSON (o admin mostra err.error no toast).
@@ -216,7 +220,9 @@ function uploadImagem(req, res, next) {
       req.fotosEnviadas = CAMPOS_FOTO.map((campo, i) =>
         (arquivos[campo] || (i === 0 && arquivos.imagem) || [])[0] || null
       );
-      for (const file of req.fotosEnviadas) {
+      // Foto de cada cor do cadastro, pela posição da cor (null = cor sem foto própria)
+      req.fotosCores = CAMPOS_FOTO_COR.map((campo) => (arquivos[campo] || [])[0] || null);
+      for (const file of [...req.fotosEnviadas, ...req.fotosCores]) {
         if (!file) continue;
         file.tipoDetectado = detectarTipoImagem(file.buffer);
         if (!file.tipoDetectado) {
@@ -229,7 +235,7 @@ function uploadImagem(req, res, next) {
       const msg = err.code === 'LIMIT_FILE_SIZE'
         ? `Imagem muito grande (máximo ${TAMANHO_MAX_IMAGEM / 1024 / 1024} MB)`
         : err.code === 'LIMIT_FILE_COUNT'
-          ? `No máximo ${MAX_FOTOS} fotos por produto`
+          ? `No máximo ${MAX_FOTOS} fotos por produto (e uma por cor)`
           : 'Upload inválido';
       return res.status(400).json({ error: msg });
     }
@@ -853,6 +859,33 @@ function lerGradeTamanhos(v) {
   return grade;
 }
 
+// Cores do cadastro: [{ cor, estoque }] (ou o JSON dela). Cada cor vira um produto com o
+// seu estoque, a sua foto e SKU próprio. Vazio = null (produto único), inválida = false.
+function lerCores(v) {
+  if (v === undefined || v === null || v === '') return null;
+  let lista = v;
+  if (typeof v === 'string') {
+    try { lista = JSON.parse(v); } catch { return false; }
+  }
+  if (!Array.isArray(lista) || lista.length === 0 || lista.length > MAX_CORES) return false;
+  const vistos = new Set();
+  const cores = [];
+  for (const item of lista) {
+    const cor = textoCurto(item && item.cor, 100);
+    const estoque = lerQuantidade(item && item.estoque);
+    if (!cor || estoque === false || vistos.has(cor.toLowerCase())) return false;
+    vistos.add(cor.toLowerCase());
+    cores.push({ cor, estoque: estoque ?? 0 });
+  }
+  return cores;
+}
+
+// Pedaço do SKU de uma cor: "Azul-claro" -> "AZUL-CLARO", "Café" -> "CAFE"
+function skuDaCor(cor) {
+  return String(cor).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase()
+    .replace(/[^A-Z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 30) || 'COR';
+}
+
 // Data da compra em AAAA-MM-DD ou DD/MM/AAAA: vazio = null, inválida = false.
 function lerDataCompra(v) {
   if (v === undefined || v === null || (typeof v === 'string' && v.trim() === '')) return null;
@@ -1431,31 +1464,54 @@ async function startServer() {
     // (o código do modelo, que junta os tamanhos num card só na vitrine).
     const tamanhos = lerGradeTamanhos(req.body.tamanhos);
     if (tamanhos === false) return res.status(400).json({ error: 'Tamanhos inválidos (cada tamanho uma vez, com a quantidade em peças)' });
+    // Cores: o mesmo, um produto por cor ("<nome> - <cor>", SKU "<SKU>-<COR>"), cada um com
+    // a cor, o estoque e a foto 1 da sua cor; as fotos 2 a 4 do formulário valem para todas.
+    const cores = lerCores(req.body.cores);
+    if (cores === false) return res.status(400).json({ error: 'Cores inválidas (cada cor uma vez, com a quantidade em peças)' });
+    if (cores && tamanhos) return res.status(400).json({ error: 'Cadastre por tamanhos ou por cores, não os dois de uma vez' });
+    const skusCor = new Set();
     const pecas = tamanhos
       ? tamanhos.map((t) => ({
         nome: `${nome} - ${t.tamanho}`, sku: `${codigoFinal}-${t.tamanho}`, estoque: t.estoque,
         espec: { ...espec, tamanho: t.tamanho, grade: textoCurto(codigoFinal, 100) },
       }))
-      : [{ nome, sku: codigoFinal, estoque: estoque ?? 1, espec }];
+      : cores
+        ? cores.map((c, i) => {
+          let sku = `${codigoFinal}-${skuDaCor(c.cor)}`;
+          for (let n = 2; skusCor.has(sku); n++) sku = `${codigoFinal}-${skuDaCor(c.cor)}-${n}`;
+          skusCor.add(sku);
+          return {
+            nome: `${nome} - ${c.cor}`, sku, estoque: c.estoque, cor: c.cor, fotoCor: (req.fotosCores || [])[i] || null,
+            espec: { ...espec, grade: textoCurto(codigoFinal, 100) },
+          };
+        })
+        : [{ nome, sku: codigoFinal, estoque: estoque ?? 1, espec }];
+    const variacoes = tamanhos || cores;
 
     let client;
     try {
       client = await req.db.connect();
       await client.query('BEGIN');
+      // Com foto em todas as cores, a foto 1 do formulário não seria usada: nem é gravada
+      const foto1Sobra = cores && pecas.every((peca) => peca.fotoCor);
       const posicoes = [];
-      for (const file of req.fotosEnviadas || []) {
-        posicoes.push(file ? await salvarImagem(client, file) : null);
+      for (const [i, file] of (req.fotosEnviadas || []).entries()) {
+        posicoes.push(file && !(i === 0 && foto1Sobra) ? await salvarImagem(client, file) : null);
       }
-      const fotos = organizarFotos(posicoes);
+      const fotosComuns = organizarFotos(posicoes);
       const criados = [];
       for (const peca of pecas) {
         const e = peca.espec;
+        // A foto da cor entra no lugar da foto 1 (sem ela, a cor usa a foto 1 do formulário)
+        const fotos = peca.fotoCor
+          ? organizarFotos([await salvarImagem(client, peca.fotoCor), ...posicoes.slice(1)])
+          : fotosComuns;
         const result = await client.query(
           `INSERT INTO produtos (nome, codigo_sku, preco_custo, preco_venda, imagem_url, fotos, disponibilidade, formato, estilo, cor_armacao, fornecedor, codigo_fornecedor, link_fornecedor,
                                  diametro_cm, ponte_cm, largura_total_cm, material, tipo, nome_curto, genero, estoque, tamanho, grade, nome_fornecedor)
            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24)
            RETURNING *`,
-          [peca.nome, peca.sku, preco_custo, preco_venda, fotos[0] || null, fotos, disponibilidade, formato, estilo, cor_armacao, fornecedor, codigoFornecedor, linkFornecedor,
+          [peca.nome, peca.sku, preco_custo, preco_venda, fotos[0] || null, fotos, disponibilidade, formato, estilo, peca.cor || cor_armacao, fornecedor, codigoFornecedor, linkFornecedor,
             e.diametro_cm ?? null, e.ponte_cm ?? null, e.largura_total_cm ?? null, e.material || '', e.tipo || '', e.nome_curto || '', e.genero || '',
             peca.estoque, e.tamanho || '', e.grade || '', nomeFornecedor]
         );
@@ -1465,12 +1521,12 @@ async function startServer() {
       }
       await client.query('COMMIT');
       // Um produto: a resposta de sempre. Grade: o 1º tamanho e a lista completa.
-      res.status(201).json(tamanhos ? { ...criados[0], produtos: criados } : criados[0]);
+      res.status(201).json(variacoes ? { ...criados[0], produtos: criados } : criados[0]);
     } catch (err) {
       if (client) await client.query('ROLLBACK').catch(() => {});
       console.error(err);
       if (err.code === '23505') {
-        return res.status(400).json({ error: tamanhos ? 'SKU já cadastrado (algum tamanho já existe com esse código)' : 'SKU já cadastrado' });
+        return res.status(400).json({ error: tamanhos ? 'SKU já cadastrado (algum tamanho já existe com esse código)' : cores ? 'SKU já cadastrado (alguma cor já existe com esse código)' : 'SKU já cadastrado' });
       }
       res.status(500).json({ error: 'Erro ao cadastrar produto' });
     } finally {
@@ -1582,15 +1638,17 @@ async function startServer() {
         result = { rows: await recalcularStatus(client, [result.rows[0].id]) };
       }
 
-      // Roupas: as fotos valem para todos os tamanhos do mesmo modelo (grade)
+      // Roupas: as fotos valem para todos os tamanhos do mesmo modelo (grade). Só entre os
+      // da mesma cor: cada cor do modelo tem as suas fotos.
       const grade = result.rows[0].grade;
       if (mexeNasFotos && grade) {
         const irmaos = await client.query(
           `UPDATE produtos p SET fotos = $1, imagem_url = $2, updated_at = CURRENT_TIMESTAMP
-           FROM (SELECT id, fotos FROM produtos WHERE grade = $3 AND id <> $4 FOR UPDATE) antes
+           FROM (SELECT id, fotos FROM produtos WHERE grade = $3 AND id <> $4
+                   AND lower(COALESCE(cor_armacao, '')) = lower(COALESCE($5, '')) FOR UPDATE) antes
            WHERE p.id = antes.id
            RETURNING antes.fotos`,
-          [result.rows[0].fotos, result.rows[0].imagem_url, grade, result.rows[0].id]
+          [result.rows[0].fotos, result.rows[0].imagem_url, grade, result.rows[0].id, result.rows[0].cor_armacao]
         );
         for (const r of irmaos.rows) removidas.push(...(r.fotos || []).filter((url) => url && !result.rows[0].fotos.includes(url)));
       }
