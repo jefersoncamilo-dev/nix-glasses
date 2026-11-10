@@ -24,7 +24,7 @@ function extrairFuncao(html, nome) {
 function carregar(arquivo, funcoes, globais) {
   const html = fs.readFileSync(path.join(__dirname, '..', ...arquivo.split('/')), 'utf8');
   const fonte = funcoes.map(f => extrairFuncao(html, f)).join('\n');
-  const ctx = vm.createContext({ ...globais, Intl, Number, String, Math });
+  const ctx = vm.createContext({ promocaoFiltro: 0, anuncios: [], anunciosAdmin: [], ...globais, Intl, Number, String, Math });
   vm.runInContext(`${fonte}\n${funcoes.map(f => `this.${f} = ${f};`).join('\n')}`, ctx);
   return ctx;
 }
@@ -78,7 +78,7 @@ function semInjecao(html) {
 describe('vitrine (index.html) escapa dados de produto', () => {
   for (const disponibilidade of ['PRONTA_ENTREGA', 'SOB_ENCOMENDA']) it(`no catálogo (${disponibilidade})`, () => {
     const catalogoGrid = elemento();
-    const ctx = carregar('index.html', ['ordemTamanho', 'agruparCards', 'variaPorCor', 'coresCard', 'botoesCor', 'nomeModelo', 'tamanhosCard', 'botaoGrupoCard', 'escapeHtml', 'fotosDoProduto', 'fotoProvador', 'indiceCircular', 'ehSobEncomenda', 'calcularSinal', 'passaFiltroStatus', 'etiquetaProduto', 'nomeCard', 'tagsCard', 'botaoMaletaCard', 'passaFiltroGenero', 'renderizarCatalogo'], {
+    const ctx = carregar('index.html', ['ordemTamanho', 'agruparCards', 'variaPorCor', 'coresCard', 'botoesCor', 'promocaoDoGrupo', 'htmlSeloPromocao', 'nomeModelo', 'tamanhosCard', 'botaoGrupoCard', 'escapeHtml', 'fotosDoProduto', 'fotoProvador', 'indiceCircular', 'ehSobEncomenda', 'calcularSinal', 'passaFiltroStatus', 'etiquetaProduto', 'nomeCard', 'tagsCard', 'botaoMaletaCard', 'passaFiltroGenero', 'renderizarCatalogo'], {
       NICHO: 'oculos', rotulos: { formato: 'Formato da lente', formatos: 'Todos os formatos', material: 'Material', tipo: 'Tipo' }, ORDEM_TAMANHOS: [], filtroTamanho: { value: '' },
       produtos: [produtoMalicioso({ disponibilidade })],
       maleta: { itens: [] },
@@ -97,7 +97,7 @@ describe('vitrine (index.html) escapa dados de produto', () => {
 
   it('nos detalhes do produto (carrossel e miniaturas)', () => {
     const detalhesConteudo = elemento();
-    const ctx = carregar('index.html', ['ordemTamanho', 'agruparCards', 'variaPorCor', 'coresCard', 'botoesCor', 'nomeModelo', 'grupoDoProduto', 'botoesTamanho', 'escapeHtml', 'fotosDoProduto', 'fotoProvador', 'indiceCircular', 'ehSobEncomenda', 'calcularSinal', 'etiquetaProduto', 'especificacoesProduto', 'renderizarDetalhes'], {
+    const ctx = carregar('index.html', ['ordemTamanho', 'agruparCards', 'variaPorCor', 'coresCard', 'botoesCor', 'promocaoDoGrupo', 'htmlSeloPromocao', 'nomeModelo', 'grupoDoProduto', 'botoesTamanho', 'escapeHtml', 'fotosDoProduto', 'fotoProvador', 'indiceCircular', 'ehSobEncomenda', 'calcularSinal', 'etiquetaProduto', 'especificacoesProduto', 'renderizarDetalhes'], {
       NICHO: 'oculos', rotulos: { formato: 'Formato da lente', formatos: 'Todos os formatos', material: 'Material', tipo: 'Tipo' }, ORDEM_TAMANHOS: [], filtroTamanho: { value: '' },
       produtos: [produtoMalicioso()],
       maleta: { itens: [] },
@@ -113,7 +113,7 @@ describe('vitrine (index.html) escapa dados de produto', () => {
 
   it('na maleta guardada no navegador', () => {
     const maletaItens = elemento();
-    const ctx = carregar('index.html', ['escapeHtml', 'calcularSinal', 'itemEhEncomenda', 'resumoMaleta', 'textoGuiaCatalogo', 'atualizarGuias', 'atualizarBarraMaleta', 'atualizarMaletaUI'], {
+    const ctx = carregar('index.html', ['escapeHtml', 'calcularSinal', 'itemEhEncomenda', 'resumoMaleta', 'textoGuiaCatalogo', 'anuncioPorId', 'atualizarGuias', 'atualizarBarraMaleta', 'atualizarMaletaUI'], {
       filtroStatus: elemento(),
       maleta: { itens: [
         { id: 7, nome: PAYLOAD, preco: 100, imagem: `x" onerror="alert(1)` },
@@ -138,7 +138,7 @@ describe('painel (admin/index.html) escapa dados de produto', () => {
 
   it('na tabela de produtos', () => {
     const tabelaProdutos = elemento();
-    const ctx = carregar('admin/index.html', ['escapeHtml', 'linkSeguro', 'botaoLinkFornecedor', 'variacaoCusto', 'htmlVariacao', 'htmlUltimaCompra', 'contarFotos', 'atualizarBarraAcertoEstoque', 'renderizarTabela'], {
+    const ctx = carregar('admin/index.html', ['escapeHtml', 'linkSeguro', 'botaoLinkFornecedor', 'variacaoCusto', 'htmlVariacao', 'htmlUltimaCompra', 'contarFotos', 'atualizarBarraAcertoEstoque', 'anuncioPorId', 'htmlPromocaoProduto', 'renderizarTabela'], {
       URL,
       // Acerto de estoque ligado: a caixinha de marcar leva o nome do produto
       modoAcertoEstoque: true,

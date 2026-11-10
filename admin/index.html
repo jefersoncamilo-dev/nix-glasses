@@ -879,6 +879,7 @@
           <!-- Abas de Configurações: Usuários só aparece para o dono da loja -->
           <div id="abasConfig" class="inline-flex rounded-lg bg-gray-100 p-1 self-start">
             <button type="button" data-aba-config="geral" class="aba-config px-4 py-1.5 rounded-md text-sm font-medium bg-white shadow text-gray-900">Geral</button>
+            <button type="button" data-aba-config="anuncios" class="aba-config px-4 py-1.5 rounded-md text-sm font-medium text-gray-600 hover:text-gray-900">POP Anúncio</button>
             <button type="button" data-aba-config="usuarios" class="aba-config so-dono hidden px-4 py-1.5 rounded-md text-sm font-medium text-gray-600 hover:text-gray-900">Usuários</button>
           </div>
         </div>
@@ -1003,6 +1004,95 @@
           <input type="text" id="zerarConfirmacao" autocomplete="off" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 mb-4">
           <button id="btnZerarDados" disabled class="bg-red-600 hover:bg-red-700 disabled:opacity-40 disabled:cursor-not-allowed text-white px-6 py-2 rounded-lg font-medium transition-colors">Zerar dados</button>
         </div>
+        </div>
+
+        <!-- POP Anúncio: as promoções da vitrine. Cada anúncio tem o selo (canto da foto dos
+             produtos e botão na tela inicial), a imagem do pop-up, o texto do botão do pop-up
+             (leva aos produtos da promoção) e a chave Ativo. O produto escolhe a promoção no
+             cadastro. Aqui também se escolhe o pop-up da tela inicial. -->
+        <div id="configAnuncios" class="hidden">
+          <div class="bg-white rounded-xl border border-gray-200 p-6 max-w-3xl">
+            <h4 class="text-base font-semibold text-gray-900 mb-1">Pop-up da tela inicial</h4>
+            <p class="text-sm text-gray-500 mb-3">Aparece toda vez que alguém entra na vitrine, logo depois de os produtos carregarem. Só anúncios ativos e com a imagem do anúncio aparecem.</p>
+            <div class="flex flex-col sm:flex-row gap-2">
+              <select id="popupInicial" class="flex-1 min-w-0 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500">
+                <option value="nenhum">Nenhum pop-up</option>
+              </select>
+              <button type="button" id="btnSalvarPopup" class="bg-orange-500 hover:bg-orange-600 text-white px-6 py-2 rounded-lg font-medium transition-colors">Salvar</button>
+            </div>
+            <p id="avisoPopupInicial" class="hidden text-xs text-amber-700 mt-2"></p>
+          </div>
+
+          <div class="bg-white rounded-xl border border-gray-200 p-6 max-w-3xl mt-6">
+            <div class="flex flex-col sm:flex-row sm:items-start justify-between gap-3 mb-4">
+              <div>
+                <h4 class="text-base font-semibold text-gray-900 mb-1">Anúncios e promoções</h4>
+                <p class="text-sm text-gray-500">Ativo: o selo aparece nos produtos da promoção e vira um botão na tela inicial que mostra só esses modelos. Inativo: some da vitrine, e os produtos continuam ligados para quando você reativar.</p>
+              </div>
+              <button type="button" id="btnNovoAnuncio" class="shrink-0 bg-orange-500 hover:bg-orange-600 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors">+ Novo anúncio</button>
+            </div>
+            <div id="listaAnuncios" class="divide-y divide-gray-100 border border-gray-100 rounded-lg"></div>
+          </div>
+
+          <form id="formAnuncio" class="hidden bg-white rounded-xl border border-orange-200 p-6 max-w-3xl mt-6" autocomplete="off">
+            <h4 id="tituloFormAnuncio" class="text-base font-semibold text-gray-900 mb-4">Novo anúncio</h4>
+            <input type="hidden" id="anuncioId">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div class="md:col-span-2">
+                <label for="anuncioNome" class="block text-sm font-medium text-gray-700 mb-1">Nome da promoção *</label>
+                <input type="text" id="anuncioNome" maxlength="80" required class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500" placeholder="Ex: Black Friday, Dia dos Namorados">
+                <p class="text-xs text-gray-500 mt-1">É o nome que você escolhe no cadastro do produto. Na vitrine aparece só para leitores de tela.</p>
+              </div>
+              <div>
+                <span class="block text-sm font-medium text-gray-700 mb-1">Imagem do selo</span>
+                <div class="flex items-center gap-3">
+                  <span class="flex items-center justify-center w-20 h-20 rounded-lg border border-gray-200 overflow-hidden" style="background:repeating-conic-gradient(#f3f4f6 0% 25%, #fff 0% 50%) 50% / 16px 16px">
+                    <img id="anuncioSeloPreview" alt="" class="hidden max-w-full max-h-full object-contain">
+                    <span id="anuncioSeloVazio" class="text-xs text-gray-400">Sem selo</span>
+                  </span>
+                  <div class="flex flex-col gap-1 items-start">
+                    <label class="cursor-pointer bg-gray-100 hover:bg-gray-200 text-gray-800 px-3 py-2 rounded-lg text-sm font-medium">
+                      Escolher selo
+                      <input type="file" id="anuncioSeloArquivo" accept="image/jpeg,image/png,image/webp" class="hidden">
+                    </label>
+                    <button type="button" id="btnRemoverSelo" class="hidden text-xs text-red-600 hover:underline">Remover selo</button>
+                  </div>
+                </div>
+                <p class="text-xs text-gray-500 mt-2">Vai no canto da foto dos produtos e no botão da tela inicial. PNG com fundo transparente, quadrado (ex.: 300 x 300), fica melhor.</p>
+              </div>
+              <div>
+                <span class="block text-sm font-medium text-gray-700 mb-1">Imagem do anúncio (pop-up)</span>
+                <div class="flex items-center gap-3">
+                  <span class="flex items-center justify-center w-20 h-28 rounded-lg border border-gray-200 overflow-hidden bg-gray-50">
+                    <img id="anuncioImagemPreview" alt="" class="hidden max-w-full max-h-full object-contain">
+                    <span id="anuncioImagemVazia" class="text-xs text-gray-400 text-center px-1">Sem imagem</span>
+                  </span>
+                  <div class="flex flex-col gap-1 items-start">
+                    <label class="cursor-pointer bg-gray-100 hover:bg-gray-200 text-gray-800 px-3 py-2 rounded-lg text-sm font-medium">
+                      Escolher imagem
+                      <input type="file" id="anuncioImagemArquivo" accept="image/jpeg,image/png,image/webp" class="hidden">
+                    </label>
+                    <button type="button" id="btnRemoverImagemAnuncio" class="hidden text-xs text-red-600 hover:underline">Remover imagem</button>
+                  </div>
+                </div>
+                <p class="text-xs text-gray-500 mt-2">Aparece no pop-up da tela inicial. Em pé (ex.: 1080 x 1350) ocupa bem a tela do celular.</p>
+              </div>
+              <div class="md:col-span-2">
+                <label for="anuncioBotao" class="block text-sm font-medium text-gray-700 mb-1">Texto do botão do pop-up</label>
+                <input type="text" id="anuncioBotao" maxlength="40" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500" placeholder="Ver produtos da promoção">
+                <p class="text-xs text-gray-500 mt-1">O botão leva à lista dos produtos desta promoção. Vazio = "Ver produtos da promoção".</p>
+              </div>
+            </div>
+            <label class="flex items-center gap-3 mt-5">
+              <input type="checkbox" id="anuncioAtivo" checked class="h-4 w-4 accent-orange-500">
+              <span class="text-sm text-gray-700">Ativo (mostra o selo e o botão na vitrine; desmarque para ocultar)</span>
+            </label>
+            <div class="flex flex-wrap items-center gap-3 mt-6">
+              <button type="submit" id="btnSalvarAnuncio" class="bg-orange-500 hover:bg-orange-600 text-white px-6 py-2 rounded-lg font-medium transition-colors">Salvar anúncio</button>
+              <button type="button" id="btnCancelarAnuncio" class="bg-gray-100 hover:bg-gray-200 text-gray-700 px-6 py-2 rounded-lg font-medium transition-colors">Cancelar</button>
+              <button type="button" id="btnExcluirAnuncio" class="hidden ml-auto text-sm text-red-600 hover:underline">Excluir anúncio</button>
+            </div>
+          </form>
         </div>
 
         <!-- Usuários do painel: quem entra no admin e em quais telas -->
@@ -1282,6 +1372,24 @@
               <option value="SOB_ENCOMENDA">Sob Encomenda (50% de sinal)</option>
             </select>
             <p id="avisoSinal" class="text-xs text-blue-700 mt-1 hidden"></p>
+          </div>
+          <!-- Promoção: o selo do anúncio escolhido vai no canto da foto na vitrine, e o
+               produto entra no botão da promoção da tela inicial (Configurações > POP Anúncio) -->
+          <div id="campoPromocao" class="md:col-span-2 border border-gray-200 rounded-lg p-4">
+            <label class="flex items-center gap-3">
+              <input type="checkbox" id="promocaoMarcada" class="h-4 w-4 accent-orange-500">
+              <span class="text-sm font-semibold text-gray-800">PROMOÇÃO</span>
+            </label>
+            <div id="promocaoEscolha" class="hidden mt-3">
+              <label for="anuncio_id" class="block text-sm font-medium text-gray-700 mb-1">Qual promoção? *</label>
+              <div class="flex items-center gap-3">
+                <select id="anuncio_id" class="flex-1 min-w-0 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500">
+                  <option value="">Escolha a promoção</option>
+                </select>
+                <img id="promocaoSelo" alt="" class="hidden w-10 h-10 object-contain flex-none">
+              </div>
+              <p id="promocaoAviso" class="text-xs text-gray-500 mt-1">O selo da promoção aparece no canto da foto na vitrine. Vale para todas as cores e tamanhos do modelo.</p>
+            </div>
           </div>
         </div>
         <div>
@@ -2510,11 +2618,15 @@
     });
 
     // Carregar produtos
+    // Promoções de Configurações > POP Anúncio (a lista e o cadastro de produtos usam)
+    let anunciosAdmin = [];
+    let popupInicialAdmin = 'nenhum';
     async function carregarProdutos() {
       try {
         const res = await fetchAdmin('/api/admin/produtos');
         if (!res.ok) throw new Error('Erro ao carregar');
         todosProdutos = await res.json();
+        if (todosProdutos.some(p => p.anuncio_id) && !anunciosAdmin.length) await carregarAnuncios();
         preencherFiltroFormato();
         preencherFornecedores();
         renderizarTabela();
@@ -2523,6 +2635,14 @@
         console.error(err);
         mostrarToast('Erro ao carregar produtos', 'error');
       }
+    }
+
+    // Etiqueta da promoção na lista de produtos (o nome vem de Configurações > POP Anúncio)
+    function htmlPromocaoProduto(p) {
+      if (!p.anuncio_id) return '';
+      const a = typeof anuncioPorId === 'function' ? anuncioPorId(p.anuncio_id) : null;
+      const nome = a ? a.nome : 'Promoção';
+      return `<span data-promocao-produto class="block w-max max-w-[10rem] truncate mt-1 px-2 py-1 text-xs font-medium rounded-full ${a && !a.ativo ? 'bg-gray-100 text-gray-500' : 'bg-pink-100 text-pink-700'}" title="${a && !a.ativo ? 'Promoção inativa (oculta na vitrine)' : 'Promoção'}">PROMO: ${escapeHtml(nome)}</span>`;
     }
 
     function preencherFiltroFormato() {
@@ -2646,6 +2766,7 @@
             <span class="px-2 py-1 text-xs font-medium rounded-full ${statusClass(p.status)}">${escapeHtml(p.status)}</span>
             <span class="block mt-1 text-xs text-gray-500">${Number(p.estoque) || 0} em estoque${Number(p.em_maleta) ? ` • ${Number(p.em_maleta)} em maleta` : ''}</span>
             ${p.disponibilidade === 'SOB_ENCOMENDA' ? '<span class="block w-max mt-1 px-2 py-1 text-xs font-medium rounded-full bg-blue-100 text-blue-700">SOB ENCOMENDA</span>' : ''}
+            ${htmlPromocaoProduto(p)}
           </td>
           <td class="hidden sm:table-cell px-4 sm:px-6 py-4 text-gray-900 font-medium">${Number(p.vezes_em_maleta) || 0}</td>
           <td class="px-4 sm:px-6 py-4">
@@ -3155,6 +3276,7 @@
       document.getElementById('coresProduto').classList.toggle('hidden', !!produto);
       atualizarAvisoSinal();
       atualizarAbrirLink();
+      preencherPromocaoProduto(produto);
       document.getElementById('importarStatus').textContent = 'Preenche nome fornec., custo, código, link e as especificações da descrição (medidas, material, formato...). Confira antes de salvar.';
       modalProduto.classList.remove('hidden');
       document.body.style.overflow = 'hidden';
@@ -3594,6 +3716,13 @@
       });
       // Sempre enviados, para que apagar o fornecedor ou uma especificação na edição também valha
       ['nome_curto', 'fornecedor', 'codigo_fornecedor', 'nome_fornecedor', 'link_fornecedor', ...CAMPOS_MEDIDA, 'material', 'tipo', 'genero', 'tamanho', 'grade'].forEach(field => formData.append(field, document.getElementById(field).value.trim()));
+      // Promoção: marcada pede qual; desmarcada tira a promoção
+      const anuncioId = anuncioDoFormulario();
+      if (anuncioId === null) {
+        document.getElementById('anuncio_id').focus();
+        return mostrarToast('Escolha qual promoção vale para este produto (ou desmarque PROMOÇÃO)', 'error');
+      }
+      formData.append('anuncio_id', anuncioId);
       if (!id && nichoPainel() === 'roupas') {
         const grade = lerGradeFormulario();
         if (grade === null) return mostrarToast('Confira os tamanhos: cada um uma vez, com a quantidade em número', 'error');
@@ -6421,6 +6550,258 @@
       }
     }
 
+    // ---------- Configurações > POP Anúncio (promoções da vitrine) ----------
+    // A lista também serve ao cadastro de produtos (Promoção > qual promoção).
+    const formAnuncio = { selo: null, imagem: null, removerSelo: false, removerImagem: false };
+
+    async function carregarAnuncios() {
+      try {
+        const res = await fetchAdmin('/api/admin/anuncios');
+        if (!res.ok) throw new Error();
+        const data = await res.json();
+        anunciosAdmin = Array.isArray(data.anuncios) ? data.anuncios : [];
+        popupInicialAdmin = data.popup ?? 'nenhum';
+      } catch (err) {
+        console.error(err);
+      }
+      renderizarAnuncios();
+      preencherOpcoesPromocao();
+      return anunciosAdmin;
+    }
+
+    function anuncioPorId(id) {
+      return anunciosAdmin.find(a => Number(a.id) === Number(id)) || null;
+    }
+
+    function renderizarAnuncios() {
+      const lista = document.getElementById('listaAnuncios');
+      if (!lista) return;
+      lista.innerHTML = anunciosAdmin.length ? anunciosAdmin.map(a => `
+        <div class="flex items-center gap-3 p-3" data-anuncio="${Number(a.id)}">
+          <span class="flex-none flex items-center justify-center w-12 h-12 rounded-lg border border-gray-200 overflow-hidden bg-gray-50">
+            ${a.selo_url ? `<img src="${escapeHtml(a.selo_url)}" alt="" class="max-w-full max-h-full object-contain">` : '<span class="text-[10px] text-gray-400">sem selo</span>'}
+          </span>
+          <span class="flex-none hidden sm:flex items-center justify-center w-9 h-12 rounded border border-gray-200 overflow-hidden bg-gray-50">
+            ${a.imagem_url ? `<img src="${escapeHtml(a.imagem_url)}" alt="" class="max-w-full max-h-full object-contain">` : ''}
+          </span>
+          <span class="flex-1 min-w-0">
+            <span class="block font-medium text-gray-900 truncate">${escapeHtml(a.nome)}${Number(popupInicialAdmin) === Number(a.id) ? ' <span class="ml-1 px-2 py-0.5 text-[10px] font-semibold rounded-full bg-orange-100 text-orange-700 align-middle">POP-UP</span>' : ''}</span>
+            <span class="block text-xs text-gray-500 truncate">${Number(a.produtos) || 0} produto(s) • Botão: ${escapeHtml(a.botao_texto)}${a.imagem_url ? '' : ' • sem imagem do pop-up'}</span>
+          </span>
+          <label class="flex-none inline-flex items-center gap-2 text-xs font-medium cursor-pointer ${a.ativo ? 'text-green-700' : 'text-gray-500'}" title="Ativo mostra na vitrine; inativo oculta">
+            <input type="checkbox" data-anuncio-ativo="${Number(a.id)}" ${a.ativo ? 'checked' : ''} class="h-4 w-4 accent-green-600">
+            ${a.ativo ? 'Ativo' : 'Inativo'}
+          </label>
+          <button type="button" data-anuncio-editar="${Number(a.id)}" class="flex-none px-3 py-1.5 text-sm text-orange-700 border border-orange-200 rounded-lg hover:bg-orange-50">Editar</button>
+        </div>`).join('') : '<p class="p-4 text-sm text-gray-500">Nenhum anúncio ainda. Toque em "+ Novo anúncio" para criar a primeira promoção.</p>';
+      // Pop-up da tela inicial: nenhum, o Provador Virtual (só lojas de óculos) ou um anúncio
+      const select = document.getElementById('popupInicial');
+      const opcoes = [['nenhum', 'Nenhum pop-up']];
+      if (nichoPainel() === 'oculos' || popupInicialAdmin === 'provador') opcoes.push(['provador', 'Provador Virtual (só no celular)']);
+      for (const a of anunciosAdmin) opcoes.push([String(a.id), `Anúncio: ${a.nome}${a.ativo ? '' : ' (inativo)'}${a.imagem_url ? '' : ' (sem imagem)'}`]);
+      select.innerHTML = opcoes.map(([v, t]) => `<option value="${escapeHtml(v)}">${escapeHtml(t)}</option>`).join('');
+      select.value = String(popupInicialAdmin);
+      if (select.value !== String(popupInicialAdmin)) select.value = 'nenhum';
+      atualizarAvisoPopup();
+    }
+
+    function atualizarAvisoPopup() {
+      const aviso = document.getElementById('avisoPopupInicial');
+      const a = anuncioPorId(document.getElementById('popupInicial').value);
+      let texto = '';
+      if (a && !a.ativo) texto = 'Esse anúncio está inativo: o pop-up só aparece quando ele estiver ativo.';
+      else if (a && !a.imagem_url) texto = 'Esse anúncio não tem a imagem do pop-up. Envie a imagem antes de escolher.';
+      aviso.textContent = texto;
+      aviso.classList.toggle('hidden', !texto);
+    }
+    document.getElementById('popupInicial').addEventListener('change', atualizarAvisoPopup);
+
+    document.getElementById('btnSalvarPopup').addEventListener('click', async () => {
+      const v = document.getElementById('popupInicial').value;
+      try {
+        const res = await fetchAdmin('/api/admin/anuncios/popup', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ popup: v === 'nenhum' || v === 'provador' ? v : Number(v) }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.error || 'Erro ao salvar o pop-up');
+        popupInicialAdmin = data.popup;
+        renderizarAnuncios();
+        mostrarToast(v === 'nenhum' ? 'A tela inicial ficou sem pop-up' : 'Pop-up da tela inicial salvo!');
+      } catch (err) {
+        mostrarToast(err.message, 'error');
+      }
+    });
+
+    function mostrarPreviewAnuncio(tipo, url) {
+      const [img, vazio, remover] = tipo === 'selo'
+        ? ['anuncioSeloPreview', 'anuncioSeloVazio', 'btnRemoverSelo']
+        : ['anuncioImagemPreview', 'anuncioImagemVazia', 'btnRemoverImagemAnuncio'];
+      const el = document.getElementById(img);
+      el.classList.toggle('hidden', !url);
+      if (url) el.src = url; else el.removeAttribute('src');
+      document.getElementById(vazio).classList.toggle('hidden', !!url);
+      document.getElementById(remover).classList.toggle('hidden', !url);
+    }
+
+    function abrirFormAnuncio(anuncio = null) {
+      const form = document.getElementById('formAnuncio');
+      form.reset();
+      Object.assign(formAnuncio, { selo: null, imagem: null, removerSelo: false, removerImagem: false });
+      document.getElementById('anuncioId').value = anuncio ? anuncio.id : '';
+      document.getElementById('tituloFormAnuncio').textContent = anuncio ? `Editar anúncio: ${anuncio.nome}` : 'Novo anúncio';
+      document.getElementById('anuncioNome').value = anuncio ? anuncio.nome : '';
+      document.getElementById('anuncioBotao').value = anuncio ? anuncio.botao_texto : '';
+      document.getElementById('anuncioAtivo').checked = anuncio ? !!anuncio.ativo : true;
+      document.getElementById('btnExcluirAnuncio').classList.toggle('hidden', !anuncio);
+      mostrarPreviewAnuncio('selo', anuncio && anuncio.selo_url);
+      mostrarPreviewAnuncio('imagem', anuncio && anuncio.imagem_url);
+      form.classList.remove('hidden');
+      form.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      document.getElementById('anuncioNome').focus({ preventScroll: true });
+    }
+
+    function fecharFormAnuncio() {
+      document.getElementById('formAnuncio').classList.add('hidden');
+    }
+
+    document.getElementById('btnNovoAnuncio').addEventListener('click', () => abrirFormAnuncio());
+    document.getElementById('btnCancelarAnuncio').addEventListener('click', fecharFormAnuncio);
+    for (const [tipo, input] of [['selo', 'anuncioSeloArquivo'], ['imagem', 'anuncioImagemArquivo']]) {
+      document.getElementById(input).addEventListener('change', (e) => {
+        const file = e.target.files && e.target.files[0];
+        if (!file) return;
+        formAnuncio[tipo] = file;
+        formAnuncio[tipo === 'selo' ? 'removerSelo' : 'removerImagem'] = false;
+        mostrarPreviewAnuncio(tipo, URL.createObjectURL(file));
+      });
+    }
+    document.getElementById('btnRemoverSelo').addEventListener('click', () => {
+      Object.assign(formAnuncio, { selo: null, removerSelo: true });
+      document.getElementById('anuncioSeloArquivo').value = '';
+      mostrarPreviewAnuncio('selo', null);
+    });
+    document.getElementById('btnRemoverImagemAnuncio').addEventListener('click', () => {
+      Object.assign(formAnuncio, { imagem: null, removerImagem: true });
+      document.getElementById('anuncioImagemArquivo').value = '';
+      mostrarPreviewAnuncio('imagem', null);
+    });
+
+    document.getElementById('formAnuncio').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const id = document.getElementById('anuncioId').value;
+      const fd = new FormData();
+      fd.append('nome', document.getElementById('anuncioNome').value.trim());
+      fd.append('botao_texto', document.getElementById('anuncioBotao').value.trim());
+      fd.append('ativo', document.getElementById('anuncioAtivo').checked ? 'true' : 'false');
+      // O selo fica em PNG (mantém o fundo transparente); a imagem do pop-up é reduzida como as fotos
+      if (formAnuncio.selo) fd.append('selo', formAnuncio.selo);
+      if (formAnuncio.imagem) fd.append('imagem', await prepararImagem(formAnuncio.imagem));
+      if (id && formAnuncio.removerSelo) fd.append('remover_selo', 'true');
+      if (id && formAnuncio.removerImagem) fd.append('remover_imagem', 'true');
+      try {
+        const res = await fetchAdmin(id ? `/api/admin/anuncios/${id}` : '/api/admin/anuncios', { method: id ? 'PUT' : 'POST', body: fd });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.error || 'Erro ao salvar o anúncio');
+        mostrarToast(id ? 'Anúncio salvo!' : 'Anúncio criado! Agora marque PROMOÇÃO nos produtos dele.');
+        fecharFormAnuncio();
+        await carregarAnuncios();
+      } catch (err) {
+        mostrarToast(err.message, 'error');
+      }
+    });
+
+    document.getElementById('btnExcluirAnuncio').addEventListener('click', async () => {
+      const a = anuncioPorId(document.getElementById('anuncioId').value);
+      if (!a) return;
+      const n = Number(a.produtos) || 0;
+      if (!confirm(`Excluir o anúncio "${a.nome}"?${n ? ` ${n} produto(s) ficam sem promoção.` : ''} Não tem como desfazer.`)) return;
+      try {
+        const res = await fetchAdmin(`/api/admin/anuncios/${a.id}`, { method: 'DELETE' });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.error || 'Erro ao excluir');
+        mostrarToast('Anúncio excluído');
+        fecharFormAnuncio();
+        await carregarAnuncios();
+        carregarProdutos();
+      } catch (err) {
+        mostrarToast(err.message, 'error');
+      }
+    });
+
+    document.getElementById('listaAnuncios').addEventListener('click', (e) => {
+      const editar = e.target.closest('[data-anuncio-editar]');
+      if (editar) abrirFormAnuncio(anuncioPorId(editar.dataset.anuncioEditar));
+    });
+    // Chave Ativo/Inativo direto na lista
+    document.getElementById('listaAnuncios').addEventListener('change', async (e) => {
+      const chave = e.target.closest('[data-anuncio-ativo]');
+      if (!chave) return;
+      const fd = new FormData();
+      fd.append('ativo', chave.checked ? 'true' : 'false');
+      try {
+        const res = await fetchAdmin(`/api/admin/anuncios/${chave.dataset.anuncioAtivo}`, { method: 'PUT', body: fd });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.error || 'Erro ao salvar');
+        mostrarToast(data.ativo ? `"${data.nome}" ativo na vitrine` : `"${data.nome}" oculto da vitrine`);
+      } catch (err) {
+        mostrarToast(err.message, 'error');
+      }
+      carregarAnuncios();
+    });
+
+    // Cadastro do produto: PROMOÇÃO marcada pede a promoção. Mostra os anúncios ativos e,
+    // se o produto já estiver num inativo, esse também (avisando que está oculto).
+    function preencherOpcoesPromocao(atualId) {
+      const select = document.getElementById('anuncio_id');
+      const escolhido = atualId !== undefined ? String(atualId || '') : select.value;
+      const opcoes = anunciosAdmin.filter(a => a.ativo || String(a.id) === escolhido);
+      select.innerHTML = '<option value="">Escolha a promoção</option>' + opcoes.map(a =>
+        `<option value="${Number(a.id)}">${escapeHtml(a.nome)}${a.ativo ? '' : ' (inativo, oculto na vitrine)'}</option>`).join('');
+      select.value = escolhido;
+      atualizarSeloPromocao();
+    }
+
+    function atualizarSeloPromocao() {
+      const marcada = document.getElementById('promocaoMarcada').checked;
+      document.getElementById('promocaoEscolha').classList.toggle('hidden', !marcada);
+      const a = anuncioPorId(document.getElementById('anuncio_id').value);
+      const img = document.getElementById('promocaoSelo');
+      img.classList.toggle('hidden', !(a && a.selo_url));
+      if (a && a.selo_url) img.src = a.selo_url; else img.removeAttribute('src');
+      const aviso = document.getElementById('promocaoAviso');
+      if (marcada && !anunciosAdmin.some(x => x.ativo)) {
+        aviso.textContent = 'Nenhuma promoção ativa. Crie ou ative uma em Configurações > POP Anúncio.';
+      } else if (a && !a.ativo) {
+        aviso.textContent = 'Essa promoção está inativa: o selo não aparece na vitrine até você ativá-la.';
+      } else {
+        aviso.textContent = 'O selo da promoção aparece no canto da foto na vitrine. Vale para todas as cores e tamanhos do modelo.';
+      }
+    }
+
+    function preencherPromocaoProduto(produto) {
+      const id = produto && produto.anuncio_id ? String(produto.anuncio_id) : '';
+      document.getElementById('promocaoMarcada').checked = !!id;
+      preencherOpcoesPromocao(id);
+      // A lista pode ter mudado em Configurações: relê sem travar o formulário
+      carregarAnuncios().then(() => {
+        if (produtoEditando === produto) preencherOpcoesPromocao(document.getElementById('anuncio_id').value || id);
+      });
+    }
+
+    // Valor enviado no cadastro: '' = sem promoção; null = marcada sem escolher (erro)
+    function anuncioDoFormulario() {
+      if (!document.getElementById('promocaoMarcada').checked) return '';
+      return document.getElementById('anuncio_id').value || null;
+    }
+
+    document.getElementById('promocaoMarcada').addEventListener('change', () => {
+      atualizarSeloPromocao();
+      if (document.getElementById('promocaoMarcada').checked) document.getElementById('anuncio_id').focus();
+    });
+    document.getElementById('anuncio_id').addEventListener('change', atualizarSeloPromocao);
+
     function trocarAbaConfig(aba) {
       if (aba === 'usuarios' && !acessoAdmin.dono) aba = 'geral';
       document.querySelectorAll('.aba-config').forEach(b => {
@@ -6432,7 +6813,9 @@
       });
       document.getElementById('configGeral').classList.toggle('hidden', aba !== 'geral');
       document.getElementById('configUsuarios').classList.toggle('hidden', aba !== 'usuarios');
+      document.getElementById('configAnuncios').classList.toggle('hidden', aba !== 'anuncios');
       if (aba === 'usuarios') carregarUsuarios();
+      if (aba === 'anuncios') { fecharFormAnuncio(); carregarAnuncios(); }
     }
     document.querySelectorAll('.aba-config').forEach(b => b.addEventListener('click', () => trocarAbaConfig(b.dataset.abaConfig)));
 

@@ -21,7 +21,7 @@ function extrairFuncao(html, nome) {
 }
 
 function carregar(funcoes, globais = {}) {
-  const ctx = vm.createContext({ ...globais });
+  const ctx = vm.createContext({ promocaoFiltro: 0, anuncios: [], ...globais });
   vm.runInContext(`${funcoes.map((f) => extrairFuncao(HTML, f)).join('\n')}\n${funcoes.map((f) => `this.${f} = ${f};`).join('\n')}`, ctx);
   return ctx;
 }
@@ -194,7 +194,7 @@ describe('Provador: desenharOculos', () => {
 
 describe('Provador: botão nos detalhes do produto', () => {
   const FUNCOES = ['escapeHtml', 'fotosDoProduto', 'fotoProvador', 'indiceCircular', 'ehSobEncomenda', 'calcularSinal',
-    'etiquetaProduto', 'especificacoesProduto', 'renderizarDetalhes', 'ordemTamanho', 'agruparCards', 'variaPorCor', 'coresCard', 'botoesCor', 'nomeModelo', 'grupoDoProduto', 'botoesTamanho'];
+    'etiquetaProduto', 'especificacoesProduto', 'renderizarDetalhes', 'ordemTamanho', 'agruparCards', 'variaPorCor', 'coresCard', 'botoesCor', 'promocaoDoGrupo', 'htmlSeloPromocao', 'nomeModelo', 'grupoDoProduto', 'botoesTamanho'];
 
   function detalhesDe(produto) {
     const detalhesConteudo = { innerHTML: '' };

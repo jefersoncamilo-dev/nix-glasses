@@ -14,6 +14,7 @@ const { lerPedidoPdf, ErroPedidoPdf } = require('./pedido-fornecedor');
 const usuariosAdmin = require('./usuarios-admin');
 const conferenciaEstoque = require('./conferencia-estoque');
 const vendas = require('./vendas');
+const anuncios = require('./anuncios');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -238,6 +239,19 @@ function uploadImagem(req, res, next) {
           ? `No máximo ${MAX_FOTOS} fotos por produto (e uma por cor)`
           : 'Upload inválido';
       return res.status(400).json({ error: msg });
+    }
+    if (err.status === 400) return res.status(400).json({ error: err.message });
+    next(err);
+  });
+}
+
+// Configurações > POP Anúncio: a imagem do selo (`selo`) e a do pop-up (`imagem`)
+const camposAnuncio = upload.fields([{ name: 'selo', maxCount: 1 }, { name: 'imagem', maxCount: 1 }]);
+function uploadAnuncio(req, res, next) {
+  camposAnuncio(req, res, (err) => {
+    if (!err) return next();
+    if (err instanceof multer.MulterError) {
+      return res.status(400).json({ error: err.code === 'LIMIT_FILE_SIZE' ? `Imagem muito grande (máximo ${TAMANHO_MAX_IMAGEM / 1024 / 1024} MB)` : 'Envie no máximo uma imagem de selo e uma de anúncio' });
     }
     if (err.status === 400) return res.status(400).json({ error: err.message });
     next(err);
@@ -1371,11 +1385,13 @@ async function startServer() {
   async function handleListPublicos(req, res) {
     try {
       const result = await req.db.query(
-        `SELECT id, nome, nome_curto, codigo_sku, preco_venda, imagem_url, fotos, status, disponibilidade, formato, estilo, cor_armacao,
-                diametro_cm, ponte_cm, largura_total_cm, material, tipo, genero, tamanho, grade
-         FROM produtos
-         WHERE status IN ('DISPONIVEL', 'CONDICIONAL')
-         ORDER BY created_at DESC`
+        `SELECT p.id, p.nome, p.nome_curto, p.codigo_sku, p.preco_venda, p.imagem_url, p.fotos, p.status, p.disponibilidade, p.formato, p.estilo, p.cor_armacao,
+                p.diametro_cm, p.ponte_cm, p.largura_total_cm, p.material, p.tipo, p.genero, p.tamanho, p.grade,
+                CASE WHEN a.ativo THEN p.anuncio_id END AS anuncio_id
+         FROM produtos p
+         LEFT JOIN anuncios a ON a.id = p.anuncio_id
+         WHERE p.status IN ('DISPONIVEL', 'CONDICIONAL')
+         ORDER BY p.created_at DESC`
       );
       const { oculos } = await lojaDaEmpresa(req.empresa);
       res.json(result.rows.map((row) => ({ ...row, ...fotosPublicas(row, oculos) })));
@@ -1393,7 +1409,7 @@ async function startServer() {
         `SELECT p.id, p.nome, p.nome_curto, p.codigo_sku, p.preco_custo, p.preco_venda, p.imagem_url, p.fotos, p.status, p.disponibilidade,
                 p.formato, p.estilo, p.cor_armacao, p.diametro_cm, p.ponte_cm, p.largura_total_cm, p.material, p.tipo, p.genero, p.tamanho, p.grade,
                 p.fornecedor, p.codigo_fornecedor, p.nome_fornecedor, p.link_fornecedor, p.vezes_em_maleta, p.pedido_condicional_id,
-                p.estoque, COALESCE(mp.pedidos, '{}') AS maletas, COALESCE(cardinality(mp.pedidos), 0)::int AS em_maleta,
+                p.estoque, p.anuncio_id, COALESCE(mp.pedidos, '{}') AS maletas, COALESCE(cardinality(mp.pedidos), 0)::int AS em_maleta,
                 to_char(uc.data_compra, 'YYYY-MM-DD') AS ultima_compra, uc.preco_custo AS custo_ultima_compra,
                 ca.preco_custo AS custo_compra_anterior, COALESCE(nc.total, 0)::int AS total_compras
          FROM produtos p
@@ -1459,6 +1475,9 @@ async function startServer() {
     if (erroEspec) return res.status(400).json({ error: erroEspec.mensagem });
     const estoque = lerQuantidade(req.body.estoque);
     if (estoque === false) return res.status(400).json({ error: 'Estoque inválido' });
+    // Promoção (Configurações > POP Anúncio): vale para todos os tamanhos/cores do cadastro
+    const anuncioId = anuncios.lerAnuncioId(req.body.anuncio_id);
+    if (anuncioId === false) return res.status(400).json({ error: 'Promoção inválida' });
     // Roupas: com a grade de tamanhos, cada tamanho vira um produto com o seu estoque,
     // SKU "<SKU>-<tamanho>", nome "<nome> - <tamanho>", as mesmas fotos e grade = SKU
     // (o código do modelo, que junta os tamanhos num card só na vitrine).
@@ -1508,12 +1527,12 @@ async function startServer() {
           : fotosComuns;
         const result = await client.query(
           `INSERT INTO produtos (nome, codigo_sku, preco_custo, preco_venda, imagem_url, fotos, disponibilidade, formato, estilo, cor_armacao, fornecedor, codigo_fornecedor, link_fornecedor,
-                                 diametro_cm, ponte_cm, largura_total_cm, material, tipo, nome_curto, genero, estoque, tamanho, grade, nome_fornecedor)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24)
+                                 diametro_cm, ponte_cm, largura_total_cm, material, tipo, nome_curto, genero, estoque, tamanho, grade, nome_fornecedor, anuncio_id)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25)
            RETURNING *`,
           [peca.nome, peca.sku, preco_custo, preco_venda, fotos[0] || null, fotos, disponibilidade, formato, estilo, peca.cor || cor_armacao, fornecedor, codigoFornecedor, linkFornecedor,
             e.diametro_cm ?? null, e.ponte_cm ?? null, e.largura_total_cm ?? null, e.material || '', e.tipo || '', e.nome_curto || '', e.genero || '',
-            peca.estoque, e.tamanho || '', e.grade || '', nomeFornecedor]
+            peca.estoque, e.tamanho || '', e.grade || '', nomeFornecedor, anuncioId ?? null]
         );
         // A compra do cadastro conta ao menos 1 peça (o custo fica registrado mesmo sem estoque)
         await registrarCompraCadastro(client, result.rows[0], { quantidade: peca.estoque || 1 });
@@ -1525,6 +1544,7 @@ async function startServer() {
     } catch (err) {
       if (client) await client.query('ROLLBACK').catch(() => {});
       console.error(err);
+      if (err.code === '23503' && anuncioId) return res.status(400).json({ error: 'Essa promoção não existe mais. Escolha outra.' });
       if (err.code === '23505') {
         return res.status(400).json({ error: tamanhos ? 'SKU já cadastrado (algum tamanho já existe com esse código)' : cores ? 'SKU já cadastrado (alguma cor já existe com esse código)' : 'SKU já cadastrado' });
       }
@@ -1559,6 +1579,8 @@ async function startServer() {
     const estoque = lerQuantidade(req.body.estoque);
     if (estoque === false) return res.status(400).json({ error: 'Estoque inválido' });
     const mexeNoEstoque = status !== undefined || estoque !== null;
+    const anuncioId = anuncios.lerAnuncioId(req.body.anuncio_id);
+    if (anuncioId === false) return res.status(400).json({ error: 'Promoção inválida' });
 
     let client;
     try {
@@ -1589,6 +1611,10 @@ async function startServer() {
       if (req.body.codigo_fornecedor !== undefined) addField('codigo_fornecedor', textoCurto(req.body.codigo_fornecedor, 100));
       if (req.body.nome_fornecedor !== undefined) addField('nome_fornecedor', textoCurto(req.body.nome_fornecedor, 255));
       if (req.body.link_fornecedor !== undefined) addField('link_fornecedor', linkFornecedor);
+      if (anuncioId !== undefined) {
+        fields.push(`anuncio_id = $${paramCount++}`);
+        values.push(anuncioId);
+      }
       // addField pula undefined, mas null (medida apagada) precisa entrar
       for (const [campo, valor] of Object.entries(espec)) {
         fields.push(`${campo} = $${paramCount++}`);
@@ -1653,6 +1679,14 @@ async function startServer() {
         for (const r of irmaos.rows) removidas.push(...(r.fotos || []).filter((url) => url && !result.rows[0].fotos.includes(url)));
       }
 
+      // A promoção vale para o modelo inteiro (todos os tamanhos e cores do mesmo código)
+      if (anuncioId !== undefined && grade) {
+        await client.query(
+          'UPDATE produtos SET anuncio_id = $1, updated_at = CURRENT_TIMESTAMP WHERE grade = $2 AND id <> $3 AND anuncio_id IS DISTINCT FROM $1',
+          [anuncioId, grade, result.rows[0].id]
+        );
+      }
+
       // Apaga as fotos que saíram, menos as que outro produto ainda usa
       const idsRemovidos = [...new Set(removidas.map(idDaImagem).filter(Boolean))];
       if (idsRemovidos.length) {
@@ -1668,6 +1702,7 @@ async function startServer() {
     } catch (err) {
       if (client) await client.query('ROLLBACK').catch(() => {});
       console.error(err);
+      if (err.code === '23503' && anuncioId) return res.status(400).json({ error: 'Essa promoção não existe mais. Escolha outra.' });
       if (err.code === '23505') {
         return res.status(400).json({ error: 'SKU já cadastrado' });
       }
@@ -3280,8 +3315,12 @@ async function startServer() {
         if (acessorios === true) tabelas.push('acessorios', 'compras_acessorio');
         tabelas.push('pedidos_fornecedor', 'movimentos_estoque');
         await client.query(`TRUNCATE ${tabelas.join(', ')} RESTART IDENTITY`);
-        // Sem produtos, a única imagem que ainda serve é a logo
-        await client.query('DELETE FROM imagens WHERE id IS DISTINCT FROM $1', [logo]);
+        // Sem produtos, as únicas imagens que ainda servem são a logo e as dos anúncios
+        await client.query(
+          `DELETE FROM imagens i WHERE i.id IS DISTINCT FROM $1
+             AND NOT EXISTS (SELECT 1 FROM anuncios a WHERE '/imagens/' || i.id IN (a.selo_url, a.imagem_url))`,
+          [logo]
+        );
       } else {
         const fotos = await client.query(
           `SELECT DISTINCT unnest(fotos || ARRAY[imagem_url]) AS url FROM produtos`
@@ -4265,6 +4304,15 @@ async function startServer() {
     hashSenha: hashSenhaCliente,
     loginDono: (req) => getAuthConfig(req.empresa).user,
   });
+  // Promoções: Configurações > POP Anúncio (o cadastro de produtos lê a lista para escolher)
+  const anunciosHandlers = anuncios.criarHandlers({ salvarImagem, idDaImagem, detectarTipoImagem });
+  app.get('/api/anuncios', anunciosHandlers.publico);
+  app.get('/api/admin/anuncios', exigirArea('config', 'produtos'), anunciosHandlers.listar);
+  app.post('/api/admin/anuncios', exigirArea('config'), uploadAnuncio, anunciosHandlers.criar);
+  app.put('/api/admin/anuncios/popup', exigirArea('config'), anunciosHandlers.escolherPopup);
+  app.put('/api/admin/anuncios/:id', exigirArea('config'), uploadAnuncio, anunciosHandlers.atualizar);
+  app.delete('/api/admin/anuncios/:id', exigirArea('config'), anunciosHandlers.excluir);
+
   app.get('/api/admin/usuarios', soDono, usuariosHandlers.listar);
   app.post('/api/admin/usuarios', soDono, usuariosHandlers.criar);
   app.put('/api/admin/usuarios/:id', soDono, usuariosHandlers.atualizar);

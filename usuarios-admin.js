@@ -14,7 +14,7 @@ const AREAS = [
   { chave: 'clientes', nome: 'Clientes' },
   { chave: 'acerto', nome: 'Acerto de maleta' },
   { chave: 'metricas', nome: 'Métricas e relatórios' },
-  { chave: 'config', nome: 'Configurações da loja (WhatsApp, dados e logo)' },
+  { chave: 'config', nome: 'Configurações da loja (WhatsApp, dados, logo e POP Anúncio)' },
 ];
 const CHAVES_AREAS = new Set(AREAS.map((a) => a.chave));
 

@@ -223,7 +223,7 @@ function extrairFuncao(html, nome) {
   }
 }
 
-const FUNCOES = ['ordemTamanho', 'agruparCards', 'variaPorCor', 'coresCard', 'botoesCor', 'nomeModelo', 'tamanhosCard', 'botaoGrupoCard', 'grupoDoProduto', 'botoesTamanho', 'escapeHtml', 'fotosDoProduto', 'fotoProvador', 'indiceCircular', 'ehSobEncomenda', 'calcularSinal', 'passaFiltroStatus',
+const FUNCOES = ['ordemTamanho', 'agruparCards', 'variaPorCor', 'coresCard', 'botoesCor', 'promocaoDoGrupo', 'htmlSeloPromocao', 'nomeModelo', 'tamanhosCard', 'botaoGrupoCard', 'grupoDoProduto', 'botoesTamanho', 'escapeHtml', 'fotosDoProduto', 'fotoProvador', 'indiceCircular', 'ehSobEncomenda', 'calcularSinal', 'passaFiltroStatus',
   'etiquetaProduto', 'nomeCard', 'tagsCard', 'botaoMaletaCard', 'passaFiltroGenero', 'renderizarCatalogo', 'trocarFotoCard', 'especificacoesProduto', 'renderizarDetalhes', 'mostrarFotoDetalhes'];
 
 function vitrine(produtos) {
@@ -232,6 +232,7 @@ function vitrine(produtos) {
   const elemento = () => ({ innerHTML: '', value: '', dataset: {}, classList: { add() {}, remove() {} } });
   const ctx = vm.createContext({
     produtos,
+    promocaoFiltro: 0, anuncios: [],
     maleta: { itens: [] },
     fotoCard: {},
     detalhes: null,
