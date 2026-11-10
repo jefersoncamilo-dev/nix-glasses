@@ -132,7 +132,7 @@ describe('vitrine: atalhos e pílulas de filtro', () => {
 
     const chips = { innerHTML: '', setAttribute() {}, classList: { toggle: (c, v) => { chips.escondido = v; } } };
     const filtroFormato = { value: '' };
-    const c = vm.createContext({ chipsFormato: chips, filtroFormato, rotulos: { formato: 'Formato da lente', formatos: 'Todos os formatos' } });
+    const c = vm.createContext({ chipsFormato: chips, filtroFormato, promocaoFiltro: 0, rotulos: { formato: 'Formato da lente', formatos: 'Todos os formatos' } });
     vm.runInContext(`${extrairFuncao('escapeHtml')}\n${extrairFuncao('preencherFiltroFormato')}; this.f = preencherFiltroFormato;`, c);
     c.produtos = [{ formato: 'Aviador' }, { formato: 'Aviador' }];
     vm.runInContext('produtos = this.produtos; f();', c);

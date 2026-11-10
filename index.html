@@ -809,9 +809,9 @@
           atualizarMaletaUI();
           mostrarToast(saiu === 1 ? '1 peça saiu da maleta porque não está mais disponível' : `${saiu} peças saíram da maleta porque não estão mais disponíveis`);
         }
+        renderizarPromocoes();
         preencherFiltroFormato();
         preencherFiltroTamanho();
-        renderizarPromocoes();
         atualizarContagemFiltros();
         renderizarCatalogo();
         agendarPopupInicial();
@@ -890,6 +890,7 @@
       chipsFormato.querySelectorAll('[data-formato]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.formato === '')));
       marcarFiltroStatus('');
       renderizarPromocoes();
+      preencherFiltroFormato();
       atualizarContagemFiltros();
       renderizarCatalogo();
       atualizarGuias();
@@ -900,9 +901,11 @@
 
     // Chips de formato (óculos) ou categoria (roupas/geral): uma pílula por formato
     // cadastrado nos produtos, em ordem alfabética, depois de "TODOS".
+    // Com uma promoção escolhida, só os formatos que têm produto na promoção.
     // O escolhido fica em #filtroFormato (campo escondido), que o catálogo lê.
     function preencherFiltroFormato() {
-      const formatos = [...new Set(produtos.map(p => p.formato).filter(Boolean))].sort((a, b) => String(a).localeCompare(String(b), 'pt-BR'));
+      const base = promocaoFiltro ? produtos.filter(p => Number(p.anuncio_id) === promocaoFiltro) : produtos;
+      const formatos = [...new Set(base.map(p => p.formato).filter(Boolean))].sort((a, b) => String(a).localeCompare(String(b), 'pt-BR'));
       // O formato escolhido sumiu do catálogo (produto vendido/apagado): volta para "Todos"
       if (!formatos.includes(filtroFormato.value)) filtroFormato.value = '';
       chipsFormato.setAttribute('aria-label', rotulos.formato);
@@ -966,6 +969,20 @@
         grupos.push(grupo);
       }
       return grupos.map(g => g.sort((a, b) => ordemTamanho(a.tamanho) - ordemTamanho(b.tamanho)));
+    }
+
+    // Ordem dos cards na vitrine: primeiro os modelos disponíveis (pronta entrega, livres
+    // para provar), depois os Sob Encomenda e por último os que estão com outra cliente
+    // (em condicional). Um modelo vale pela melhor peça (tamanho/cor) que tem. Dentro de
+    // cada grupo fica a ordem de sempre (os mais novos primeiro).
+    function ordemDisponibilidade(p) {
+      if (ehSobEncomenda(p)) return 1;
+      return p.status === 'DISPONIVEL' ? 0 : 2;
+    }
+
+    function ordenarCardsVitrine(grupos) {
+      const ordem = g => Math.min(...g.map(ordemDisponibilidade));
+      return grupos.map((g, i) => ({ g, i, o: ordem(g) })).sort((a, b) => a.o - b.o || a.i - b.i).map(x => x.g);
     }
 
     // Todos os tamanhos/cores do modelo de um produto (o próprio produto, se não tiver grade)
@@ -1215,7 +1232,7 @@
       catalogoGrid.classList.remove('hidden');
       emptyState.classList.add('hidden');
 
-      agruparCards(filtrados).forEach(grupo => {
+      ordenarCardsVitrine(agruparCards(filtrados)).forEach(grupo => {
         const produto = grupo[0];
         const jaNaMaleta = grupo.some(p => maleta.itens.some(i => i.id === p.id));
         const tamanhos = tamanhosCard(grupo);
