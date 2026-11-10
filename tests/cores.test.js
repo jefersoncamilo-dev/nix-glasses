@@ -139,6 +139,52 @@ describe('cadastro por cores', () => {
   });
 });
 
+describe('editar produto: incluir cores no modelo', () => {
+  it('produto avulso vira modelo: as cores novas copiam os dados e as fotos 2 a 4, cada uma com a sua capa', async () => {
+    const r = await enviar('POST', '/api/produtos', { ...oculos, cor_armacao: 'Preto', estoque: '2', material: 'Acetato' },
+      { foto1: png(1), foto2: png(2), foto4: png(4) });
+    const p = r.body;
+    const add = await enviar('POST', `/api/produtos/${p.id}/cores`, { cores: [{ cor: 'Azul', estoque: 3 }, { cor: 'Verde', estoque: 0 }] }, { foto_cor_1: png(31) });
+    assert.equal(add.status, 201);
+    assert.equal(add.body.grade, 'NIX-010');
+    const [azul, verde] = add.body.produtos;
+    assert.deepEqual([azul.codigo_sku, azul.nome, azul.cor_armacao, azul.estoque, azul.status], ['NIX-010-AZUL', 'Nix Rex Aviador - Azul', 'Azul', 3, 'DISPONIVEL']);
+    assert.deepEqual([verde.estoque, verde.status], [0, 'ESGOTADO']);
+    assert.equal(azul.material, 'Acetato');
+    assert.equal(azul.preco_venda, p.preco_venda);
+    assert.equal(azul.grade, 'NIX-010');
+    assert.notEqual(azul.fotos[0], p.fotos[0]);
+    assert.equal(azul.fotos[1], p.fotos[1]);
+    assert.equal(azul.fotos[3], p.fotos[3]);
+    assert.equal(verde.fotos[0], p.fotos[0]);
+    // O produto editado entra no modelo (código do modelo = o seu SKU) e continua com o seu SKU
+    const lista = (await api('GET', '/api/admin/produtos')).body;
+    const original = lista.find((x) => x.id === p.id);
+    assert.deepEqual([original.grade, original.codigo_sku, original.estoque], ['NIX-010', 'NIX-010', 2]);
+  });
+
+  it('modelo por cores: tira o " - cor" do nome, recusa cor repetida e numera SKU já usado', async () => {
+    const r = await enviar('POST', '/api/produtos', { ...oculos, cores: [{ cor: 'Preto', estoque: 1 }] });
+    const [preto] = r.body.produtos;
+    const repetida = await enviar('POST', `/api/produtos/${preto.id}/cores`, { cores: [{ cor: 'preto', estoque: 1 }] });
+    assert.equal(repetida.status, 400);
+    assert.match(repetida.body.error, /já tem a cor/);
+    await enviar('POST', '/api/produtos', { ...oculos, nome: 'Outro', codigo_sku: 'NIX-010-ROSA' });
+    const add = await enviar('POST', `/api/produtos/${preto.id}/cores`, { cores: [{ cor: 'Rosa', estoque: 1 }] });
+    assert.equal(add.status, 201);
+    assert.deepEqual([add.body.produtos[0].codigo_sku, add.body.produtos[0].nome], ['NIX-010-ROSA-2', 'Nix Rex Aviador - Rosa']);
+  });
+
+  it('pede a cor do produto antes e recusa cores inválidas', async () => {
+    const r = await enviar('POST', '/api/produtos', { ...oculos, cor_armacao: '' });
+    const semCor = await enviar('POST', `/api/produtos/${r.body.id}/cores`, { cores: [{ cor: 'Azul', estoque: 1 }] });
+    assert.equal(semCor.status, 400);
+    assert.match(semCor.body.error, /cor deste produto/);
+    assert.equal((await enviar('POST', `/api/produtos/${r.body.id}/cores`, { cores: 'x' })).status, 400);
+    assert.equal((await enviar('POST', '/api/produtos/999999/cores', { cores: [{ cor: 'Azul', estoque: 1 }] })).status, 404);
+  });
+});
+
 // ---------- Vitrine: um card por modelo, a cor escolhida pela foto ----------
 
 function extrairFuncao(html, nome) {

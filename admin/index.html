@@ -1366,8 +1366,9 @@
           </fieldset>
           <!-- Produto novo com várias cores: um produto por cor, cada um com a sua foto e o seu estoque -->
           <fieldset id="coresProduto" class="hidden md:col-span-2 border border-gray-200 rounded-lg p-4">
-            <legend class="px-1 text-sm font-semibold text-gray-800">Cores e quantidades</legend>
-            <p class="text-xs text-gray-500 mb-3">Para um modelo com várias cores: inclua cada cor com a foto dela e a quantidade de peças que tem (0 = cadastrada, mas esgotada). Cada cor vira um produto com o seu estoque e SKU próprio (ex.: NIX-010-PRETO); na vitrine o modelo aparece num card só e o cliente escolhe a cor pela foto. A foto da cor é a capa; as fotos 2 a 4 lá embaixo valem para todas as cores. Sem cores, é um produto só, como sempre.</p>
+            <legend id="coresTitulo" class="px-1 text-sm font-semibold text-gray-800">Cores e quantidades</legend>
+            <p id="coresEdicao" class="hidden text-xs text-gray-500 mb-3">Inclua outras cores deste modelo: cada cor nova vira um produto com a sua foto, o seu estoque e SKU próprio, com os mesmos preços e especificações deste produto (as fotos 2 a 4 também vêm daqui). A cor deste produto é a do campo Cor lá em cima. <span id="coresExistentes" class="block mt-1 font-medium text-gray-700"></span></p>
+            <p id="coresNovo" class="text-xs text-gray-500 mb-3">Para um modelo com várias cores: inclua cada cor com a foto dela e a quantidade de peças que tem (0 = cadastrada, mas esgotada). Cada cor vira um produto com o seu estoque e SKU próprio (ex.: NIX-010-PRETO); na vitrine o modelo aparece num card só e o cliente escolhe a cor pela foto. A foto da cor é a capa; as fotos 2 a 4 lá embaixo valem para todas as cores. Sem cores, é um produto só, como sempre.</p>
             <div id="listaCores" class="space-y-2"></div>
             <button type="button" id="btnAdicionarCor" class="mt-3 inline-flex items-center gap-1 px-3 py-2 border border-orange-300 text-orange-700 rounded-lg text-sm font-medium hover:bg-orange-50">+ Adicionar cor</button>
             <p id="coresResumo" class="text-xs text-gray-600 mt-2"></p>
@@ -3194,13 +3195,13 @@
     function atualizarResumoCores() {
       const cores = lerCoresFormulario();
       const resumo = document.getElementById('coresResumo');
-      const sku = document.getElementById('codigo_sku').value.trim() || 'SKU';
+      const sku = (produtoEditando && (document.getElementById('grade').value.trim() || document.getElementById('codigo_sku').value.trim())) || document.getElementById('codigo_sku').value.trim() || 'SKU';
       const skuCor = (cor) => cor.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase().replace(/[^A-Z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'COR';
       if (cores === null) resumo.textContent = 'Confira as cores: cada cor com nome, uma vez só, e a quantidade em número.';
       else if (!cores.length) resumo.textContent = '';
       else {
         const semFoto = cores.filter(c => !c.file).length;
-        resumo.textContent = `Vai cadastrar ${cores.length} cor(es), ${cores.reduce((t, c) => t + c.estoque, 0)} peça(s): ${cores.map(c => `${sku}-${skuCor(c.cor)} (${c.estoque})`).join(', ')}. O estoque e a cor lá de cima não valem: cada cor usa os seus.${semFoto ? ` ${semFoto} cor(es) sem foto usam a foto 1.` : ''}`;
+        resumo.textContent = `Vai cadastrar ${cores.length} cor(es), ${cores.reduce((t, c) => t + c.estoque, 0)} peça(s): ${cores.map(c => `${sku}-${skuCor(c.cor)} (${c.estoque})`).join(', ')}. ${produtoEditando ? ' Elas são incluídas ao salvar.' : ' O estoque e a cor lá de cima não valem: cada cor usa os seus.'}${semFoto ? ` ${semFoto} cor(es) sem foto usam a foto 1.` : ''}`;
       }
     }
 
@@ -3285,7 +3286,17 @@
       // As cores também só no cadastro novo (na edição, cada cor é um produto)
       coresForm = [];
       desenharCores();
-      document.getElementById('coresProduto').classList.toggle('hidden', !!produto);
+      // Na edição: inclui cores novas no modelo deste produto (não vale para tamanhos de roupa)
+      document.getElementById('coresProduto').classList.toggle('hidden', !!(produto && String(produto.tamanho || '').trim()));
+      document.getElementById('coresTitulo').textContent = produto ? 'Incluir cores neste modelo' : 'Cores e quantidades';
+      document.getElementById('coresNovo').classList.toggle('hidden', !!produto);
+      document.getElementById('coresEdicao').classList.toggle('hidden', !produto);
+      if (produto) {
+        const grade = String(produto.grade || '').trim();
+        const doModelo = grade ? todosProdutos.filter(p => String(p.grade || '').trim() === grade) : [produto];
+        const lista = doModelo.map(p => `${p.cor_armacao || 'sem cor'} (${Number(p.estoque) || 0})`).join(', ');
+        document.getElementById('coresExistentes').textContent = `Cores que o modelo já tem: ${lista}.`;
+      }
       atualizarAvisoSinal();
       atualizarAbrirLink();
       preencherPromocaoProduto(produto);
@@ -3758,6 +3769,11 @@
       // Fotos já salvas que continuam (null = posição vazia ou removida)
       formData.append('fotos_manter', JSON.stringify(slotsFotos.map(s => (s.file ? null : s.url))));
 
+      // Edição com cores novas: conferidas antes de salvar o produto
+      const coresNovas = id ? lerCoresFormulario() : [];
+      if (coresNovas === null) return mostrarToast('Confira as cores: cada cor com nome, uma vez só, e a quantidade em número', 'error');
+      if (coresNovas.length && !document.getElementById('cor_armacao').value.trim()) return mostrarToast('Preencha a Cor deste produto antes de incluir outras cores', 'error');
+
       try {
         const url = id ? `/api/produtos/${id}` : '/api/produtos';
         const method = id ? 'PUT' : 'POST';
@@ -3767,6 +3783,23 @@
           throw new Error(err.error || 'Erro ao salvar');
         }
         const salvo = await res.json().catch(() => ({}));
+        if (id && coresNovas.length) {
+          const formCores = new FormData();
+          formCores.append('cores', JSON.stringify(coresNovas.map(c => ({ cor: c.cor, estoque: c.estoque }))));
+          for (const [i, c] of coresNovas.entries()) {
+            if (c.file) formCores.append(`foto_cor_${i + 1}`, await prepararImagem(c.file));
+          }
+          const rc = await fetchAdmin(`/api/produtos/${id}/cores`, { method: 'POST', body: formCores });
+          const corpo = await rc.json().catch(() => ({}));
+          if (!rc.ok) {
+            carregarProdutos();
+            throw new Error(`Produto salvo, mas as cores não: ${corpo.error || 'erro ao incluir as cores'}`);
+          }
+          mostrarToast(`Produto atualizado e ${corpo.produtos.length} cor(es) incluída(s)!`);
+          fecharModal();
+          carregarProdutos();
+          return;
+        }
         mostrarToast(id ? 'Produto atualizado!' : Array.isArray(salvo.produtos) ? `${salvo.produtos.length} ${formData.has('cores') ? 'cores' : 'tamanhos'} cadastrad${formData.has('cores') ? 'a' : 'o'}s!` : 'Produto criado!');
         // Produto novo importado do fornecedor: a foto principal vai para o computador como <SKU>.jpg
         const foto = !id && imagemImportada;
