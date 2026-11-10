@@ -266,7 +266,7 @@ function extrairFuncao(html, nome) {
 
 function carregar(arquivo, funcoes, globais = {}) {
   const html = fs.readFileSync(path.join(__dirname, '..', ...arquivo.split('/')), 'utf8');
-  const ctx = vm.createContext({ ...globais, Intl, Number, String, Math, Array, Set });
+  const ctx = vm.createContext({ promocaoFiltro: 0, anuncios: [], ...globais, Intl, Number, String, Math, Array, Set });
   vm.runInContext(`${funcoes.map(f => extrairFuncao(html, f)).join('\n')}\n${funcoes.map(f => `this.${f} = ${f};`).join('\n')}`, ctx);
   return ctx;
 }
@@ -344,7 +344,7 @@ describe('painel: cálculo e filtros dos pedidos', () => {
 });
 
 describe('vitrine: intenção de cada item no carrinho', () => {
-  const FUNCOES = ['escapeHtml', 'calcularSinal', 'itemEhEncomenda', 'resumoMaleta', 'definirIntencao', 'textoGuiaCatalogo', 'atualizarGuias', 'atualizarBarraMaleta', 'atualizarMaletaUI', 'montarTextoWhatsapp'];
+  const FUNCOES = ['escapeHtml', 'calcularSinal', 'itemEhEncomenda', 'resumoMaleta', 'definirIntencao', 'textoGuiaCatalogo', 'anuncioPorId', 'atualizarGuias', 'atualizarBarraMaleta', 'atualizarMaletaUI', 'montarTextoWhatsapp'];
   function vitrine(itens) {
     const el = () => ({ innerHTML: '', textContent: '', classList: { add() {}, remove() {} } });
     const els = { maletaVazia: el(), maletaItens: el(), maletaFormulario: el(), maletaFooter: el(), maletaTotal: el(), maletaSinal: el() };

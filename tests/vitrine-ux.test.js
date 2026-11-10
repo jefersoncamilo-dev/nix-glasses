@@ -20,7 +20,7 @@ function extrairFuncao(html, nome) {
 
 function carregar(arquivo, funcoes, globais = {}, prefixo = '') {
   const html = fs.readFileSync(path.join(__dirname, '..', ...arquivo.split('/')), 'utf8');
-  const ctx = vm.createContext({ Number, String, Math, Map, Set, Object, URL, Intl, ...globais });
+  const ctx = vm.createContext({ Number, String, Math, Map, Set, Object, URL, Intl, promocaoFiltro: 0, anuncios: [], ...globais });
   vm.runInContext(`${typeof prefixo === 'function' ? prefixo(html) : prefixo}\n${funcoes.map((f) => extrairFuncao(html, f)).join('\n')}\n${funcoes.map((f) => `this.${f} = ${f};`).join('\n')}`, ctx);
   return ctx;
 }
@@ -113,7 +113,7 @@ describe('vitrine: botão Voltar fecha o modal', () => {
 
 // ---------- Card do produto ----------
 
-const VITRINE = ['ordemTamanho', 'agruparCards', 'grupoDoProduto', 'variaPorCor', 'coresCard', 'botoesCor', 'nomeModelo', 'tamanhosCard', 'botaoGrupoCard', 'escapeHtml', 'fotosDoProduto', 'fotoProvador', 'indiceCircular', 'ehSobEncomenda', 'calcularSinal', 'passaFiltroStatus', 'etiquetaProduto',
+const VITRINE = ['ordemTamanho', 'agruparCards', 'grupoDoProduto', 'variaPorCor', 'coresCard', 'botoesCor', 'promocaoDoGrupo', 'htmlSeloPromocao', 'nomeModelo', 'tamanhosCard', 'botaoGrupoCard', 'escapeHtml', 'fotosDoProduto', 'fotoProvador', 'indiceCircular', 'ehSobEncomenda', 'calcularSinal', 'passaFiltroStatus', 'etiquetaProduto',
   'nomeCard', 'tagsCard', 'botaoMaletaCard', 'atualizarCardMaleta', 'passaFiltroGenero', 'renderizarCatalogo', 'toggleMaleta'];
 
 function elemento() {

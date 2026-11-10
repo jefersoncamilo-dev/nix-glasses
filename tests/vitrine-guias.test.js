@@ -184,7 +184,9 @@ describe('vitrine: atalhos e pílulas de filtro', () => {
     assert.equal(c.f('', false, 0), false); // catálogo vazio
     // a contagem das pílulas é só do modelo escolhido
     const fn = extrairFuncao('atualizarContagemFiltros');
-    assert.match(fn, /formato \? produtos\.filter\(p => p\.formato === formato\)/);
+    assert.match(fn, /formato \? daPromocao\.filter\(p => p\.formato === formato\)/);
+    // e, com uma promoção escolhida, só dos modelos dela
+    assert.match(fn, /promocaoFiltro \? produtos\.filter\(p => Number\(p\.anuncio_id\) === promocaoFiltro\)/);
   });
 
   it('barra flutuante da maleta: contador + "Ver Maleta"; aparece com o 1º modelo ou ao rolar no celular', () => {
@@ -232,7 +234,7 @@ describe('vitrine: atalhos e pílulas de filtro', () => {
     assert.ok(bloco, 'faltou desligar as animações de guia');
   });
 
-  it('pop-up do Provador Virtual: só no celular, loja de óculos, a cada entrada no site e com modelo para provar', () => {
+  it('pop-up do Provador Virtual (quando escolhido no painel): só no celular, loja de óculos, a cada entrada no site e com modelo para provar', () => {
     const ctxPopup = vm.createContext({});
     vm.runInContext(`${extrairFuncao('devePopupProvador')}\nthis.devePopupProvador = devePopupProvador;`, ctxPopup);
     const deve = ctxPopup.devePopupProvador;
@@ -249,6 +251,9 @@ describe('vitrine: atalhos e pílulas de filtro', () => {
     // aparece em toda entrada (sem guardar "já visto"), fecha pelo Voltar e é agendado depois de carregar os óculos
     assert.doesNotMatch(html, /CHAVE_POPUP_PROVADOR|popupProvadorJaVisto/);
     assert.match(html, /popupProvador: \(\) => fecharPopupProvador\(\)/);
-    assert.match(html, /renderizarCatalogo\(\);\s*agendarPopupProvador\(\);/);
+    // o pop-up da tela inicial agora é escolhido no painel (POP Anúncio): o do provador só
+    // abre quando a escolha é "Provador Virtual"
+    assert.match(html, /renderizarCatalogo\(\);\s*agendarPopupInicial\(\);/);
+    assert.match(extrairFuncao('agendarPopupInicial'), /popupInicial\.tipo === 'provador'\) return agendarPopupProvador\(\)/);
   });
 });
