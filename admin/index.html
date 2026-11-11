@@ -993,6 +993,32 @@
                 </span>
               </label>
             </div>
+            <!-- Produtos por linha na tela inicial da vitrine (celular e computador) -->
+            <div>
+              <span class="block text-sm font-medium text-gray-700 mb-1">Produtos por linha na vitrine</span>
+              <div class="grid grid-cols-2 gap-3">
+                <label class="block">
+                  <span class="block text-xs text-gray-600 mb-1">No celular</span>
+                  <select id="loja_colunas_celular" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500">
+                  <option value="1">1 produto</option>
+                  <option value="2">2 produtos</option>
+                  <option value="3">3 produtos (padrão)</option>
+                  <option value="4">4 produtos</option>
+                  </select>
+                </label>
+                <label class="block">
+                  <span class="block text-xs text-gray-600 mb-1">No computador</span>
+                  <select id="loja_colunas_computador" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500">
+                  <option value="2">2 produtos</option>
+                  <option value="3">3 produtos</option>
+                  <option value="4">4 produtos (padrão)</option>
+                  <option value="5">5 produtos</option>
+                  <option value="6">6 produtos</option>
+                  </select>
+                </label>
+              </div>
+              <p class="text-xs text-gray-500 mt-1">Quantos cards aparecem lado a lado na tela inicial. Menos por linha deixa a foto maior; mais por linha mostra mais modelos de uma vez.</p>
+            </div>
           </div>
           <button id="btnSalvarLoja" class="mt-6 bg-orange-500 hover:bg-orange-600 text-white px-6 py-2 rounded-lg font-medium transition-colors">Salvar dados da loja</button>
         </div>
@@ -5819,6 +5845,8 @@
       document.querySelectorAll('[data-campo-loja]').forEach(el => { el.value = loja[el.dataset.campoLoja] || ''; });
       document.getElementById('loja_nicho').value = loja.nicho || (loja.oculos ? 'oculos' : 'geral');
       document.getElementById('loja_provador').checked = loja.provador !== false;
+      document.getElementById('loja_colunas_celular').value = String(loja.colunas_celular || 3);
+      document.getElementById('loja_colunas_computador').value = String(loja.colunas_computador || 4);
       if (globalThis.LOJA) globalThis.LOJA.provador = loja.provador !== false;
       // O cadastro de produtos acompanha o tipo de loja salvo
       if (globalThis.LOJA && loja.nicho && globalThis.LOJA.nicho !== loja.nicho) {
@@ -5849,6 +5877,8 @@
       const corpo = { nicho: document.getElementById('loja_nicho').value };
       // A chave só vale para loja de óculos (nos outros tipos fica escondida e não muda)
       if (corpo.nicho === 'oculos') corpo.provador = document.getElementById('loja_provador').checked;
+      corpo.colunas_celular = Number(document.getElementById('loja_colunas_celular').value);
+      corpo.colunas_computador = Number(document.getElementById('loja_colunas_computador').value);
       document.querySelectorAll('[data-campo-loja]').forEach(el => { corpo[el.dataset.campoLoja] = el.value; });
       try {
         await respostaLoja(await fetchAdmin('/api/admin/loja', {

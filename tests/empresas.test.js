@@ -144,9 +144,11 @@ describe('dados da loja', () => {
 describe('renderizarPagina', () => {
   const paginas = ['index.html', 'admin/index.html', 'admin/login.html', 'admin/acerto.html'];
   const ler = (p) => fs.readFileSync(path.join(__dirname, '..', p), 'utf8');
-  const semScriptLoja = (html) => html.replace(/  <script>window\.LOJA = .*;<\/script>\n/, '');
+  const semScriptLoja = (html) => html
+    .replace(/  <style>:root \{ --colunas-celular: .*<\/style>\n/, '')
+    .replace(/  <script>window\.LOJA = .*;<\/script>\n/, '');
 
-  it('com os dados da Nix, as páginas ficam iguais (só ganham window.LOJA)', () => {
+  it('com os dados da Nix, as páginas ficam iguais (só ganham window.LOJA e as colunas da vitrine)', () => {
     for (const p of paginas) {
       const html = ler(p);
       const out = renderizarPagina(html, PADRAO_NIX);
