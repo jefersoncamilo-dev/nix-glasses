@@ -827,6 +827,8 @@ function validarProdutoLote(linha) {
     cadastrar_novo: l.cadastrar_novo === true,
     // Importado pelo link: fica fora da vitrine até ser liberado no painel
     em_conferencia: l.em_conferencia === true,
+    // Cor cadastrada esgotada ou sob encomenda, sem peça na loja: estoque inicial 0
+    sem_estoque: l.sem_estoque === true,
   };
   const { espec, erro: erroEspec } = lerEspecificacoes(l);
   Object.assign(produto, { diametro_cm: null, ponte_cm: null, largura_total_cm: null, material: '', tipo: '', nome_curto: '', genero: '', tamanho: '', grade: '' }, espec);
@@ -889,9 +891,12 @@ function lerCores(v) {
   for (const item of lista) {
     const cor = textoCurto(item && item.cor, 100);
     const estoque = lerQuantidade(item && item.estoque);
-    if (!cor || estoque === false || vistos.has(cor.toLowerCase())) return false;
+    // Disponibilidade da cor: Disponível (pronta entrega), Sob Encomenda ou Esgotado (estoque 0).
+    // Sem ela, a cor segue a disponibilidade do produto.
+    const disp = item && item.disponibilidade ? String(item.disponibilidade) : '';
+    if (!cor || estoque === false || vistos.has(cor.toLowerCase()) || (disp && !['PRONTA_ENTREGA', 'SOB_ENCOMENDA', 'ESGOTADO'].includes(disp))) return false;
     vistos.add(cor.toLowerCase());
-    cores.push({ cor, estoque: estoque ?? 0 });
+    cores.push({ cor, estoque: disp === 'ESGOTADO' ? 0 : estoque ?? 0, disponibilidade: disp === 'ESGOTADO' ? 'PRONTA_ENTREGA' : disp });
   }
   return cores;
 }
@@ -1023,13 +1028,14 @@ async function gravarLote(client, produtos) {
        ON CONFLICT (codigo_sku) DO NOTHING
        RETURNING *`,
       [p.nome, p.codigo_sku, p.preco_custo, p.preco_venda, p.status, p.disponibilidade, p.formato, p.estilo, p.cor_armacao, p.fornecedor, p.codigo_fornecedor, p.link_fornecedor,
-        p.diametro_cm, p.ponte_cm, p.largura_total_cm, p.material, p.tipo, p.nome_curto, p.genero, compra.quantidade, p.tamanho, p.grade, p.nome_fornecedor, p.em_conferencia === true]
+        p.diametro_cm, p.ponte_cm, p.largura_total_cm, p.material, p.tipo, p.nome_curto, p.genero, p.sem_estoque ? 0 : compra.quantidade, p.tamanho, p.grade, p.nome_fornecedor, p.em_conferencia === true]
     );
     if (!r.rows.length) {
       ignorados.push({ linha: i, codigo_sku: p.codigo_sku, codigo_fornecedor: p.codigo_fornecedor, campo: 'codigo_sku', motivo: 'SKU já cadastrado' });
       continue;
     }
-    await registrarCompraCadastro(client, r.rows[0], compra);
+    // Cor sem peça (esgotada ou sob encomenda): nada foi comprado
+    if (!p.sem_estoque) await registrarCompraCadastro(client, r.rows[0], compra);
     if (p.status !== 'DISPONIVEL') await aplicarStatusManual(client, r.rows[0].id, p.status);
     criados.push((await recalcularStatus(client, [r.rows[0].id]))[0]);
   }
@@ -1524,7 +1530,7 @@ async function startServer() {
           for (let n = 2; skusCor.has(sku); n++) sku = `${codigoFinal}-${skuDaCor(c.cor)}-${n}`;
           skusCor.add(sku);
           return {
-            nome: `${nome} - ${c.cor}`, sku, estoque: c.estoque, cor: c.cor, fotoCor: (req.fotosCores || [])[i] || null,
+            nome: `${nome} - ${c.cor}`, sku, estoque: c.estoque, cor: c.cor, fotoCor: (req.fotosCores || [])[i] || null, disponibilidade: c.disponibilidade,
             espec: { ...espec, grade: textoCurto(codigoFinal, 100) },
           };
         })
@@ -1554,7 +1560,7 @@ async function startServer() {
                                  diametro_cm, ponte_cm, largura_total_cm, material, tipo, nome_curto, genero, estoque, tamanho, grade, nome_fornecedor, anuncio_id, preco_promocional)
            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26)
            RETURNING *`,
-          [peca.nome, peca.sku, preco_custo, preco_venda, fotos[0] || null, fotos, disponibilidade, formato, estilo, peca.cor || cor_armacao, fornecedor, codigoFornecedor, linkFornecedor,
+          [peca.nome, peca.sku, preco_custo, preco_venda, fotos[0] || null, fotos, peca.disponibilidade || disponibilidade, formato, estilo, peca.cor || cor_armacao, fornecedor, codigoFornecedor, linkFornecedor,
             e.diametro_cm ?? null, e.ponte_cm ?? null, e.largura_total_cm ?? null, e.material || '', e.tipo || '', e.nome_curto || '', e.genero || '',
             peca.estoque, e.tamanho || '', e.grade || '', nomeFornecedor, anuncioId ?? null, precoPromocional ?? null]
         );
@@ -1651,7 +1657,7 @@ async function startServer() {
                                  diametro_cm, ponte_cm, largura_total_cm, material, tipo, nome_curto, genero, estoque, tamanho, grade, nome_fornecedor, anuncio_id, preco_promocional)
            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, '', $22, $23, $24, $25)
            RETURNING *`,
-          [`${nomeBase} - ${c.cor}`, sku, p.preco_custo, p.preco_venda, fotos[0] || null, fotos, p.disponibilidade, p.formato, p.estilo, c.cor, p.fornecedor, p.codigo_fornecedor, p.link_fornecedor,
+          [`${nomeBase} - ${c.cor}`, sku, p.preco_custo, p.preco_venda, fotos[0] || null, fotos, c.disponibilidade || p.disponibilidade, p.formato, p.estilo, c.cor, p.fornecedor, p.codigo_fornecedor, p.link_fornecedor,
             p.diametro_cm, p.ponte_cm, p.largura_total_cm, p.material || '', p.tipo || '', p.nome_curto || '', p.genero || '', c.estoque, grade, p.nome_fornecedor || '', p.anuncio_id ?? null, p.preco_promocional ?? null]
         );
         await registrarCompraCadastro(client, result.rows[0], { quantidade: c.estoque || 1 });
