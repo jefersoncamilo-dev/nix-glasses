@@ -99,6 +99,28 @@ describe('editar em estoque (API)', () => {
     assert.equal(r.body.produtos[0].codigo_sku, 'mesmo');
   });
 
+  it('grava a promoção e o preço promocional, e a promoção vale para o modelo inteiro', async () => {
+    const anuncio = (await h.pool.query(`INSERT INTO anuncios (nome) VALUES ('Black Friday') RETURNING id`)).rows[0].id;
+    const [a, b, c] = await cadastrar(linha('PR-1', { grade: 'MOD-1' }), linha('PR-2', { grade: 'MOD-1' }), linha('PR-3'));
+    // preço promocional maior que o de venda e sem promoção: erro
+    let r = await editar([{ ...linha('PR-3'), id: c.id, anuncio_id: anuncio, preco_promocional: 130 }]);
+    assert.equal(r.status, 400);
+    assert.deepEqual(r.body.erros.map(e => e.campo), ['preco_promocional']);
+    r = await editar([{ ...linha('PR-1', { grade: 'MOD-1' }), id: a.id, anuncio_id: anuncio, preco_promocional: '99,90' }, { ...linha('PR-3'), id: c.id, anuncio_id: null, preco_promocional: 50 }]);
+    assert.equal(r.status, 200);
+    const linhas = (await h.pool.query('SELECT id, anuncio_id, preco_promocional FROM produtos ORDER BY id')).rows;
+    assert.deepEqual(linhas.map(x => [x.id, x.anuncio_id, x.preco_promocional === null ? null : Number(x.preco_promocional)]),
+      [[a.id, anuncio, 99.9], [b.id, anuncio, 99.9], [c.id, null, null]]);
+    // tirar a promoção tira o preço promocional; linha sem os campos não mexe na promoção
+    r = await editar([{ ...linha('PR-1', { grade: 'MOD-1' }), id: a.id, anuncio_id: '', preco_promocional: '' }, { ...linha('PR-2', { grade: 'MOD-1' }), id: b.id, nome: 'Outro' }]);
+    assert.equal(r.status, 200);
+    const depois = (await h.pool.query('SELECT anuncio_id, preco_promocional FROM produtos WHERE id = ANY($1) ORDER BY id', [[a.id, b.id]])).rows;
+    assert.deepEqual(depois.map(x => [x.anuncio_id, x.preco_promocional === null ? null : Number(x.preco_promocional)]), [[null, null], [anuncio, 99.9]]);
+    // promoção que não existe
+    r = await editar([{ ...linha('PR-3'), id: c.id, anuncio_id: 999999 }]);
+    assert.equal(r.status, 400);
+  });
+
   it('recusa lote vazio e acima do limite', async () => {
     assert.equal((await editar([])).status, 400);
     assert.equal((await api('PUT', '/api/admin/produtos/lote', { body: {} })).status, 400);
@@ -125,11 +147,13 @@ describe('painel: editar em estoque', () => {
     html.match(/const CAMPOS_MEDIDA = \[.*\];/)[0],
     html.match(/const CAMPOS_SO_CADASTRO = .*;/)[0],
     html.match(/const COLUNAS_EDICAO = [\s\S]*?;\n/)[0],
+    html.match(/const CAMPOS_NUMERO_EDICAO = .*;/)[0],
     ...['escapeHtml', 'linhaLoteEstaVazia', 'lerPreco', 'lerMedida', 'formatarMedida', 'linkSeguro', 'lerDataCompra', 'validarLote',
-      'precoParaTexto', 'linhaDoProduto', 'linhaEdicaoAlterada', 'validarLinhaEdicao', 'produtoDaEdicao', 'textoBuscaEdicao', 'linhasVisiveisEdicao'].map(f => extrairFuncao(html, f)),
+      'precoParaTexto', 'linhaDoProduto', 'linhaEdicaoAlterada', 'validarLinhaEdicao', 'produtoDaEdicao', 'textoBuscaEdicao', 'linhasVisiveisEdicao',
+      'valorOrdenacaoEdicao', 'ordenarLinhasEdicao', 'agruparLinhasEdicao', 'aplicarEmMassaEdicao'].map(f => extrairFuncao(html, f)),
   ].join('\n');
   const ctx = vm.createContext({});
-  vm.runInContext(`${fonte}\nthis.f = { COLUNAS_EDICAO, linhaDoProduto, linhaEdicaoAlterada, validarLinhaEdicao, produtoDaEdicao, linhasVisiveisEdicao };`, ctx);
+  vm.runInContext(`${fonte}\nthis.f = { COLUNAS_EDICAO, linhaDoProduto, linhaEdicaoAlterada, validarLinhaEdicao, produtoDaEdicao, linhasVisiveisEdicao, ordenarLinhasEdicao, agruparLinhasEdicao, aplicarEmMassaEdicao };`, ctx);
   const f = ctx.f;
   const produto = { id: 7, nome: 'Nix Raptor', codigo_sku: 'NIX-7', preco_custo: '50.00', preco_venda: '139.90', disponibilidade: 'SOB_ENCOMENDA', status: 'DISPONIVEL', estoque: 2, formato: 'Esportivo', diametro_cm: '6.0', genero: null, fornecedor: 'Clush', cor_armacao: 'Preto' };
 
@@ -185,5 +209,55 @@ describe('painel: editar em estoque', () => {
     assert.deepEqual(f.linhasVisiveisEdicao([a, b], originais, '', true).map(l => l.id), []);
     b.nome = 'Mudou';
     assert.deepEqual(f.linhasVisiveisEdicao([a, b], originais, '', true).map(l => l.id), [8]);
+  });
+
+  it('tem as colunas novas do cadastro: promoção e preço promocional', () => {
+    const campos = f.COLUNAS_EDICAO.map(c => c.campo);
+    assert.equal(campos.slice(campos.indexOf('preco_venda'), campos.indexOf('preco_venda') + 3).join(), 'preco_venda,anuncio_id,preco_promocional');
+    for (const c of ['nome_fornecedor', 'cor_armacao', 'grade', 'tamanho', 'nome_curto']) assert.ok(campos.includes(c), c);
+    const l = f.linhaDoProduto({ ...produto, anuncio_id: 3, preco_promocional: '99.90', fotos: [null, '/imagens/9'] });
+    assert.equal(l.anuncio_id, '3');
+    assert.equal(l.preco_promocional, '99,90');
+    assert.equal(l.foto, '/imagens/9');
+    assert.equal(f.linhaDoProduto(produto).anuncio_id, '');
+    assert.deepEqual(Object.keys(f.validarLinhaEdicao({ ...l, preco_promocional: '150' })), ['preco_promocional']);
+    assert.deepEqual(Object.keys(f.validarLinhaEdicao({ ...l, anuncio_id: '' })), ['preco_promocional']);
+    let p = f.produtoDaEdicao(l);
+    assert.equal(p.anuncio_id, 3);
+    assert.equal(p.preco_promocional, 99.9);
+    assert.equal(p.foto, undefined);
+    p = f.produtoDaEdicao({ ...l, anuncio_id: '' });
+    assert.equal(p.anuncio_id, null);
+    assert.equal(p.preco_promocional, null);
+  });
+
+  it('ordena por texto (sem acento) e por número, com os vazios no fim', () => {
+    const linhas = [
+      { id: 1, nome: 'Óculos B', preco_venda: '100,00', fornecedor: '' },
+      { id: 2, nome: 'aviador', preco_venda: '1.234,00', fornecedor: 'Tassia' },
+      { id: 3, nome: 'Oculos A', preco_venda: '99,90', fornecedor: 'Clush' },
+    ];
+    assert.deepEqual(f.ordenarLinhasEdicao(linhas, 'nome', 1).map(l => l.id), [2, 3, 1]);
+    assert.deepEqual(f.ordenarLinhasEdicao(linhas, 'nome', -1).map(l => l.id), [1, 3, 2]);
+    assert.deepEqual(f.ordenarLinhasEdicao(linhas, 'preco_venda', 1).map(l => l.id), [3, 1, 2]);
+    assert.deepEqual(f.ordenarLinhasEdicao(linhas, 'fornecedor', 1).map(l => l.id), [3, 2, 1]);
+    assert.deepEqual(f.ordenarLinhasEdicao(linhas, 'fornecedor', -1).map(l => l.id), [2, 3, 1]);
+    assert.deepEqual(f.ordenarLinhasEdicao(linhas, '', 1).map(l => l.id), [1, 2, 3]);
+  });
+
+  it('agrupa pelo valor da coluna (sem diferenciar maiúscula), com o grupo vazio no fim', () => {
+    const linhas = [
+      { id: 1, fornecedor: 'tassia' }, { id: 2, fornecedor: '' }, { id: 3, fornecedor: 'Clush' }, { id: 4, fornecedor: 'Tassia ' },
+    ];
+    const grupos = f.agruparLinhasEdicao(linhas, 'fornecedor', v => v || 'Sem fornecedor');
+    assert.deepEqual(JSON.parse(JSON.stringify(grupos.map(g => [g.titulo, g.linhas.map(l => l.id)]))), [['Clush', [3]], ['tassia', [1, 4]], ['Sem fornecedor', [2]]]);
+  });
+
+  it('alterar em massa muda a coluna das linhas e tirar a promoção tira o preço promocional', () => {
+    const linhas = [{ id: 1, fornecedor: 'A', anuncio_id: '2', preco_promocional: '50' }, { id: 2, fornecedor: 'B', anuncio_id: '', preco_promocional: '' }];
+    assert.equal(f.aplicarEmMassaEdicao(linhas, 'fornecedor', 'B'), 1);
+    assert.deepEqual(linhas.map(l => l.fornecedor), ['B', 'B']);
+    assert.equal(f.aplicarEmMassaEdicao(linhas, 'anuncio_id', ''), 1);
+    assert.equal(linhas[0].preco_promocional, '');
   });
 });

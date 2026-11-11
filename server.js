@@ -1892,10 +1892,20 @@ async function startServer() {
       idsVistos.add(id);
       const estoque = lerQuantidade(l.estoque);
       if (estoque === false) erros.push({ linha: i, campo: 'estoque', mensagem: 'Estoque inválido (número inteiro a partir de 0)' });
+      // Promoção e preço promocional: só mexe quando a linha manda (painel antigo não manda)
+      const anuncioId = anuncios.lerAnuncioId(l.anuncio_id);
+      if (anuncioId === false) erros.push({ linha: i, campo: 'anuncio_id', mensagem: 'Promoção inválida' });
+      let precoPromocional = anuncios.lerPrecoPromocional(l.preco_promocional);
+      if (precoPromocional === false) erros.push({ linha: i, campo: 'preco_promocional', mensagem: 'Preço promocional inválido' });
+      if (anuncioId === null) precoPromocional = null;
+      if (precoPromocional && anuncioId === undefined) precoPromocional = undefined;
+      if (precoPromocional && !(precoPromocional < r.produto.preco_venda)) {
+        erros.push({ linha: i, campo: 'preco_promocional', mensagem: 'O preço promocional precisa ser menor que o preço de venda' });
+      }
       const sku = r.produto.codigo_sku.toLowerCase();
       if (sku && skusVistos.has(sku)) erros.push({ linha: i, campo: 'codigo_sku', mensagem: `SKU repetido na linha ${skusVistos.get(sku) + 1}` });
       else if (sku) skusVistos.set(sku, i);
-      return { ...r.produto, id, estoque };
+      return { ...r.produto, id, estoque, anuncio_id: anuncioId === false ? undefined : anuncioId, preco_promocional: precoPromocional === false ? undefined : precoPromocional };
     });
     if (erros.length) {
       erros.sort((a, b) => a.linha - b.linha);
@@ -1907,7 +1917,8 @@ async function startServer() {
       client = await req.db.connect();
       await client.query('BEGIN');
       const ids = produtos.map((p) => p.id);
-      const existentes = new Set((await client.query('SELECT id FROM produtos WHERE id = ANY($1) FOR UPDATE', [ids])).rows.map((r) => Number(r.id)));
+      const antes = new Map((await client.query('SELECT id, anuncio_id, preco_promocional FROM produtos WHERE id = ANY($1) FOR UPDATE', [ids])).rows.map((r) => [Number(r.id), r]));
+      const existentes = new Set(antes.keys());
       // SKU que já é de outro produto (fora das linhas enviadas)
       const outros = await client.query(
         'SELECT lower(codigo_sku) AS sku FROM produtos WHERE lower(codigo_sku) = ANY($1) AND NOT (id = ANY($2))',
@@ -1934,6 +1945,23 @@ async function startServer() {
             p.material, p.tipo, p.nome_curto, p.genero, p.tamanho, p.grade]
         );
         if (p.estoque !== null) await client.query('UPDATE produtos SET estoque = $2 WHERE id = $1', [p.id, p.estoque]);
+        if (p.anuncio_id !== undefined) {
+          const a = antes.get(p.id);
+          const promo = p.preco_promocional === undefined ? (p.anuncio_id ? a.preco_promocional : null) : p.preco_promocional;
+          await client.query('UPDATE produtos SET anuncio_id = $2, preco_promocional = $3 WHERE id = $1', [p.id, p.anuncio_id, promo]);
+          // Como na edição de um produto: a promoção vale para o modelo inteiro (mesmo
+          // código do modelo). Só quando mudou, e sem mexer nas linhas que vieram juntas.
+          const mudou = Number(a.anuncio_id || 0) !== Number(p.anuncio_id || 0) || Number(a.preco_promocional || 0) !== Number(promo || 0);
+          if (mudou && p.grade) {
+            await client.query(
+              `UPDATE produtos SET anuncio_id = $1, preco_promocional = $2, updated_at = CURRENT_TIMESTAMP
+               WHERE grade = $3 AND NOT (id = ANY($4))
+                 AND (anuncio_id IS DISTINCT FROM $1 OR preco_promocional IS DISTINCT FROM $2)
+                 AND ($2::numeric IS NULL OR $2::numeric < preco_venda)`,
+              [p.anuncio_id, promo, p.grade, ids]
+            );
+          }
+        }
       }
       const atualizados = await recalcularStatus(client, ids);
       await client.query('COMMIT');
@@ -1942,6 +1970,7 @@ async function startServer() {
       if (client) await client.query('ROLLBACK').catch(() => {});
       console.error(err);
       if (err.code === '23505') return res.status(400).json({ error: 'Dois produtos ficariam com o mesmo SKU' });
+      if (err.code === '23503') return res.status(400).json({ error: 'Essa promoção não existe mais. Escolha outra.' });
       res.status(500).json({ error: 'Erro ao salvar as alterações' });
     } finally {
       if (client) client.release();

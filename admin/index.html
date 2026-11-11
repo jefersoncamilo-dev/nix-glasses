@@ -397,12 +397,38 @@
             </div>
           </div>
           <div class="flex flex-col sm:flex-row gap-2 mb-4">
-            <input type="search" id="edicaoBusca" class="w-full sm:w-80 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500" placeholder="Buscar por nome, SKU, fornecedor ou cor...">
+            <input type="search" id="edicaoBusca" class="w-full sm:w-80 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500" placeholder="Buscar por nome, SKU, fornecedor, cor ou modelo...">
             <label class="inline-flex items-center gap-2 text-sm text-gray-700"><input type="checkbox" id="edicaoSoAlterados" class="rounded border-gray-300"> Só os alterados</label>
+          </div>
+          <!-- Ordenar e agrupar as linhas, e mudar uma coluna de várias linhas de uma vez -->
+          <div class="grid lg:grid-cols-2 gap-3 mb-4">
+            <div class="bg-white rounded-xl border border-gray-200 p-3 flex flex-wrap items-end gap-3">
+              <label class="text-xs font-medium text-gray-600">Ordenar por
+                <span class="flex gap-1 mt-1">
+                  <select id="edicaoOrdenar" class="px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-orange-500"></select>
+                  <button type="button" id="edicaoDirecao" class="px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-700 hover:bg-gray-50" title="Inverter a ordem">A→Z</button>
+                </span>
+              </label>
+              <label class="text-xs font-medium text-gray-600">Agrupar por
+                <select id="edicaoAgrupar" class="block mt-1 px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-orange-500"></select>
+              </label>
+              <span id="edicaoGruposAcoes" class="hidden text-sm pb-2">
+                <button type="button" id="edicaoAbrirGrupos" class="underline text-orange-600 hover:text-orange-700">Abrir todos</button> ·
+                <button type="button" id="edicaoFecharGrupos" class="underline text-orange-600 hover:text-orange-700">Fechar todos</button>
+              </span>
+            </div>
+            <div class="bg-white rounded-xl border border-gray-200 p-3">
+              <p class="text-xs font-medium text-gray-600 mb-1">Alterar em massa <span class="font-normal text-gray-500">(muda a coluna em todas as linhas da lista, ou só de um grupo pelo botão no grupo; depois confira e salve)</span></p>
+              <div class="flex flex-wrap items-center gap-2">
+                <select id="edicaoMassaCampo" class="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"></select>
+                <span id="edicaoMassaValorCaixa" class="flex-1 min-w-[10rem]"></span>
+                <button type="button" id="btnEdicaoMassa" disabled class="bg-gray-800 hover:bg-gray-900 disabled:opacity-40 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors">Aplicar à lista</button>
+              </div>
+            </div>
           </div>
           <div class="bg-white rounded-xl border border-gray-200 overflow-hidden">
             <div class="overflow-x-auto">
-              <table class="w-full min-w-[1750px] text-sm">
+              <table class="w-full min-w-[2100px] text-sm">
                 <thead class="bg-gray-50 border-b border-gray-200">
                   <tr id="edicaoCabecalho"></tr>
                 </thead>
@@ -2447,8 +2473,22 @@
     // Sem os campos de compra (quantidade, pedido, data) e sem o status: no lugar
     // dele vai o Estoque (peças na loja), e o status sai do estoque.
     const CAMPOS_SO_CADASTRO = ['status', 'quantidade', 'pedido_fornecedor', 'data_compra'];
+    // Depois do preço de venda vêm a Promoção (Configurações > POP Anúncio) e o preço promocional.
     const COLUNAS_EDICAO = COLUNAS_LOTE.filter(c => !CAMPOS_SO_CADASTRO.includes(c.campo))
-      .flatMap(c => c.campo === 'disponibilidade' ? [c, { campo: 'estoque', titulo: 'Estoque', largura: 'w-20' }] : [c]);
+      .flatMap(c => c.campo === 'disponibilidade' ? [c, { campo: 'estoque', titulo: 'Estoque', largura: 'w-20' }]
+        : c.campo === 'preco_venda' ? [c, { campo: 'anuncio_id', titulo: 'Promoção', largura: 'w-40', promocao: true }, { campo: 'preco_promocional', titulo: 'Preço promo.', largura: 'w-24' }]
+        : [c]);
+    // Colunas que dá para agrupar (o título sai da coluna, com o nome do nicho)
+    const GRUPOS_EDICAO = ['formato', 'grade', 'fornecedor', 'cor_armacao', 'anuncio_id', 'disponibilidade', 'estilo', 'material', 'tipo', 'genero', 'tamanho'];
+    const CAMPOS_NUMERO_EDICAO = ['preco_custo', 'preco_venda', 'preco_promocional', 'estoque', 'diametro_cm', 'ponte_cm', 'largura_total_cm'];
+    let ordemEdicao = { campo: '', dir: 1 };
+    let grupoEdicao = '';
+    let gruposFechadosEdicao = new Set();
+    try {
+      const salvo = JSON.parse(localStorage.getItem('edicaoOrdemGrupo') || '{}');
+      if (COLUNAS_EDICAO.some(c => c.campo === salvo.campo)) ordemEdicao = { campo: salvo.campo, dir: salvo.dir === -1 ? -1 : 1 };
+      if (GRUPOS_EDICAO.includes(salvo.grupo)) grupoEdicao = salvo.grupo;
+    } catch (_) { /* sem preferência salva */ }
     let linhasEdicao = [];
     let originaisEdicao = new Map();
     let errosEdicao = {};
@@ -2469,6 +2509,10 @@
       l.disponibilidade = p.disponibilidade === 'SOB_ENCOMENDA' ? 'SOB_ENCOMENDA' : 'PRONTA_ENTREGA';
       l.genero = ['MASCULINO', 'FEMININO', 'UNISSEX'].includes(p.genero) ? p.genero : '';
       l.estoque = String(Number(p.estoque) || 0);
+      l.anuncio_id = Number(p.anuncio_id) > 0 ? String(Number(p.anuncio_id)) : '';
+      l.preco_promocional = l.anuncio_id ? precoParaTexto(p.preco_promocional) : '';
+      // Só para mostrar (não é coluna editável): a capa do produto
+      l.foto = (Array.isArray(p.fotos) && p.fotos.find(Boolean)) || p.imagem_url || '';
       return l;
     }
 
@@ -2480,6 +2524,13 @@
     function validarLinhaEdicao(l) {
       const erros = { ...validarLote([{ ...l, quantidade: '', data_compra: '' }])[0] };
       if (!/^\d{1,6}$/.test(String(l.estoque ?? '').trim())) erros.estoque = 'Estoque inválido (número inteiro a partir de 0)';
+      const promo = String(l.preco_promocional ?? '').trim();
+      if (promo) {
+        const n = lerPreco(promo);
+        if (!String(l.anuncio_id ?? '').trim()) erros.preco_promocional = 'Escolha a promoção para usar o preço promocional';
+        else if (Number.isNaN(n)) erros.preco_promocional = 'Preço promocional inválido';
+        else if (!(n < lerPreco(l.preco_venda))) erros.preco_promocional = 'O preço promocional precisa ser menor que o preço de venda';
+      }
       return erros;
     }
 
@@ -2491,11 +2542,13 @@
       p.preco_custo = lerPreco(l.preco_custo);
       p.preco_venda = lerPreco(l.preco_venda);
       p.estoque = Number(p.estoque);
+      p.anuncio_id = Number(p.anuncio_id) > 0 ? Number(p.anuncio_id) : null;
+      p.preco_promocional = p.anuncio_id && p.preco_promocional ? lerPreco(p.preco_promocional) : null;
       return p;
     }
 
     function textoBuscaEdicao(l) {
-      return ['nome', 'codigo_sku', 'fornecedor', 'codigo_fornecedor', 'nome_fornecedor', 'cor_armacao', 'formato', 'estilo', 'nome_curto']
+      return ['nome', 'codigo_sku', 'fornecedor', 'codigo_fornecedor', 'nome_fornecedor', 'cor_armacao', 'formato', 'estilo', 'nome_curto', 'grade', 'tamanho']
         .map(c => l[c]).join(' ').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
     }
 
@@ -2513,29 +2566,197 @@
       document.getElementById('edicaoResumo').textContent = `${linhasEdicao.length} produto(s) cadastrado(s)${alteradas ? `, ${alteradas} alterado(s) ainda não salvo(s)` : ''}. Máximo de ${MAX_LOTE} alterações por vez.`;
     }
 
-    function renderizarEdicao() {
-      const visiveis = linhasVisiveisEdicao(linhasEdicao, originaisEdicao, document.getElementById('edicaoBusca').value, document.getElementById('edicaoSoAlterados').checked);
-      tabelaEdicao.innerHTML = visiveis.length ? visiveis.map(l => {
-        const erros = errosEdicao[l.id] || {};
-        const alterada = linhaEdicaoAlterada(l, originaisEdicao.get(l.id));
-        const celulas = COLUNAS_EDICAO.map(col => {
-          const erro = erros[col.campo];
-          const borda = erro ? 'border-red-500 bg-red-50' : 'border-gray-300';
-          const attrs = `data-id="${l.id}" data-campo="${col.campo}" class="edicao-campo ${col.largura} px-2 py-1.5 border ${borda} rounded focus:outline-none focus:ring-2 focus:ring-orange-500" title="${escapeHtml(erro || '')}"`;
-          const campo = col.opcoes
-            ? `<select ${attrs}>${col.opcoes.map(([v, t]) => `<option value="${v}"${l[col.campo] === v ? ' selected' : ''}>${t}</option>`).join('')}</select>`
-            : `<input type="${col.campo === 'link_fornecedor' ? 'url' : 'text'}" ${attrs} value="${escapeHtml(l[col.campo])}"${col.campo.startsWith('preco') || CAMPOS_MEDIDA.includes(col.campo) ? ' inputmode="decimal"' : col.campo === 'estoque' ? ' inputmode="numeric"' : ''}>`;
-          return `<td class="px-2 py-2 align-top">${campo}</td>`;
-        }).join('');
-        const mensagens = Object.values(erros);
-        return `
+    // Valor para ordenar: número nas colunas de número, texto sem acento nas outras
+    function valorOrdenacaoEdicao(l, campo) {
+      const v = String(l[campo] ?? '').trim();
+      if (!v) return null;
+      if (CAMPOS_NUMERO_EDICAO.includes(campo)) {
+        const n = CAMPOS_MEDIDA.includes(campo) ? lerMedida(v) : campo === 'estoque' ? Number(v) : lerPreco(v);
+        return Number.isFinite(n) ? n : null;
+      }
+      return v.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+    }
+
+    // Ordena pela coluna (dir 1 = A→Z / menor primeiro, -1 = ao contrário). Vazios sempre no fim.
+    // Sem coluna, fica na ordem de sempre (a da lista de produtos).
+    function ordenarLinhasEdicao(linhas, campo, dir) {
+      if (!campo) return linhas.slice();
+      return linhas.map((l, i) => ({ l, i, v: valorOrdenacaoEdicao(l, campo) })).sort((a, b) => {
+        if (a.v === null || b.v === null) return a.v === b.v ? a.i - b.i : (a.v === null ? 1 : -1);
+        const c = typeof a.v === 'number' ? a.v - b.v : a.v.localeCompare(b.v, 'pt-BR', { numeric: true });
+        return c ? c * dir : a.i - b.i;
+      }).map(x => x.l);
+    }
+
+    // Separa as linhas em grupos pelo valor da coluna (sem diferenciar maiúscula/acento).
+    // Os grupos vão em ordem alfabética, com o grupo vazio no fim; dentro de cada grupo
+    // as linhas continuam na ordem em que vieram. rotulo(valor) dá o título do grupo.
+    function agruparLinhasEdicao(linhas, campo, rotulo) {
+      const grupos = new Map();
+      linhas.forEach(l => {
+        const valor = String(l[campo] ?? '').trim();
+        const chave = valor.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+        if (!grupos.has(chave)) grupos.set(chave, { chave, titulo: rotulo ? rotulo(valor) : valor, linhas: [] });
+        grupos.get(chave).linhas.push(l);
+      });
+      return [...grupos.values()].sort((a, b) => (!a.chave || !b.chave) ? (a.chave ? -1 : b.chave ? 1 : 0)
+        : String(a.titulo).localeCompare(String(b.titulo), 'pt-BR', { numeric: true }));
+    }
+
+    // Alterar em massa: põe o mesmo valor na coluna de todas as linhas. Tirar a promoção
+    // tira junto o preço promocional. Devolve quantas linhas mudaram.
+    function aplicarEmMassaEdicao(linhas, campo, valor) {
+      let mudou = 0;
+      linhas.forEach(l => {
+        const antes = JSON.stringify([l[campo], l.preco_promocional]);
+        l[campo] = valor;
+        if (campo === 'anuncio_id' && !valor) l.preco_promocional = '';
+        if (JSON.stringify([l[campo], l.preco_promocional]) !== antes) mudou++;
+      });
+      return mudou;
+    }
+
+    function colunaEdicao(campo) {
+      return COLUNAS_EDICAO.find(c => c.campo === campo);
+    }
+
+    // Opções da coluna Promoção: as ativas e a que a linha já tem (mesmo inativa)
+    function opcoesPromocaoEdicao(atual) {
+      const lista = anunciosAdmin.filter(a => a.ativo || String(a.id) === String(atual));
+      const opcoes = [['', '—'], ...lista.map(a => [String(a.id), `${a.nome}${a.ativo ? '' : ' (inativa)'}`])];
+      if (atual && !lista.some(a => String(a.id) === String(atual))) opcoes.push([String(atual), `Promoção ${atual}`]);
+      return opcoes;
+    }
+
+    function opcoesColunaEdicao(col, atual) {
+      return col.promocao ? opcoesPromocaoEdicao(atual) : col.opcoes;
+    }
+
+    // Título do grupo: o texto da opção (Disponibilidade, Gênero, Promoção) ou o valor
+    function rotuloGrupoEdicao(campo, valor) {
+      const col = colunaEdicao(campo);
+      if (!valor) return `Sem ${tituloColunaLote(col).replace(' *', '').toLowerCase()}`;
+      const opcoes = col && opcoesColunaEdicao(col, valor);
+      const opcao = opcoes && opcoes.find(([v]) => v === valor);
+      return opcao ? opcao[1] : valor;
+    }
+
+    function htmlCampoEdicao(col, valor, attrs) {
+      const opcoes = opcoesColunaEdicao(col, valor);
+      if (opcoes) return `<select ${attrs}>${opcoes.map(([v, t]) => `<option value="${escapeHtml(v)}"${valor === v ? ' selected' : ''}>${escapeHtml(t)}</option>`).join('')}</select>`;
+      const modo = col.campo.startsWith('preco') || CAMPOS_MEDIDA.includes(col.campo) ? ' inputmode="decimal"' : col.campo === 'estoque' ? ' inputmode="numeric"' : '';
+      return `<input type="${col.campo === 'link_fornecedor' ? 'url' : 'text'}" ${attrs} value="${escapeHtml(valor)}"${modo}>`;
+    }
+
+    function htmlLinhaEdicao(l) {
+      const erros = errosEdicao[l.id] || {};
+      const alterada = linhaEdicaoAlterada(l, originaisEdicao.get(l.id));
+      const celulas = COLUNAS_EDICAO.map(col => {
+        const erro = erros[col.campo];
+        const borda = erro ? 'border-red-500 bg-red-50' : 'border-gray-300';
+        const attrs = `data-id="${l.id}" data-campo="${col.campo}" class="edicao-campo ${col.largura} px-2 py-1.5 border ${borda} rounded focus:outline-none focus:ring-2 focus:ring-orange-500" title="${escapeHtml(erro || '')}"`;
+        return `<td class="px-2 py-2 align-top">${htmlCampoEdicao(col, String(l[col.campo] ?? ''), attrs)}</td>`;
+      }).join('');
+      const mensagens = Object.values(erros);
+      const foto = l.foto
+        ? `<img src="${escapeHtml(l.foto)}" alt="" loading="lazy" class="w-10 h-10 shrink-0 object-cover rounded border border-gray-200" onerror="imgFallback(this)">`
+        : '<span class="w-10 h-10 shrink-0 rounded bg-gray-100 flex items-center justify-center text-[10px] text-gray-400">sem foto</span>';
+      return `
         <tr data-linha-edicao="${l.id}" class="${alterada ? 'bg-amber-50' : ''}">
-          <td class="px-3 py-2 align-top whitespace-nowrap"><button type="button" onclick="editarProduto(${l.id})" class="text-xs text-orange-600 hover:underline" title="Abrir o produto (fotos, histórico)">Abrir</button></td>
+          <td class="px-3 py-2 align-top whitespace-nowrap"><button type="button" onclick="editarProduto(${l.id})" class="flex flex-col items-center gap-1 w-12 text-xs text-orange-600 hover:underline" title="Abrir o produto (fotos, cores, histórico)">${foto}Abrir</button></td>
           ${celulas}
         </tr>${mensagens.length ? `
         <tr class="edicao-erro"><td></td><td colspan="${COLUNAS_EDICAO.length}" class="px-2 pb-2 text-xs text-red-600">${mensagens.map(escapeHtml).join(' • ')}</td></tr>` : ''}`;
-      }).join('') : `<tr><td colspan="${COLUNAS_EDICAO.length + 1}" class="px-4 py-8 text-center text-gray-500">${linhasEdicao.length ? 'Nenhum produto com essa busca' : 'Nenhum produto cadastrado'}</td></tr>`;
+    }
+
+    function salvarPreferenciaEdicao() {
+      try { localStorage.setItem('edicaoOrdemGrupo', JSON.stringify({ campo: ordemEdicao.campo, dir: ordemEdicao.dir, grupo: grupoEdicao })); } catch (_) { /* ok */ }
+    }
+
+    function renderizarCabecalhoEdicao() {
+      document.getElementById('edicaoCabecalho').innerHTML = '<th class="px-3 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Foto</th>'
+        + COLUNAS_EDICAO.map(c => {
+          const ativa = ordemEdicao.campo === c.campo;
+          return `<th class="px-2 py-3 text-left text-xs font-semibold uppercase whitespace-nowrap ${ativa ? 'text-orange-700' : 'text-gray-500'}">`
+            + `<button type="button" data-ordenar-edicao="${c.campo}" class="uppercase hover:text-orange-600" title="Ordenar por esta coluna">${tituloColunaLote(c)}${ativa ? (ordemEdicao.dir === 1 ? ' ▲' : ' ▼') : ''}</button></th>`;
+        }).join('');
+      const ordenar = document.getElementById('edicaoOrdenar');
+      ordenar.innerHTML = '<option value="">Ordem da lista</option>' + COLUNAS_EDICAO.map(c => `<option value="${c.campo}">${tituloColunaLote(c).replace(' *', '')}</option>`).join('');
+      ordenar.value = ordemEdicao.campo;
+      const dir = document.getElementById('edicaoDirecao');
+      const numero = CAMPOS_NUMERO_EDICAO.includes(ordemEdicao.campo);
+      dir.textContent = ordemEdicao.dir === 1 ? (numero ? 'Menor → maior' : 'A → Z') : (numero ? 'Maior → menor' : 'Z → A');
+      dir.disabled = !ordemEdicao.campo;
+      const agrupar = document.getElementById('edicaoAgrupar');
+      agrupar.innerHTML = '<option value="">Sem grupos</option>' + GRUPOS_EDICAO.map(campo => `<option value="${campo}">${tituloColunaLote(colunaEdicao(campo)).replace(' *', '')}</option>`).join('');
+      agrupar.value = grupoEdicao;
+      document.getElementById('edicaoGruposAcoes').classList.toggle('hidden', !grupoEdicao);
+      const massa = document.getElementById('edicaoMassaCampo');
+      if (!massa.options.length) {
+        massa.innerHTML = '<option value="">Escolha a coluna</option>' + COLUNAS_EDICAO.filter(c => !['nome', 'codigo_sku'].includes(c.campo))
+          .map(c => `<option value="${c.campo}">${tituloColunaLote(c).replace(' *', '')}</option>`).join('');
+        montarValorMassa();
+      }
+    }
+
+    // Campo do valor do "Alterar em massa", do tipo da coluna escolhida
+    function montarValorMassa() {
+      const col = colunaEdicao(document.getElementById('edicaoMassaCampo').value);
+      const caixa = document.getElementById('edicaoMassaValorCaixa');
+      const attrs = 'id="edicaoMassaValor" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"';
+      caixa.innerHTML = col ? htmlCampoEdicao(col, '', `${attrs} placeholder="Novo valor (vazio apaga)"`) : `<input type="text" ${attrs} disabled placeholder="Novo valor">`;
+      document.getElementById('btnEdicaoMassa').disabled = !col;
+      if (col && col.campo === 'fornecedor') document.getElementById('edicaoMassaValor').setAttribute('list', 'listaFornecedores');
+    }
+
+    function linhasDaTelaEdicao() {
+      const visiveis = linhasVisiveisEdicao(linhasEdicao, originaisEdicao, document.getElementById('edicaoBusca').value, document.getElementById('edicaoSoAlterados').checked);
+      return ordenarLinhasEdicao(visiveis, ordemEdicao.campo, ordemEdicao.dir);
+    }
+
+    function renderizarEdicao() {
+      renderizarCabecalhoEdicao();
+      const linhas = linhasDaTelaEdicao();
+      const total = COLUNAS_EDICAO.length + 1;
+      const massaCampo = document.getElementById('edicaoMassaCampo').value;
+      document.getElementById('btnEdicaoMassa').textContent = `Aplicar à lista (${linhas.length})`;
+      if (!linhas.length) {
+        tabelaEdicao.innerHTML = `<tr><td colspan="${total}" class="px-4 py-8 text-center text-gray-500">${linhasEdicao.length ? 'Nenhum produto com essa busca' : 'Nenhum produto cadastrado'}</td></tr>`;
+      } else if (!grupoEdicao) {
+        tabelaEdicao.innerHTML = linhas.map(htmlLinhaEdicao).join('');
+      } else {
+        tabelaEdicao.innerHTML = agruparLinhasEdicao(linhas, grupoEdicao, v => rotuloGrupoEdicao(grupoEdicao, v)).map(g => {
+          const fechado = gruposFechadosEdicao.has(g.chave);
+          const estoque = g.linhas.reduce((s, l) => s + (Number(l.estoque) || 0), 0);
+          const alteradas = g.linhas.filter(l => linhaEdicaoAlterada(l, originaisEdicao.get(l.id))).length;
+          return `
+        <tr class="edicao-grupo bg-gray-100 border-t-2 border-gray-300">
+          <td colspan="${total}" class="px-3 py-2">
+            <div class="sticky left-3 inline-flex flex-wrap items-center gap-3">
+              <button type="button" data-grupo-edicao="${escapeHtml(g.chave)}" class="font-semibold text-gray-900 hover:text-orange-700" aria-expanded="${!fechado}">${fechado ? '▸' : '▾'} ${escapeHtml(g.titulo)}</button>
+              <span class="text-xs text-gray-600">${g.linhas.length} produto(s) • ${estoque} peça(s) na loja${alteradas ? ` • <span class="text-amber-700 font-medium">${alteradas} alterado(s)</span>` : ''}</span>
+              ${massaCampo ? `<button type="button" data-massa-grupo="${escapeHtml(g.chave)}" class="px-2 py-1 text-xs border border-gray-400 rounded-md bg-white hover:bg-gray-50">Aplicar neste grupo</button>` : ''}
+            </div>
+          </td>
+        </tr>${fechado ? '' : g.linhas.map(htmlLinhaEdicao).join('')}`;
+        }).join('');
+      }
       resumoEdicao();
+    }
+
+    function aplicarMassaEdicao(linhas) {
+      const campo = document.getElementById('edicaoMassaCampo').value;
+      const el = document.getElementById('edicaoMassaValor');
+      if (!campo || !el) return;
+      const col = colunaEdicao(campo);
+      const valor = el.value.trim();
+      if (!linhas.length) return mostrarToast('Nenhuma linha na lista', 'error');
+      if (!valor && ['nome', 'preco_custo', 'preco_venda', 'estoque'].includes(campo)) return mostrarToast(`${tituloColunaLote(col).replace(' *', '')} não pode ficar vazio`, 'error');
+      if (linhas.length > 1 && !confirm(`Colocar "${valor || '(vazio)'}" em ${tituloColunaLote(col).replace(' *', '')} de ${linhas.length} produto(s)? Nada é salvo até você clicar em Salvar alterações.`)) return;
+      const mudou = aplicarEmMassaEdicao(linhas, campo, valor);
+      linhas.forEach(l => { if (errosEdicao[l.id]) delete errosEdicao[l.id][campo]; });
+      renderizarEdicao();
+      mostrarToast(`${mudou} linha(s) alterada(s). Confira e clique em Salvar alterações.`);
     }
 
     // Recarrega a tabela a partir dos produtos do banco (descarta o que não foi salvo)
@@ -2547,11 +2768,8 @@
     }
 
     async function iniciarEdicao() {
-      if (!document.getElementById('edicaoCabecalho').innerHTML) {
-        document.getElementById('edicaoCabecalho').innerHTML = '<th class="px-3 py-3"></th>'
-          + COLUNAS_EDICAO.map(c => `<th class="px-2 py-3 text-left text-xs font-semibold text-gray-500 uppercase whitespace-nowrap">${tituloColunaLote(c)}</th>`).join('');
-      }
       if (!todosProdutos.length) await carregarProdutos();
+      if (!anunciosAdmin.length) await carregarAnuncios();
       // Mantém o que já foi alterado e não salvo; senão pega os dados mais novos
       if (!linhasEdicao.some(l => linhaEdicaoAlterada(l, originaisEdicao.get(l.id)))) recarregarEdicao();
       else renderizarEdicao();
@@ -2579,6 +2797,12 @@
       const l = linhasEdicao.find(x => x.id === Number(el.dataset.id));
       if (!l) return;
       l[el.dataset.campo] = el.value;
+      // Sem promoção não tem preço promocional
+      if (el.dataset.campo === 'anuncio_id' && !el.value && l.preco_promocional) {
+        l.preco_promocional = '';
+        const promo = el.closest('tr').querySelector('[data-campo="preco_promocional"]');
+        if (promo) promo.value = '';
+      }
       if (errosEdicao[l.id]?.[el.dataset.campo]) {
         delete errosEdicao[l.id][el.dataset.campo];
         el.classList.remove('border-red-500', 'bg-red-50');
@@ -2588,6 +2812,51 @@
       resumoEdicao();
     });
     document.getElementById('edicaoBusca').addEventListener('input', renderizarEdicao);
+    // Ordenar: pelo seletor ou clicando no título da coluna (clicar de novo inverte)
+    document.getElementById('edicaoOrdenar').addEventListener('change', (e) => {
+      ordemEdicao = { campo: e.target.value, dir: 1 };
+      salvarPreferenciaEdicao();
+      renderizarEdicao();
+    });
+    document.getElementById('edicaoDirecao').addEventListener('click', () => {
+      ordemEdicao.dir = -ordemEdicao.dir;
+      salvarPreferenciaEdicao();
+      renderizarEdicao();
+    });
+    document.getElementById('edicaoCabecalho').addEventListener('click', (e) => {
+      const b = e.target.closest('[data-ordenar-edicao]');
+      if (!b) return;
+      const campo = b.dataset.ordenarEdicao;
+      ordemEdicao = ordemEdicao.campo === campo ? { campo, dir: -ordemEdicao.dir } : { campo, dir: 1 };
+      salvarPreferenciaEdicao();
+      renderizarEdicao();
+    });
+    document.getElementById('edicaoAgrupar').addEventListener('change', (e) => {
+      grupoEdicao = e.target.value;
+      gruposFechadosEdicao = new Set();
+      salvarPreferenciaEdicao();
+      renderizarEdicao();
+    });
+    document.getElementById('edicaoAbrirGrupos').addEventListener('click', () => { gruposFechadosEdicao = new Set(); renderizarEdicao(); });
+    document.getElementById('edicaoFecharGrupos').addEventListener('click', () => {
+      gruposFechadosEdicao = new Set(agruparLinhasEdicao(linhasDaTelaEdicao(), grupoEdicao).map(g => g.chave));
+      renderizarEdicao();
+    });
+    tabelaEdicao.addEventListener('click', (e) => {
+      const grupo = e.target.closest('[data-grupo-edicao]');
+      if (grupo) {
+        const chave = grupo.dataset.grupoEdicao;
+        if (gruposFechadosEdicao.has(chave)) gruposFechadosEdicao.delete(chave); else gruposFechadosEdicao.add(chave);
+        return renderizarEdicao();
+      }
+      const massa = e.target.closest('[data-massa-grupo]');
+      if (massa) {
+        const g = agruparLinhasEdicao(linhasDaTelaEdicao(), grupoEdicao).find(x => x.chave === massa.dataset.massaGrupo);
+        aplicarMassaEdicao(g ? g.linhas : []);
+      }
+    });
+    document.getElementById('edicaoMassaCampo').addEventListener('change', () => { montarValorMassa(); renderizarEdicao(); });
+    document.getElementById('btnEdicaoMassa').addEventListener('click', () => aplicarMassaEdicao(linhasDaTelaEdicao()));
     document.getElementById('edicaoSoAlterados').addEventListener('change', renderizarEdicao);
     document.getElementById('btnEdicaoDesfazer').addEventListener('click', () => {
       if (linhasEdicao.some(l => linhaEdicaoAlterada(l, originaisEdicao.get(l.id))) && !confirm('Desfazer todas as alterações que ainda não foram salvas?')) return;
