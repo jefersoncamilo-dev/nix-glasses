@@ -60,6 +60,15 @@ describe('Botões de WhatsApp e Instagram no topo', () => {
     assert.match(html, /window\.ligarWhatsappTopo\(whatsappNumero\)/, 'o número que chega depois também liga o botão');
   });
 
+  it('vitrine: "Ver coleção" fica na mesma linha do WhatsApp e mostra a linha', () => {
+    const redes = html.indexOf('id="redesTopo"');
+    const colecao = html.indexOf('id="heroColecao"');
+    const zap = html.indexOf('id="topoWhatsapp"');
+    assert.ok(redes < colecao && colecao < zap, 'dentro de #redesTopo, antes do WhatsApp');
+    assert.match(html, /<a href="#catalogo" id="heroColecao" class="btn-rede btn-rede-colecao hidden"/);
+    assert.match(html, /getElementById\('heroColecao'\)\.classList\.remove\('hidden'\);\s*document\.getElementById\('redesTopo'\)\.classList\.remove\('hidden'\)/);
+  });
+
   it('painel: campo Instagram em Dados da loja, salvo junto com os outros', () => {
     assert.match(admin, /<input type="text" id="loja_instagram" data-campo-loja="instagram"/);
   });
