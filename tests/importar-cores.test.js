@@ -1,6 +1,6 @@
 // Importação pelo link com cores (Tassia Nunes e outras lojas Nuvemshop): as variações
 // de cor do produto, com a foto de cada uma e as fotos comuns, viram uma linha do
-// Cadastro em Lote por cor (linhasDasCores), todas com o mesmo Código do modelo.
+// Cadastro em Lote numa linha só por modelo, com o estoque de cada cor (Cores cor:qtd).
 const { describe, it } = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
@@ -97,7 +97,7 @@ describe('importação: cores da Nuvemshop (Tassia Nunes)', () => {
   });
 });
 
-// ---------- Painel: linhas do lote por cor ----------
+// ---------- Painel: o modelo com as cores numa linha do lote ----------
 const html = fs.readFileSync(path.join(__dirname, '..', 'admin', 'index.html'), 'utf8');
 function extrairFuncao(nome) {
   const inicio = html.search(new RegExp(`(async )?function ${nome}\\(`));
@@ -108,7 +108,9 @@ function extrairFuncao(nome) {
     else if (html[i] === '}' && --nivel === 0) return html.slice(inicio, i + 1);
   }
 }
-const funcoes = ['linkSeguro', 'precoVendaPadrao', 'proximoSku', 'nomeTematico', 'camposDaImportacao', 'formatarMedida', 'linhaLoteVazia', 'linhaLoteEstaVazia', 'conflitosLote', 'linhasDasCores'];
+const funcoes = ['linkSeguro', 'precoVendaPadrao', 'proximoSku', 'nomeTematico', 'camposDaImportacao', 'formatarMedida', 'linhaLoteVazia', 'linhaLoteEstaVazia',
+  'conflitosLote', 'produtoJaCadastrado', 'lerCoresLote', 'textoCoresLote', 'linhaDoModeloComCores', 'planoCoresLote', 'resumoCoresLote', 'expandirCoresLote',
+  'agruparCoresPorModelo', 'nomeDoModelo', 'lerPreco', 'lerMedida', 'lerDataCompra', 'validarLote', 'campoDoCabecalho', 'linhasDaPlanilha', 'lerDisponibilidade', 'lerStatus', 'lerGenero'];
 const ctx = vm.createContext({ Number, String, Math, Map, Set, Object, URL, Array, JSON });
 vm.runInContext(`
   const ACRESCIMO_VENDA = 100;
@@ -122,59 +124,99 @@ function linhaBase(dados) {
   const c = ctx.camposDaImportacao({ ...dados, link_fornecedor: URL_TASSIA });
   return { ...ctx.linhaLoteVazia(), ...c, preco_custo: c.preco_custo.replace('.', ','), preco_venda: c.preco_venda.replace('.', ',') };
 }
+const json = (v) => JSON.parse(JSON.stringify(v));
 
-describe('painel: Cadastro em Lote com as cores do link', () => {
+describe('painel: Cadastro em Lote com as cores do link (um produto, estoque por cor)', () => {
   const dados = extrairDadosProduto(paginaNuvemshop(variacoes), URL_TASSIA);
 
-  it('uma linha por cor disponível, mesmo Código do modelo, nome/SKU Nix com a cor e fotos', () => {
-    const r = ctx.linhasDasCores(linhaBase(dados), dados, [], []);
+  it('lê e escreve "cor:qtd"', () => {
+    assert.deepEqual(json(ctx.lerCoresLote('Preto:2, Azul claro : 3; Rosa')), [{ cor: 'Preto', qtd: 2 }, { cor: 'Azul claro', qtd: 3 }, { cor: 'Rosa', qtd: 1 }]);
+    assert.deepEqual(json(ctx.lerCoresLote('')), []);
+    assert.equal(ctx.lerCoresLote('Preto:1, preto:2'), null, 'cor repetida');
+    assert.equal(ctx.lerCoresLote('Preto:x'), null);
+    assert.equal(ctx.lerCoresLote('Preto:0'), null);
+    assert.equal(ctx.textoCoresLote([{ cor: 'Preto', qtd: 2 }, { cor: 'Rosa', qtd: 1 }]), 'Preto:2, Rosa:1');
+  });
+
+  it('importação: UMA linha para o modelo, com as cores disponíveis (1 de cada) e a foto de cada cor', () => {
+    const r = ctx.linhaDoModeloComCores(linhaBase(dados), dados, [], []);
     assert.deepEqual([...r.esgotadas], ['Marrom']);
-    assert.equal(r.linhas.length, 2);
-    const [preto, azul] = r.linhas;
-    assert.equal(preto.cor_armacao, 'Preto');
-    assert.equal(preto.nome, 'Nix Raptor NV1720 - Onyx Black');
-    assert.equal(preto.codigo_sku, 'NIX-NV1-RAP-BLK');
-    assert.equal(azul.nome, 'Nix Raptor NV1720 - Ocean Blue');
-    assert.equal(azul.codigo_sku, 'NIX-NV1-RAP-BLU');
+    const l = r.linha;
+    assert.equal(l.nome, 'Nix Raptor NV1720');
+    assert.equal(l.codigo_sku, 'NIX-NV1-RAP');
+    assert.equal(l.cores, 'Preto:1, Azul:1');
+    assert.equal(l.cor_armacao, '');
+    assert.equal(l.codigo_fornecedor, 'NV1720');
+    assert.deepEqual(json(l.fotos_cores), { preto: `https:${CDN}/preto-1024-1024.webp`, azul: `https:${CDN}/azul-1024-1024.webp` });
+    assert.deepEqual(json(l.imagens_extras), [`https:${CDN}/lateral-1024-1024.webp`, `https:${CDN}/caixa-1024-1024.webp`]);
+    assert.equal(ctx.resumoCoresLote(l, []), 'Um produto com 2 cor(es), 2 peça(s): Preto (1), Azul (1)');
+    assert.deepEqual(json(ctx.validarLote([l])), [{}]);
+    assert.equal(ctx.conflitosLote([l, { ...l }], []).length, 0, 'linha com cores não abre a conferência');
+  });
+
+  it('ao salvar, modelo novo vira um cadastro por cor por dentro, todos com o mesmo Código do modelo', () => {
+    const l = { ...ctx.linhaDoModeloComCores(linhaBase(dados), dados, [], []).linha, cores: 'Preto:2, Azul:1' };
+    const e = ctx.expandirCoresLote([l], []);
+    assert.equal(e.incluir.length, 0);
+    assert.deepEqual([...e.origens], [0, 0]);
+    const [preto, azul] = e.produtos;
+    assert.equal(preto.nome, 'Nix Raptor NV1720 - Preto');
+    assert.equal(preto.codigo_sku, 'NIX-NV1-RAP-PRETO');
     assert.equal(preto.grade, 'NIX-NV1-RAP');
-    assert.equal(azul.grade, 'NIX-NV1-RAP');
-    assert.equal(preto.nome_fornecedor, `${NOME} - Preto`);
-    assert.equal(preto.codigo_fornecedor, 'NV1720');
-    assert.equal(preto.fornecedor, 'Tassia Nunes Atacado');
+    assert.equal(preto.cor_armacao, 'Preto');
+    assert.equal(preto.quantidade, '2');
+    assert.equal(preto.cadastrar_novo, true);
     assert.equal(preto.imagem_fornecedor, `https:${CDN}/preto-1024-1024.webp`);
-    assert.equal(azul.imagem_fornecedor, `https:${CDN}/azul-1024-1024.webp`);
-    assert.deepEqual([...preto.imagens_extras], [`https:${CDN}/lateral-1024-1024.webp`, `https:${CDN}/caixa-1024-1024.webp`]);
-    assert.equal(preto.preco_custo, '29,90');
-    assert.equal(azul.preco_custo, '31,90', 'preço da variação');
-    assert.equal(azul.preco_venda, '131,90');
-    assert.equal(preto.cadastrar_novo, true, 'não junta com a outra cor pelo cód. do fornecedor');
+    assert.equal(preto.cores, undefined);
+    assert.equal(azul.codigo_sku, 'NIX-NV1-RAP-AZUL');
+    assert.equal(azul.quantidade, '1');
   });
 
-  it('as cores do mesmo modelo não pedem conferência entre si', () => {
-    const r = ctx.linhasDasCores(linhaBase(dados), dados, [], []);
-    assert.equal(ctx.conflitosLote(r.linhas, []).length, 0);
+  it('mesmo cód. do fornecedor já cadastrado: soma nas cores que ele tem e inclui as novas no modelo', () => {
+    const existentes = [
+      { id: 5, nome: 'Nix Raptor NV1720 - Preto', codigo_sku: 'NIX-NV1-RAP-PRETO', cor_armacao: 'preto', grade: 'NIX-NV1-RAP', fornecedor: 'Tassia Nunes Atacado', codigo_fornecedor: 'NV1720', link_fornecedor: '', tamanho: '' },
+      { id: 6, nome: 'Outro', codigo_sku: 'OUTRO', cor_armacao: 'Azul', grade: '', fornecedor: 'Tassia Nunes Atacado', codigo_fornecedor: 'X1', tamanho: '' },
+    ];
+    const l = ctx.linhaDoModeloComCores(linhaBase(dados), dados, existentes, []).linha;
+    assert.equal(l.codigo_sku, 'NIX-NV1-RAP', 'usa o código do modelo cadastrado');
+    assert.equal(l.nome, 'Nix Raptor NV1720');
+    assert.equal(ctx.resumoCoresLote(l, existentes), 'Já cadastrado (NIX-NV1-RAP-PRETO): inclui a(s) cor(es) Azul (1); soma no estoque de Preto (1)');
+    const e = ctx.expandirCoresLote([l], existentes);
+    assert.equal(e.produtos.length, 1);
+    assert.equal(e.produtos[0].codigo_sku, 'NIX-NV1-RAP-PRETO');
+    assert.equal(e.produtos[0].quantidade, '1');
+    assert.equal(e.produtos[0].imagem_fornecedor, '', 'reposição não troca a foto');
+    assert.equal(e.incluir.length, 1);
+    assert.equal(e.incluir[0].produto.id, 5);
+    assert.deepEqual(json(e.incluir[0].cores), [{ cor: 'Azul', estoque: 1, foto: `https:${CDN}/azul-1024-1024.webp` }]);
   });
 
-  it('cor já cadastrada vira reposição de 1 no SKU dela; as outras são novas', () => {
-    const existentes = [{ id: 5, nome: 'Nix Raptor NV1720 - Onyx Black', codigo_sku: 'NIX-NV1-RAP-BLK', cor_armacao: 'preto', grade: 'NIX-NV1-RAP', fornecedor: 'Tassia Nunes Atacado', codigo_fornecedor: 'NV1720', link_fornecedor: URL_TASSIA }];
-    const r = ctx.linhasDasCores(linhaBase(dados), dados, existentes, []);
-    const [preto, azul] = r.linhas;
-    assert.equal(preto.codigo_sku, 'NIX-NV1-RAP-BLK');
-    assert.equal(preto.quantidade, '1');
-    assert.equal(preto.cadastrar_novo, undefined);
-    assert.equal(azul.cadastrar_novo, true);
-    // A cor nova do modelo já cadastrado não pede conferência
-    assert.deepEqual(ctx.conflitosLote([azul], existentes).length, 0);
+  it('produto antigo sem Código do modelo e mesmo cód. do fornecedor: as cores entram nele', () => {
+    const antigo = [{ id: 9, nome: 'Nix Rex Velho - Onyx Black', codigo_sku: 'NIX-VEL', cor_armacao: 'Preto', grade: '', fornecedor: 'Tassia Nunes Atacado', codigo_fornecedor: 'nv1720', tamanho: '' }];
+    const plano = ctx.planoCoresLote({ ...ctx.linhaLoteVazia(), codigo_sku: 'NIX-NOVO', fornecedor: 'Tassia Nunes Atacado', codigo_fornecedor: 'NV1720', cores: 'Preto:1, Rosa:2' }, antigo);
+    assert.equal(plano.modelo, 'NIX-VEL');
+    assert.deepEqual(json(plano.itens.map(i => [i.cor, i.acao])), [['Preto', 'repor'], ['Rosa', 'incluir']]);
   });
 
-  it('cor que o padrão Nix não conhece entra como está no nome e no SKU; todas esgotadas = todas entram', () => {
-    const d = { ...dados, cores: [{ cor: 'C1 Fumê Degradê', disponivel: false }, { cor: 'Mix', disponivel: false }] };
-    const r = ctx.linhasDasCores(linhaBase(d), d, [], []);
-    assert.equal(r.linhas.length, 2);
-    assert.deepEqual([...r.esgotadas], []);
-    assert.equal(r.linhas[0].nome, 'Nix Raptor NV1720 - Smoke Gradient');
-    assert.equal(r.linhas[1].nome, 'Nix Raptor NV1720 - Mix');
-    assert.equal(r.linhas[1].codigo_sku, 'NIX-NV1-RAP-MIX');
-    assert.notEqual(r.linhas[0].codigo_sku, r.linhas[1].codigo_sku);
+  it('planilha: coluna "Cores" pelo cabeçalho; cor e tamanho juntos é erro', () => {
+    const [l] = ctx.linhasDaPlanilha('Nome\tSKU\tCusto\tVenda\tCores\nNix X\tNIX-X\t10\t20\tPreto:2, Rosa:1');
+    assert.equal(l.cores, 'Preto:2, Rosa:1');
+    const erros = ctx.validarLote([{ ...l, preco_custo: '10', preco_venda: '20', cores: 'Preto:a' }, { ...l, tamanho: 'M' }]);
+    assert.match(erros[0].cores, /Cores inválidas/);
+    assert.match(erros[1].cores, /cores ou tamanho/);
+  });
+
+  it('lista de Produtos: as cores de um modelo numa linha só', () => {
+    const lista = [
+      { id: 1, nome: 'Nix A - Preto', cor_armacao: 'Preto', grade: 'NIX-A', tamanho: '' },
+      { id: 2, nome: 'Avulso', cor_armacao: 'Azul', grade: '', tamanho: '' },
+      { id: 3, nome: 'Nix A - Rosa', cor_armacao: 'Rosa', grade: 'nix-a', tamanho: '' },
+      { id: 4, nome: 'Vestido - M', cor_armacao: '', grade: 'VEST', tamanho: 'M' },
+      { id: 5, nome: 'Vestido - G', cor_armacao: '', grade: 'VEST', tamanho: 'G' },
+      { id: 6, nome: 'Nix B - Preto', cor_armacao: 'Preto', grade: 'NIX-B', tamanho: '' },
+    ];
+    const itens = ctx.agruparCoresPorModelo(lista);
+    assert.deepEqual(json(itens.map(i => i.cores ? i.cores.map(c => c.id) : i.produto.id)), [[1, 3], 2, 4, 5, 6]);
+    assert.equal(ctx.nomeDoModelo(lista[0]), 'Nix A');
   });
 });

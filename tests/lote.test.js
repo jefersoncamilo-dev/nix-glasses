@@ -306,7 +306,7 @@ describe('painel: cadastro em lote', () => {
     assert.equal(b.nome_fornecedor, 'Máscara Nitro');
     assert.equal(b.nome, 'NIX Compso');
     const colunas = ctx.linhaLoteVazia();
-    assert.equal(Object.keys(colunas).pop(), 'nome_fornecedor');
+    assert.equal(Object.keys(colunas).slice(-2).join(), 'nome_fornecedor,cores');
     assert.equal(ctx.linhaLoteEstaVazia({ ...colunas, nome_fornecedor: 'X' }), false);
   });
 
