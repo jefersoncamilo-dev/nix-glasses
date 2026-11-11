@@ -1388,7 +1388,7 @@
               <label for="formato" data-rotulo="formato" class="block text-sm font-medium text-gray-700 mb-1">Formato da lente</label>
               <input type="text" id="formato" name="formato" maxlength="100" placeholder="Ex: Hexagonal, Redondo" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500">
             </div>
-            <div>
+            <div id="campoCorProduto">
               <label for="cor_armacao" class="block text-sm font-medium text-gray-700 mb-1">Cor</label>
               <input type="text" id="cor_armacao" name="cor_armacao" maxlength="100" placeholder="Ex: Preto, Dourado" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500">
             </div>
@@ -1430,16 +1430,17 @@
             <legend id="coresTitulo" class="px-1 text-sm font-semibold text-gray-800">Cores e quantidades</legend>
             <p id="coresEdicao" class="hidden text-xs text-gray-500 mb-3">Inclua outras cores deste modelo: cada cor nova vira um produto com a sua foto, o seu estoque e SKU próprio, com os mesmos preços e especificações deste produto (as fotos 2 a 4 também vêm daqui). A cor deste produto é a do campo Cor lá em cima. <span id="coresExistentes" class="block mt-1 font-medium text-gray-700"></span></p>
             <p id="coresNovo" class="text-xs text-gray-500 mb-3">Para um modelo com várias cores: inclua cada cor com a foto dela e a quantidade de peças que tem (0 = cadastrada, mas esgotada). Cada cor vira um produto com o seu estoque e SKU próprio (ex.: NIX-010-PRETO); na vitrine o modelo aparece num card só e o cliente escolhe a cor pela foto. A foto da cor é a capa; as fotos 2 a 4 lá embaixo valem para todas as cores. Sem cores, é um produto só, como sempre.</p>
+            <div id="coresDoModelo" class="hidden space-y-2 mb-3"></div>
             <div id="listaCores" class="space-y-2"></div>
             <button type="button" id="btnAdicionarCor" class="mt-3 inline-flex items-center gap-1 px-3 py-2 border border-orange-300 text-orange-700 rounded-lg text-sm font-medium hover:bg-orange-50">+ Adicionar cor</button>
             <p id="coresResumo" class="text-xs text-gray-600 mt-2"></p>
           </fieldset>
-          <div>
+          <div id="campoEstoqueProduto">
             <label for="estoque" class="block text-sm font-medium text-gray-700 mb-1">Estoque (peças na loja) *</label>
             <input type="number" id="estoque" name="estoque" min="0" step="1" value="1" required class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500">
             <p id="estoqueMaleta" class="text-xs text-gray-500 mt-1">O status sai do estoque: com peça na loja fica Disponível; zerado, Esgotado.</p>
           </div>
-          <div>
+          <div id="campoDisponibilidadeProduto">
             <label class="block text-sm font-medium text-gray-700 mb-1">Disponibilidade *</label>
             <select id="disponibilidade" name="disponibilidade" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500" required>
               <option value="PRONTA_ENTREGA">Pronta Entrega</option>
@@ -2015,7 +2016,7 @@
         const qtd = String(l.quantidade ?? '').trim();
         if (qtd && !(/^\d{1,6}$/.test(qtd) && Number(qtd) >= 1)) erros.quantidade = 'Quantidade inválida (número inteiro a partir de 1)';
         if (String(l.data_compra ?? '').trim() && !lerDataCompra(l.data_compra)) erros.data_compra = 'Data inválida (use DD/MM/AAAA)';
-        if (String(l.cores ?? '').trim() && !lerCoresLote(l.cores)) erros.cores = 'Cores inválidas: cada cor uma vez, com a quantidade (ex.: Preto:2, Rosa:1), até 20 cores';
+        if (String(l.cores ?? '').trim() && !lerCoresLote(l.cores)) erros.cores = 'Cores inválidas: cada cor uma vez, com a quantidade e, se quiser, a disponibilidade (ex.: Preto:2, Rosa:0:esgotado, Azul:1:encomenda), até 20 cores';
         if (String(l.cores ?? '').trim() && String(l.tamanho ?? '').trim()) erros.cores = 'Use cores ou tamanho na linha, não os dois';
         if (String(l.link_fornecedor || '').trim() && !linkSeguro(l.link_fornecedor)) erros.link_fornecedor = 'Link inválido (use http:// ou https://)';
         CAMPOS_MEDIDA.forEach(c => {
@@ -2292,7 +2293,7 @@
       const noLote = linhasLote.find(l => caminho(l.link_fornecedor) && caminho(l.link_fornecedor) === caminho(url));
       if (noLote) {
         const cores = lerCoresLote(noLote.cores);
-        if (cores && cores.length) noLote.cores = textoCoresLote(cores.map(c => ({ ...c, qtd: c.qtd + 1 })));
+        if (cores && cores.length) noLote.cores = textoCoresLote(cores.map(c => (c.disp === 'ESGOTADO' ? c : { ...c, qtd: c.qtd + 1 })));
         else noLote.quantidade = String((Number(noLote.quantidade) || 1) + 1);
         renderizarLote();
         return { repetidos: 1 };
@@ -2310,7 +2311,7 @@
         return {
           novos: plano.base ? 0 : 1,
           repostos: plano.base ? 1 : 0,
-          cores: `${nome}: ${plano.itens.length} cor(es)${r.esgotadas.length ? `, fora as esgotadas no site: ${r.esgotadas.join(', ')}` : ''}`,
+          cores: `${nome}: ${plano.itens.length} cor(es)${r.esgotadas.length ? ` (esgotada(s) no site, entram como Esgotado: ${r.esgotadas.join(', ')})` : ''}`,
         };
       }
       const existente = produtoJaCadastrado(todosProdutos, linha);
@@ -2325,27 +2326,39 @@
       return existente ? { repostos: 1 } : { novos: 1 };
     }
 
-    // "Preto:2, Rosa, Azul claro: 3" -> [{ cor, qtd }] (sem quantidade = 1). Vazio -> [].
-    // Inválido (cor repetida, quantidade que não é número, mais de 20 cores) -> null.
+    // Disponibilidade de cada cor: Disponível (pronta entrega), Sob Encomenda ou Esgotado
+    const DISPONIBILIDADES_COR = [['PRONTA_ENTREGA', 'Disponível'], ['SOB_ENCOMENDA', 'Sob Encomenda'], ['ESGOTADO', 'Esgotado']];
+
+    // "Preto:2, Rosa, Azul claro: 3, Verde:0:esgotado, Lilás:1:encomenda" -> [{ cor, qtd, disp }]
+    // (sem quantidade = 1; disp PRONTA_ENTREGA | SOB_ENCOMENDA | ESGOTADO; quantidade 0 sem
+    // disponibilidade = esgotado; esgotado fica com 0). Vazio -> []. Inválido (cor repetida,
+    // quantidade que não é número, disponibilidade desconhecida, mais de 20 cores) -> null.
     function lerCoresLote(texto) {
       const t = String(texto ?? '').trim();
       if (!t) return [];
+      const semAcento = v => String(v).normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim();
       const cores = [];
       const vistos = new Set();
       for (const parte of t.split(/[,;\n]/).map(x => x.trim()).filter(Boolean)) {
-        const m = /^(.*?)\s*[:=]\s*(\S*)$/.exec(parte);
+        const m = /^(.*?)\s*[:=]\s*(\d{1,6})\s*(?:[:=]\s*([^:=]*))?$/.exec(parte);
         const cor = (m ? m[1] : parte).trim();
-        const qtd = m ? m[2] : '1';
-        const chave = cor.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
-        if (!cor || cor.length > 100 || !/^\d{1,6}$/.test(qtd) || Number(qtd) < 1 || vistos.has(chave)) return null;
+        const chave = semAcento(cor);
+        if (!cor || cor.length > 100 || vistos.has(chave) || (!m && /[:=]/.test(parte))) return null;
+        let qtd = m ? Number(m[2]) : 1;
+        const d = m && m[3] !== undefined ? semAcento(m[3]) : '';
+        let disp = !d ? (qtd === 0 ? 'ESGOTADO' : 'PRONTA_ENTREGA')
+          : /^(disponivel|pronta)/.test(d) ? 'PRONTA_ENTREGA' : /encomenda/.test(d) ? 'SOB_ENCOMENDA' : /^esgotad/.test(d) ? 'ESGOTADO' : '';
+        if (!disp) return null;
+        if (disp === 'ESGOTADO') qtd = 0;
+        if (disp === 'PRONTA_ENTREGA' && qtd < 1) return null;
         vistos.add(chave);
-        cores.push({ cor, qtd: Number(qtd) });
+        cores.push({ cor, qtd, disp });
       }
       return cores.length <= 20 ? cores : null;
     }
 
     function textoCoresLote(cores) {
-      return cores.map(c => `${c.cor}:${c.qtd}`).join(', ');
+      return cores.map(c => `${c.cor}:${c.qtd}${c.disp === 'SOB_ENCOMENDA' ? ':encomenda' : c.disp === 'ESGOTADO' ? ':esgotado' : ''}`).join(', ');
     }
 
     // Produto com cores na loja do fornecedor -> UMA linha do lote para o modelo, com as cores
@@ -2357,19 +2370,22 @@
       const norm = v => String(v ?? '').normalize('NFD').replace(/[̀-ͯ]/g, '').trim().toLowerCase();
       const todas = (Array.isArray(dados.cores) ? dados.cores : []).filter(c => c && String(c.cor ?? '').trim())
         .filter((c, i, lista) => lista.findIndex(x => norm(x.cor) === norm(c.cor)) === i).slice(0, 20);
-      const disponiveis = todas.filter(c => c.disponivel !== false);
-      const cores = disponiveis.length ? disponiveis : todas;
-      const esgotadas = disponiveis.length ? todas.filter(c => c.disponivel === false).map(c => String(c.cor).trim()) : [];
+      // Todas as cores da loja: a esgotada no site entra como Esgotado (0); se o site não
+      // marca nenhuma como disponível, todas entram como disponíveis
+      const algumaDisponivel = todas.some(c => c.disponivel !== false);
+      const cores = todas;
+      const esgotada = c => algumaDisponivel && c.disponivel === false;
+      const esgotadas = todas.filter(esgotada).map(c => String(c.cor).trim());
       const linha = {
         ...base,
         cor_armacao: '',
         quantidade: '',
-        cores: textoCoresLote(cores.map(c => ({ cor: String(c.cor).trim().slice(0, 100), qtd: 1 }))),
+        cores: textoCoresLote(cores.map(c => ({ cor: String(c.cor).trim().slice(0, 100), qtd: esgotada(c) ? 0 : 1, disp: esgotada(c) ? 'ESGOTADO' : 'PRONTA_ENTREGA' }))),
         fotos_cores: Object.fromEntries(cores.map(c => [norm(c.cor), linkSeguro(c.imagem)]).filter(([, u]) => u)),
         imagens_extras: (Array.isArray(dados.fotos_comuns) ? dados.fotos_comuns : []).map(linkSeguro).filter(Boolean).slice(0, 2),
       };
       // Preço: o da cor mais barata, se a página não trouxe o do produto
-      const precos = cores.map(c => Number(c.preco)).filter(n => Number.isFinite(n) && n > 0);
+      const precos = cores.filter(c => !esgotada(c)).map(c => Number(c.preco)).filter(n => Number.isFinite(n) && n > 0);
       if (!String(linha.preco_custo || '').trim() && precos.length) {
         const menor = Math.min(...precos);
         linha.preco_custo = menor.toFixed(2).replace('.', ',');
@@ -2407,7 +2423,8 @@
       const usados = new Set(produtos.map(p => norm(p.codigo_sku)));
       const itens = cores.map(c => {
         const produto = doModelo.find(p => norm(p.cor_armacao) === norm(c.cor));
-        if (produto) return { ...c, acao: 'repor', produto, sku: produto.codigo_sku };
+        // Cor que o modelo já tem: soma as peças (sem peças, não muda nada)
+        if (produto) return { ...c, acao: c.qtd > 0 ? 'repor' : 'manter', produto, sku: produto.codigo_sku };
         if (base) return { ...c, acao: 'incluir', produto: base, sku: '' };
         let novo = `${modelo}-${skuDaCor(c.cor)}`;
         for (let n = 2; usados.has(norm(novo)); n++) novo = `${modelo}-${skuDaCor(c.cor)}-${n}`;
@@ -2421,12 +2438,13 @@
     function resumoCoresLote(l, produtos) {
       const plano = planoCoresLote(l, produtos);
       if (!plano.itens.length) return '';
-      const lista = itens => itens.map(c => `${c.cor} (${c.qtd})`).join(', ');
+      const rotulo = { SOB_ENCOMENDA: 'sob encomenda', ESGOTADO: 'esgotado' };
+      const lista = itens => itens.map(c => `${c.cor} (${rotulo[c.disp] || c.qtd})`).join(', ');
       const repor = plano.itens.filter(c => c.acao === 'repor');
       const incluir = plano.itens.filter(c => c.acao === 'incluir');
       const novas = plano.itens.filter(c => c.acao === 'novo');
       const pecas = plano.itens.reduce((t, c) => t + c.qtd, 0);
-      if (!plano.base) return `Um produto com ${novas.length} cor(es), ${pecas} peça(s): ${lista(novas)}`;
+      if (!plano.base) return `Um produto com ${novas.length} cor(es), ${pecas} peça(s) na loja: ${lista(novas)}`;
       return [`Já cadastrado (${plano.base.codigo_sku})`,
         incluir.length && `inclui a(s) cor(es) ${lista(incluir)}`,
         repor.length && `soma no estoque de ${lista(repor)}`].filter(Boolean).join(': ').replace(/: soma/, '; soma');
@@ -2448,10 +2466,15 @@
         const novas = [];
         for (const c of plano.itens) {
           const foto = fotos[norm(c.cor)] || '';
-          if (c.acao === 'incluir') { novas.push({ cor: c.cor, estoque: c.qtd, foto }); continue; }
+          if (c.acao === 'manter') continue;
+          if (c.acao === 'incluir') { novas.push({ cor: c.cor, estoque: c.qtd, disponibilidade: c.disp, foto }); continue; }
           const linha = { ...resto, cor_armacao: c.cor, quantidade: String(Math.max(1, c.qtd)), imagem_fornecedor: c.acao === 'novo' ? (foto || resto.imagem_fornecedor || '') : '' };
           if (c.acao === 'repor') Object.assign(linha, { nome: c.produto.nome, codigo_sku: c.produto.codigo_sku });
-          else Object.assign(linha, { nome: `${String(resto.nome).trim()} - ${c.cor}`.slice(0, 255), codigo_sku: c.sku, grade: plano.modelo, cadastrar_novo: true });
+          else {
+            Object.assign(linha, { nome: `${String(resto.nome).trim()} - ${c.cor}`.slice(0, 255), codigo_sku: c.sku, grade: plano.modelo, cadastrar_novo: true,
+              disponibilidade: c.disp === 'SOB_ENCOMENDA' ? 'SOB_ENCOMENDA' : 'PRONTA_ENTREGA' });
+            if (c.qtd === 0) linha.sem_estoque = true;
+          }
           saida.push(linha);
           origens.push(k);
         }
@@ -2516,7 +2539,7 @@
         for (const inc of expandido.incluir) {
           try {
             const fd = new FormData();
-            fd.append('cores', JSON.stringify(inc.cores.map(c => ({ cor: c.cor, estoque: c.estoque }))));
+            fd.append('cores', JSON.stringify(inc.cores.map(c => ({ cor: c.cor, estoque: c.estoque, disponibilidade: c.disponibilidade }))));
             if (inc.conferencia) fd.append('em_conferencia', 'true');
             if (inc.nome) fd.append('nome_modelo', inc.nome);
             for (const [k, c] of inc.cores.entries()) {
@@ -3786,24 +3809,106 @@
     function desenharCores() {
       const lista = document.getElementById('listaCores');
       lista.innerHTML = coresForm.map((c, i) => `
-        <div data-cor-linha="${i}" class="flex items-center gap-2">
+        <div data-cor-linha="${i}" class="flex flex-wrap sm:flex-nowrap items-center gap-2">
           <label class="relative shrink-0 w-14 h-14 rounded-lg border-2 border-dashed border-gray-300 bg-gray-50 overflow-hidden cursor-pointer flex items-center justify-center text-gray-400 hover:border-orange-400" title="Foto da cor">
             ${c.file ? `<img data-cor-foto src="" alt="Foto da cor" class="w-full h-full object-cover">` : '<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z"/></svg><span class="sr-only">Escolher foto da cor</span>'}
             <input type="file" accept="image/*" data-cor-arquivo="${i}" class="hidden">
           </label>
           <input type="text" data-cor-nome="${i}" maxlength="100" placeholder="Cor (ex.: Preto)" aria-label="Nome da cor ${i + 1}" class="flex-1 min-w-0 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500">
           <input type="number" data-cor-estoque="${i}" min="0" step="1" placeholder="Qtd" aria-label="Quantidade da cor ${i + 1}" class="w-20 shrink-0 px-2 py-2 border border-gray-300 rounded-lg text-center focus:outline-none focus:ring-2 focus:ring-orange-500">
+          <select data-cor-disp="${i}" aria-label="Disponibilidade da cor ${i + 1}" class="w-32 shrink-0 px-2 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-orange-500">${DISPONIBILIDADES_COR.map(([v, t]) => `<option value="${v}">${t}</option>`).join('')}</select>
           <button type="button" data-cor-remover="${i}" class="shrink-0 w-9 h-9 flex items-center justify-center rounded-lg text-gray-500 hover:text-red-600 hover:bg-red-50" aria-label="Tirar a cor ${i + 1}">✕</button>
         </div>`).join('');
       coresForm.forEach((c, i) => {
         lista.querySelector(`[data-cor-nome="${i}"]`).value = c.cor;
         lista.querySelector(`[data-cor-estoque="${i}"]`).value = c.estoque;
+        lista.querySelector(`[data-cor-disp="${i}"]`).value = c.disponibilidade || 'PRONTA_ENTREGA';
+        lista.querySelector(`[data-cor-estoque="${i}"]`).disabled = c.disponibilidade === 'ESGOTADO';
         const img = lista.querySelector(`[data-cor-linha="${i}"] [data-cor-foto]`);
         if (img) img.src = URL.createObjectURL(c.file);
       });
       document.getElementById('btnAdicionarCor').classList.toggle('hidden', coresForm.length >= MAX_CORES);
       atualizarResumoCores();
     }
+
+    // ---------- Cores de um modelo já cadastrado (edição): [{ produto, cor, estoque, disponibilidade }] ----------
+    let coresModelo = [];
+
+    // Cores do modelo do produto (mesmo Código do modelo, sem tamanho, com cor), o produto
+    // aberto primeiro. Produto sem Código do modelo ou sem cor: [] (edição como sempre).
+    function coresDoModeloDe(produto, produtos) {
+      const grade = String(produto.grade || '').trim().toLowerCase();
+      if (!grade || String(produto.tamanho || '').trim() || !String(produto.cor_armacao || '').trim()) return [];
+      const doModelo = produtos.filter(p => String(p.grade || '').trim().toLowerCase() === grade && !String(p.tamanho || '').trim() && String(p.cor_armacao || '').trim());
+      const lista = [produto, ...doModelo.filter(p => p.id !== produto.id)];
+      return lista.map(p => ({
+        produto: p,
+        cor: String(p.cor_armacao).trim(),
+        estoque: String(Number(p.estoque) || 0),
+        disponibilidade: p.disponibilidade === 'SOB_ENCOMENDA' ? 'SOB_ENCOMENDA' : (Number(p.estoque) || 0) > 0 ? 'PRONTA_ENTREGA' : 'ESGOTADO',
+      }));
+    }
+
+    function desenharCoresModelo() {
+      const caixa = document.getElementById('coresDoModelo');
+      caixa.classList.toggle('hidden', !coresModelo.length);
+      caixa.innerHTML = coresModelo.map((c, i) => `
+        <div data-cor-modelo="${i}" class="flex flex-wrap sm:flex-nowrap items-center gap-2">
+          ${c.produto.imagem_url ? `<img src="${escapeHtml(c.produto.imagem_url)}" alt="" class="shrink-0 w-14 h-14 rounded-lg object-cover border border-gray-200" onerror="imgFallback(this)">` : '<span class="shrink-0 w-14 h-14 rounded-lg bg-gray-100 border border-gray-200"></span>'}
+          <input type="text" data-modelo-cor="${i}" maxlength="100" aria-label="Cor ${i + 1}" class="flex-1 min-w-0 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500">
+          <input type="number" data-modelo-estoque="${i}" min="0" step="1" aria-label="Quantidade da cor ${i + 1}" class="w-20 shrink-0 px-2 py-2 border border-gray-300 rounded-lg text-center focus:outline-none focus:ring-2 focus:ring-orange-500">
+          <select data-modelo-disp="${i}" aria-label="Disponibilidade da cor ${i + 1}" class="w-32 shrink-0 px-2 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-orange-500">${DISPONIBILIDADES_COR.map(([v, t]) => `<option value="${v}">${t}</option>`).join('')}</select>
+          ${i === 0 ? '<span class="shrink-0 w-14 text-center text-[11px] text-gray-400" title="As fotos lá embaixo são desta cor">fotos abaixo</span>' : `<button type="button" data-modelo-fotos="${Number(c.produto.id)}" class="shrink-0 w-14 px-1 py-2 text-xs text-orange-700 hover:bg-orange-50 rounded-lg" title="Abrir esta cor para trocar as fotos (salve antes)">Fotos</button>`}
+        </div>`).join('');
+      coresModelo.forEach((c, i) => {
+        caixa.querySelector(`[data-modelo-cor="${i}"]`).value = c.cor;
+        const qtd = caixa.querySelector(`[data-modelo-estoque="${i}"]`);
+        qtd.value = c.disponibilidade === 'ESGOTADO' ? '0' : c.estoque;
+        qtd.disabled = c.disponibilidade === 'ESGOTADO';
+        caixa.querySelector(`[data-modelo-disp="${i}"]`).value = c.disponibilidade;
+      });
+    }
+
+    // Cores do modelo como vão ser gravadas -> [{ produto, cor, estoque, disponibilidade (do produto) }]
+    // ou null (cor vazia ou repetida, quantidade inválida, Disponível sem peça)
+    function lerCoresModelo(cores, novas = []) {
+      const vistos = new Set(novas.map(c => String(c.cor).trim().toLowerCase()));
+      const saida = [];
+      for (const c of cores) {
+        const cor = String(c.cor || '').trim();
+        const estoque = c.disponibilidade === 'ESGOTADO' ? 0 : Number(String(c.estoque ?? '').trim() || 0);
+        if (!cor || vistos.has(cor.toLowerCase()) || !Number.isInteger(estoque) || estoque < 0) return null;
+        vistos.add(cor.toLowerCase());
+        saida.push({ produto: c.produto, cor, estoque, disponibilidade: c.disponibilidade === 'SOB_ENCOMENDA' ? 'SOB_ENCOMENDA' : 'PRONTA_ENTREGA' });
+      }
+      return saida;
+    }
+
+    document.getElementById('coresDoModelo').addEventListener('input', (e) => {
+      const d = e.target.dataset;
+      const i = Number(d.modeloCor ?? d.modeloEstoque);
+      if (!coresModelo[i]) return;
+      if (d.modeloCor !== undefined) coresModelo[i].cor = e.target.value;
+      else if (d.modeloEstoque !== undefined) {
+        coresModelo[i].estoque = e.target.value;
+        // Peça na loja sem disponibilidade marcada: fica Disponível
+        if (Number(e.target.value) > 0 && coresModelo[i].disponibilidade === 'ESGOTADO') { coresModelo[i].disponibilidade = 'PRONTA_ENTREGA'; desenharCoresModelo(); }
+      }
+    });
+    document.getElementById('coresDoModelo').addEventListener('change', (e) => {
+      if (e.target.dataset.modeloDisp === undefined) return;
+      const c = coresModelo[Number(e.target.dataset.modeloDisp)];
+      if (!c) return;
+      c.disponibilidade = e.target.value;
+      if (c.disponibilidade === 'ESGOTADO') c.estoque = '0';
+      desenharCoresModelo();
+    });
+    document.getElementById('coresDoModelo').addEventListener('click', (e) => {
+      const btn = e.target.closest('[data-modelo-fotos]');
+      if (!btn) return;
+      if (!confirm('Abrir esta cor para trocar as fotos? O que você mudou aqui e não salvou se perde.')) return;
+      window.editarProduto(Number(btn.dataset.modeloFotos));
+    });
 
     // Cores preenchidas -> [{ cor, estoque, file }]. Linha toda em branco não entra.
     // null = alguma cor sem nome, quantidade inválida ou cor repetida.
@@ -3814,10 +3919,11 @@
         const cor = String(c.cor || '').trim();
         const qtd = String(c.estoque ?? '').trim();
         if (!cor && !qtd && !c.file) continue;
-        const estoque = qtd === '' ? 0 : Number(qtd);
+        const disponibilidade = c.disponibilidade || 'PRONTA_ENTREGA';
+        const estoque = qtd === '' || disponibilidade === 'ESGOTADO' ? 0 : Number(qtd);
         if (!cor || !Number.isInteger(estoque) || estoque < 0 || vistos.has(cor.toLowerCase())) return null;
         vistos.add(cor.toLowerCase());
-        cores.push({ cor, estoque, file: c.file || null });
+        cores.push({ cor, estoque, disponibilidade, file: c.file || null });
       }
       return cores;
     }
@@ -3849,6 +3955,13 @@
       atualizarResumoCores();
     });
     document.getElementById('listaCores').addEventListener('change', (e) => {
+      if (e.target.dataset.corDisp !== undefined) {
+        const c = coresForm[Number(e.target.dataset.corDisp)];
+        if (!c) return;
+        c.disponibilidade = e.target.value;
+        if (c.disponibilidade === 'ESGOTADO') c.estoque = '0';
+        return desenharCores();
+      }
       const i = Number(e.target.dataset.corArquivo);
       if (e.target.dataset.corArquivo === undefined || !coresForm[i]) return;
       const file = e.target.files && e.target.files[0];
@@ -3928,6 +4041,20 @@
         const lista = doModelo.map(p => `${p.cor_armacao || 'sem cor'} (${Number(p.estoque) || 0})`).join(', ');
         document.getElementById('coresExistentes').textContent = `Cores que o modelo já tem: ${lista}.`;
       }
+      // Modelo com cores: um cadastro só (preços e especificações valem para todas as cores)
+      // e a lista das cores com a quantidade e a disponibilidade de cada uma
+      coresModelo = produto ? coresDoModeloDe(produto, todosProdutos) : [];
+      const modoModelo = coresModelo.length > 0;
+      ['campoCorProduto', 'campoEstoqueProduto', 'campoDisponibilidadeProduto'].forEach(c => document.getElementById(c).classList.toggle('hidden', modoModelo));
+      document.getElementById('coresExistentes').classList.toggle('hidden', modoModelo);
+      if (modoModelo) {
+        document.getElementById('nome').value = nomeDoModelo(produto);
+        document.getElementById('coresTitulo').textContent = 'Cores do produto';
+        document.getElementById('coresEdicao').firstChild.textContent = 'Cada cor com a sua quantidade e disponibilidade. Os preços, especificações e fotos 2 a 4 deste cadastro valem para todas as cores. Para trocar a foto de uma cor, toque em Fotos. Para mais uma cor, use + Adicionar cor. ';
+      } else {
+        document.getElementById('coresEdicao').firstChild.textContent = 'Inclua outras cores deste modelo: cada cor nova vira um produto com a sua foto, o seu estoque e SKU próprio, com os mesmos preços e especificações deste produto (as fotos 2 a 4 também vêm daqui). A cor deste produto é a do campo Cor lá em cima. ';
+      }
+      desenharCoresModelo();
       atualizarAvisoSinal();
       atualizarAbrirLink();
       preencherPromocaoProduto(produto);
@@ -4288,10 +4415,15 @@
         // Produto com cores na loja (Nuvemshop): preenche "Cores e quantidades" com as cores
         // disponíveis e a foto de cada uma; a foto do produto passa a ser uma foto comum
         const coresLoja = (Array.isArray(dados.cores) ? dados.cores : []).filter(x => x && String(x.cor || '').trim());
-        const coresDisp = coresLoja.some(x => x.disponivel !== false) ? coresLoja.filter(x => x.disponivel !== false) : coresLoja;
+        // Todas as cores da loja; a esgotada no site entra como Esgotado (0)
+        const coresDisp = coresLoja;
+        const algumaDisp = coresLoja.some(x => x.disponivel !== false);
+        const corDoSite = x => (algumaDisp && x.disponivel === false
+          ? { cor: String(x.cor).trim().slice(0, 100), estoque: '0', disponibilidade: 'ESGOTADO', file: null }
+          : { cor: String(x.cor).trim().slice(0, 100), estoque: '1', disponibilidade: 'PRONTA_ENTREGA', file: null });
         let coresImportadas = 0;
         if (!produtoEditando && !existente && coresDisp.length && !coresForm.some(x => String(x.cor || '').trim() || x.file)) {
-          coresForm = coresDisp.slice(0, MAX_CORES).map(x => ({ cor: String(x.cor).trim().slice(0, 100), estoque: '1', file: null }));
+          coresForm = coresDisp.slice(0, MAX_CORES).map(corDoSite);
           coresImportadas = coresForm.length;
           desenharCores();
           coresDisp.slice(0, MAX_CORES).forEach((x, i) => {
@@ -4357,7 +4489,7 @@
               fecharModal();
               window.editarProduto(existente.id);
               importadoDoLink = true;
-              coresForm = coresNovas.map(x => ({ cor: String(x.cor).trim().slice(0, 100), estoque: '1', file: null }));
+              coresForm = coresNovas.map(corDoSite);
               desenharCores();
               coresNovas.forEach((x, i) => {
                 const linkFoto = linkSeguro(x.imagem);
@@ -4458,7 +4590,7 @@
         if (cores === null) return mostrarToast('Confira as cores: cada cor com nome, uma vez só, e a quantidade em número', 'error');
         if (cores.length && formData.has('tamanhos')) return mostrarToast('Cadastre por tamanhos ou por cores, não os dois de uma vez', 'error');
         if (cores.length) {
-          formData.append('cores', JSON.stringify(cores.map(c => ({ cor: c.cor, estoque: c.estoque }))));
+          formData.append('cores', JSON.stringify(cores.map(c => ({ cor: c.cor, estoque: c.estoque, disponibilidade: c.disponibilidade }))));
           for (const [i, c] of cores.entries()) {
             if (c.file) formData.append(`foto_cor_${i + 1}`, await prepararImagem(c.file));
           }
@@ -4477,6 +4609,18 @@
       if (coresNovas === null) return mostrarToast('Confira as cores: cada cor com nome, uma vez só, e a quantidade em número', 'error');
       if (coresNovas.length && !document.getElementById('cor_armacao').value.trim()) return mostrarToast('Preencha a Cor deste produto antes de incluir outras cores', 'error');
 
+      // Modelo com cores: o cabeçalho (nome, preços, especificações) vale para todas as
+      // cores; cada cor guarda a sua quantidade e disponibilidade (e o seu SKU por dentro)
+      const modelo = id && coresModelo.length ? lerCoresModelo(coresModelo, coresNovas) : null;
+      if (id && coresModelo.length && !modelo) return mostrarToast('Confira as cores do modelo: cada cor com nome, uma vez só, e a quantidade em número', 'error');
+      const nomeModelo = document.getElementById('nome').value.trim();
+      if (modelo) {
+        formData.set('nome', `${nomeModelo} - ${modelo[0].cor}`);
+        formData.set('cor_armacao', modelo[0].cor);
+        formData.set('estoque', String(modelo[0].estoque));
+        formData.set('disponibilidade', modelo[0].disponibilidade);
+      }
+
       try {
         const url = id ? `/api/produtos/${id}` : '/api/produtos';
         const method = id ? 'PUT' : 'POST';
@@ -4486,9 +4630,44 @@
           throw new Error(err.error || 'Erro ao salvar');
         }
         const salvo = await res.json().catch(() => ({}));
+        if (modelo && modelo.length > 1) {
+          const campo = (f) => document.getElementById(f).value.trim();
+          const linhas = modelo.slice(1).map(c => ({
+            id: Number(c.produto.id),
+            nome: `${nomeModelo} - ${c.cor}`,
+            codigo_sku: c.produto.codigo_sku,
+            preco_custo: Number(campo('preco_custo')),
+            preco_venda: Number(campo('preco_venda')),
+            disponibilidade: c.disponibilidade,
+            formato: campo('formato'),
+            estilo: campo('estilo'),
+            cor_armacao: c.cor,
+            fornecedor: campo('fornecedor'),
+            codigo_fornecedor: campo('codigo_fornecedor'),
+            link_fornecedor: campo('link_fornecedor'),
+            nome_fornecedor: campo('nome_fornecedor'),
+            ...Object.fromEntries(CAMPOS_MEDIDA.map(f => [f, campo(f)])),
+            material: campo('material'),
+            tipo: campo('tipo'),
+            nome_curto: campo('nome_curto'),
+            genero: campo('genero'),
+            tamanho: '',
+            grade: campo('grade'),
+            estoque: c.estoque,
+          }));
+          const rl = await fetchAdmin('/api/admin/produtos/lote', {
+            method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ produtos: linhas }),
+          });
+          if (!rl.ok) {
+            const corpo = await rl.json().catch(() => ({}));
+            carregarProdutos();
+            const erro = (corpo.erros && corpo.erros[0]) ? `${linhas[corpo.erros[0].linha]?.cor_armacao || ''}: ${corpo.erros[0].mensagem}` : (corpo.error || 'erro ao salvar');
+            throw new Error(`Cor ${modelo[0].cor} salva, mas as outras cores não (${erro})`);
+          }
+        }
         if (id && coresNovas.length) {
           const formCores = new FormData();
-          formCores.append('cores', JSON.stringify(coresNovas.map(c => ({ cor: c.cor, estoque: c.estoque }))));
+          formCores.append('cores', JSON.stringify(coresNovas.map(c => ({ cor: c.cor, estoque: c.estoque, disponibilidade: c.disponibilidade }))));
           if (importadoDoLink) formCores.append('em_conferencia', 'true');
           for (const [i, c] of coresNovas.entries()) {
             if (c.file) formCores.append(`foto_cor_${i + 1}`, await prepararImagem(c.file));
@@ -4504,7 +4683,7 @@
           carregarProdutos();
           return;
         }
-        mostrarToast(id ? 'Produto atualizado!' : Array.isArray(salvo.produtos) ? `${salvo.produtos.length} ${formData.has('cores') ? 'cores' : 'tamanhos'} cadastrad${formData.has('cores') ? 'a' : 'o'}s!` : 'Produto criado!');
+        mostrarToast(id ? (modelo && modelo.length > 1 ? `Produto atualizado com ${modelo.length} cores!` : 'Produto atualizado!') : Array.isArray(salvo.produtos) ? `${salvo.produtos.length} ${formData.has('cores') ? 'cores' : 'tamanhos'} cadastrad${formData.has('cores') ? 'a' : 'o'}s!` : 'Produto criado!');
         // Produto novo importado do fornecedor: a foto principal vai para o computador como <SKU>.jpg
         const foto = !id && imagemImportada;
         const skuFoto = document.getElementById('codigo_sku').value.trim();

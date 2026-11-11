@@ -110,7 +110,7 @@ function extrairFuncao(nome) {
 }
 const funcoes = ['linkSeguro', 'precoVendaPadrao', 'proximoSku', 'nomeTematico', 'camposDaImportacao', 'formatarMedida', 'linhaLoteVazia', 'linhaLoteEstaVazia',
   'conflitosLote', 'produtoJaCadastrado', 'lerCoresLote', 'textoCoresLote', 'linhaDoModeloComCores', 'planoCoresLote', 'resumoCoresLote', 'expandirCoresLote',
-  'agruparCoresPorModelo', 'nomeDoModelo', 'lerPreco', 'lerMedida', 'lerDataCompra', 'validarLote', 'campoDoCabecalho', 'linhasDaPlanilha', 'lerDisponibilidade', 'lerStatus', 'lerGenero'];
+  'agruparCoresPorModelo', 'nomeDoModelo', 'coresDoModeloDe', 'lerCoresModelo', 'lerPreco', 'lerMedida', 'lerDataCompra', 'validarLote', 'campoDoCabecalho', 'linhasDaPlanilha', 'lerDisponibilidade', 'lerStatus', 'lerGenero'];
 const ctx = vm.createContext({ Number, String, Math, Map, Set, Object, URL, Array, JSON });
 vm.runInContext(`
   const ACRESCIMO_VENDA = 100;
@@ -130,11 +130,15 @@ describe('painel: Cadastro em Lote com as cores do link (um produto, estoque por
   const dados = extrairDadosProduto(paginaNuvemshop(variacoes), URL_TASSIA);
 
   it('lê e escreve "cor:qtd"', () => {
-    assert.deepEqual(json(ctx.lerCoresLote('Preto:2, Azul claro : 3; Rosa')), [{ cor: 'Preto', qtd: 2 }, { cor: 'Azul claro', qtd: 3 }, { cor: 'Rosa', qtd: 1 }]);
+    assert.deepEqual(json(ctx.lerCoresLote('Preto:2, Azul claro : 3; Rosa')), [{ cor: 'Preto', qtd: 2, disp: 'PRONTA_ENTREGA' }, { cor: 'Azul claro', qtd: 3, disp: 'PRONTA_ENTREGA' }, { cor: 'Rosa', qtd: 1, disp: 'PRONTA_ENTREGA' }]);
+    assert.deepEqual(json(ctx.lerCoresLote('Preto:0, Rosa:0:encomenda, Azul:2:encomenda, Verde:3:esgotado, Lilás:1:disponível')), [
+      { cor: 'Preto', qtd: 0, disp: 'ESGOTADO' }, { cor: 'Rosa', qtd: 0, disp: 'SOB_ENCOMENDA' }, { cor: 'Azul', qtd: 2, disp: 'SOB_ENCOMENDA' },
+      { cor: 'Verde', qtd: 0, disp: 'ESGOTADO' }, { cor: 'Lilás', qtd: 1, disp: 'PRONTA_ENTREGA' }]);
+    assert.equal(ctx.lerCoresLote('Preto:1:qualquer'), null, 'disponibilidade desconhecida');
+    assert.equal(ctx.textoCoresLote([{ cor: 'Preto', qtd: 0, disp: 'ESGOTADO' }, { cor: 'Rosa', qtd: 0, disp: 'SOB_ENCOMENDA' }]), 'Preto:0:esgotado, Rosa:0:encomenda');
     assert.deepEqual(json(ctx.lerCoresLote('')), []);
     assert.equal(ctx.lerCoresLote('Preto:1, preto:2'), null, 'cor repetida');
     assert.equal(ctx.lerCoresLote('Preto:x'), null);
-    assert.equal(ctx.lerCoresLote('Preto:0'), null);
     assert.equal(ctx.textoCoresLote([{ cor: 'Preto', qtd: 2 }, { cor: 'Rosa', qtd: 1 }]), 'Preto:2, Rosa:1');
   });
 
@@ -144,12 +148,12 @@ describe('painel: Cadastro em Lote com as cores do link (um produto, estoque por
     const l = r.linha;
     assert.equal(l.nome, 'Nix Raptor NV1720');
     assert.equal(l.codigo_sku, 'NIX-NV1-RAP');
-    assert.equal(l.cores, 'Preto:1, Azul:1');
+    assert.equal(l.cores, 'Preto:1, Marrom:0:esgotado, Azul:1', 'esgotada no site entra como Esgotado');
     assert.equal(l.cor_armacao, '');
     assert.equal(l.codigo_fornecedor, 'NV1720');
-    assert.deepEqual(json(l.fotos_cores), { preto: `https:${CDN}/preto-1024-1024.webp`, azul: `https:${CDN}/azul-1024-1024.webp` });
+    assert.deepEqual(json(l.fotos_cores), { preto: `https:${CDN}/preto-1024-1024.webp`, marrom: `https:${CDN}/marrom-1024-1024.webp`, azul: `https:${CDN}/azul-1024-1024.webp` });
     assert.deepEqual(json(l.imagens_extras), [`https:${CDN}/lateral-1024-1024.webp`, `https:${CDN}/caixa-1024-1024.webp`]);
-    assert.equal(ctx.resumoCoresLote(l, []), 'Um produto com 2 cor(es), 2 peça(s): Preto (1), Azul (1)');
+    assert.equal(ctx.resumoCoresLote(l, []), 'Um produto com 3 cor(es), 2 peça(s) na loja: Preto (1), Marrom (esgotado), Azul (1)');
     assert.deepEqual(json(ctx.validarLote([l])), [{}]);
     assert.equal(ctx.conflitosLote([l, { ...l }], []).length, 0, 'linha com cores não abre a conferência');
   });
@@ -180,7 +184,7 @@ describe('painel: Cadastro em Lote com as cores do link (um produto, estoque por
     const l = ctx.linhaDoModeloComCores(linhaBase(dados), dados, existentes, []).linha;
     assert.equal(l.codigo_sku, 'NIX-NV1-RAP', 'usa o código do modelo cadastrado');
     assert.equal(l.nome, 'Nix Raptor NV1720');
-    assert.equal(ctx.resumoCoresLote(l, existentes), 'Já cadastrado (NIX-NV1-RAP-PRETO): inclui a(s) cor(es) Azul (1); soma no estoque de Preto (1)');
+    assert.equal(ctx.resumoCoresLote(l, existentes), 'Já cadastrado (NIX-NV1-RAP-PRETO): inclui a(s) cor(es) Marrom (esgotado), Azul (1); soma no estoque de Preto (1)');
     const e = ctx.expandirCoresLote([l], existentes);
     assert.equal(e.produtos.length, 1);
     assert.equal(e.produtos[0].codigo_sku, 'NIX-NV1-RAP-PRETO');
@@ -188,7 +192,43 @@ describe('painel: Cadastro em Lote com as cores do link (um produto, estoque por
     assert.equal(e.produtos[0].imagem_fornecedor, '', 'reposição não troca a foto');
     assert.equal(e.incluir.length, 1);
     assert.equal(e.incluir[0].produto.id, 5);
-    assert.deepEqual(json(e.incluir[0].cores), [{ cor: 'Azul', estoque: 1, foto: `https:${CDN}/azul-1024-1024.webp` }]);
+    assert.deepEqual(json(e.incluir[0].cores), [
+      { cor: 'Marrom', estoque: 0, disponibilidade: 'ESGOTADO', foto: `https:${CDN}/marrom-1024-1024.webp` },
+      { cor: 'Azul', estoque: 1, disponibilidade: 'PRONTA_ENTREGA', foto: `https:${CDN}/azul-1024-1024.webp` }]);
+  });
+
+  it('cor nova esgotada ou sob encomenda entra sem peça e com a disponibilidade', () => {
+    const l = { ...ctx.linhaDoModeloComCores(linhaBase(dados), dados, [], []).linha, cores: 'Preto:2, Marrom:0:esgotado, Azul:0:encomenda' };
+    assert.deepEqual(json(ctx.validarLote([l])), [{}]);
+    const [preto, marrom, azul] = ctx.expandirCoresLote([l], []).produtos;
+    assert.equal(preto.disponibilidade, 'PRONTA_ENTREGA');
+    assert.equal(preto.sem_estoque, undefined);
+    assert.equal(marrom.sem_estoque, true);
+    assert.equal(marrom.disponibilidade, 'PRONTA_ENTREGA', 'esgotada = pronta entrega sem peça');
+    assert.equal(azul.sem_estoque, true);
+    assert.equal(azul.disponibilidade, 'SOB_ENCOMENDA');
+  });
+
+  it('editar produto: um cabeçalho e a lista de cores do modelo, a cor aberta primeiro', () => {
+    const produtos = [
+      { id: 1, nome: 'Nix Raptor NV1720 - Preto', codigo_sku: 'NIX-NV1-RAP-PRETO', cor_armacao: 'Preto', grade: 'NIX-NV1-RAP', tamanho: '', estoque: 2, disponibilidade: 'PRONTA_ENTREGA' },
+      { id: 2, nome: 'Nix Raptor NV1720 - Azul', codigo_sku: 'NIX-NV1-RAP-AZUL', cor_armacao: 'Azul', grade: 'nix-nv1-rap', tamanho: '', estoque: 0, disponibilidade: 'PRONTA_ENTREGA' },
+      { id: 3, nome: 'Nix Raptor NV1720 - Rosa', codigo_sku: 'NIX-NV1-RAP-ROSA', cor_armacao: 'Rosa', grade: 'NIX-NV1-RAP', tamanho: '', estoque: 0, disponibilidade: 'SOB_ENCOMENDA' },
+      { id: 4, nome: 'Outro', codigo_sku: 'OUTRO', cor_armacao: 'Preto', grade: 'OUTRO', tamanho: '', estoque: 1 },
+    ];
+    const cores = ctx.coresDoModeloDe(produtos[1], produtos);
+    assert.deepEqual(json(cores.map(c => [c.produto.id, c.cor, c.estoque, c.disponibilidade])), [[2, 'Azul', '0', 'ESGOTADO'], [1, 'Preto', '2', 'PRONTA_ENTREGA'], [3, 'Rosa', '0', 'SOB_ENCOMENDA']]);
+    assert.equal(ctx.coresDoModeloDe({ ...produtos[0], grade: '' }, produtos).length, 0, 'sem Código do modelo: edição como sempre');
+    assert.equal(ctx.coresDoModeloDe({ ...produtos[0], tamanho: 'M' }, produtos).length, 0, 'por tamanho não é por cor');
+
+    cores[0].disponibilidade = 'PRONTA_ENTREGA'; cores[0].estoque = '3';
+    cores[2].estoque = '1';
+    assert.deepEqual(json(ctx.lerCoresModelo(cores).map(c => [c.cor, c.estoque, c.disponibilidade])), [['Azul', 3, 'PRONTA_ENTREGA'], ['Preto', 2, 'PRONTA_ENTREGA'], ['Rosa', 1, 'SOB_ENCOMENDA']]);
+    cores[1].disponibilidade = 'ESGOTADO';
+    assert.equal(ctx.lerCoresModelo(cores)[1].estoque, 0, 'Esgotado grava 0 peças');
+    assert.equal(ctx.lerCoresModelo(cores, [{ cor: 'rosa' }]), null, 'cor nova repetida');
+    assert.equal(ctx.lerCoresModelo([{ ...cores[0], cor: ' ' }]), null);
+    assert.equal(ctx.lerCoresModelo([{ ...cores[0], estoque: '1,5' }]), null);
   });
 
   it('produto antigo sem Código do modelo e mesmo cód. do fornecedor: as cores entram nele', () => {
@@ -271,6 +311,50 @@ describe('API: produto importado fica em conferência até liberar', () => {
     });
     assert.deepEqual(await lib.json(), { atualizados: 2 });
     assert.deepEqual((await vitrine()).sort(), ['AVULSO', 'NIX-A-PRETO', 'NIX-A-ROSA']);
+  });
+
+  it('cores com disponibilidade: esgotada e sob encomenda entram sem peça e sem compra', async () => {
+    const base = { preco_custo: 29.9, preco_venda: 129.9, quantidade: '1', grade: 'NIX-B', cadastrar_novo: true };
+    const res = await api('/api/admin/produtos/lote', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ produtos: [
+        { ...base, nome: 'Nix B - Preto', codigo_sku: 'NIX-B-PRETO', cor_armacao: 'Preto' },
+        { ...base, nome: 'Nix B - Azul', codigo_sku: 'NIX-B-AZUL', cor_armacao: 'Azul', sem_estoque: true },
+        { ...base, nome: 'Nix B - Rosa', codigo_sku: 'NIX-B-ROSA', cor_armacao: 'Rosa', sem_estoque: true, disponibilidade: 'SOB_ENCOMENDA' },
+      ] }),
+    });
+    assert.equal(res.status, 201);
+    const [preto, azul, rosa] = (await res.json()).produtos;
+    assert.deepEqual([preto.estoque, azul.estoque, rosa.estoque].map(Number), [1, 0, 0]);
+    assert.equal(azul.status, 'ESGOTADO');
+    assert.equal(rosa.disponibilidade, 'SOB_ENCOMENDA');
+    const compras = await (await api(`/api/admin/produtos/${azul.id}/compras`)).json();
+    assert.equal(compras.length, 0, 'cor sem peça não lança compra');
+
+    const fd = new FormData();
+    fd.append('cores', JSON.stringify([{ cor: 'Verde', estoque: 0, disponibilidade: 'SOB_ENCOMENDA' }, { cor: 'Lilás', estoque: 5, disponibilidade: 'ESGOTADO' }]));
+    const rc = await api(`/api/produtos/${preto.id}/cores`, { method: 'POST', body: fd });
+    assert.equal(rc.status, 201);
+    const [verde, lilas] = (await rc.json()).produtos;
+    assert.equal(verde.disponibilidade, 'SOB_ENCOMENDA');
+    assert.equal(Number(lilas.estoque), 0, 'Esgotado grava 0 peças');
+    assert.equal(lilas.disponibilidade, 'PRONTA_ENTREGA');
+
+    const ruim = new FormData();
+    ruim.append('cores', JSON.stringify([{ cor: 'Cinza', estoque: 1, disponibilidade: 'QUALQUER' }]));
+    assert.equal((await api(`/api/produtos/${preto.id}/cores`, { method: 'POST', body: ruim })).status, 400);
+
+    // Editar produto salva o cabeçalho nas outras cores do modelo pelo lote
+    const up = await api('/api/admin/produtos/lote', {
+      method: 'PUT', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ produtos: [{ id: azul.id, nome: 'Nix B Novo - Azul', codigo_sku: 'NIX-B-AZUL', preco_custo: 30, preco_venda: 139.9, disponibilidade: 'SOB_ENCOMENDA', cor_armacao: 'Azul', grade: 'NIX-B', estoque: 2 }] }),
+    });
+    assert.equal(up.status, 200);
+    const [azul2] = (await up.json()).produtos;
+    assert.equal(azul2.nome, 'Nix B Novo - Azul');
+    assert.equal(Number(azul2.preco_venda), 139.9);
+    assert.equal(Number(azul2.estoque), 2);
+    assert.equal(azul2.disponibilidade, 'SOB_ENCOMENDA');
   });
 
   it('liberar exige login e ids válidos', async () => {
