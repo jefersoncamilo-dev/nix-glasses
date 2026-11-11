@@ -7,7 +7,7 @@ const crypto = require('crypto');
 const fs = require('fs');
 const { criarPool, initTables } = require('./db');
 const { lerEmpresas, empresaDoHost, normalizarHost, identidadeBanco, hostInterno } = require('./empresas');
-const { CAMPOS_TEXTO, lerNicho, limparTextoLoja, montarLoja, renderizarPagina } = require('./loja');
+const { CAMPOS_TEXTO, COLUNAS, lerColunas, lerNicho, limparTextoLoja, montarLoja, renderizarPagina } = require('./loja');
 const master = require('./master');
 const { importarProduto, baixarImagem, ErroImportacao } = require('./importar-produto');
 const { lerPedidoPdf, ErroPedidoPdf } = require('./pedido-fornecedor');
@@ -3316,6 +3316,17 @@ async function startServer() {
     if (corpo.provador !== undefined) {
       if (typeof corpo.provador !== 'boolean') return res.status(400).json({ error: 'Campo "provador" inválido' });
       pares.push(['loja_provador', corpo.provador ? '1' : '0']);
+    }
+    // Produtos por linha na vitrine (celular 1 a 4, computador 2 a 6)
+    for (const aparelho of Object.keys(COLUNAS)) {
+      const campo = 'colunas_' + aparelho;
+      if (corpo[campo] === undefined) continue;
+      const n = lerColunas(aparelho, corpo[campo]);
+      if (n === null) {
+        const { min, max } = COLUNAS[aparelho];
+        return res.status(400).json({ error: `Produtos por linha no ${aparelho}: escolha de ${min} a ${max}` });
+      }
+      pares.push(['loja_' + campo, String(n)]);
     }
     try {
       await salvarConfiguracoes(req.db, pares);

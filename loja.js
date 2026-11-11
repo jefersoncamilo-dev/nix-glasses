@@ -24,6 +24,14 @@ const CAMPOS_TEXTO = {
 // padrão. Desligada, a vitrine esconde o card, o pop-up e o botão "Provar virtualmente";
 // as fotos (inclusive a foto 4 do provador) continuam salvas para religar depois.
 const NICHOS = ['oculos', 'roupas', 'geral'];
+// Produtos por linha na vitrine (loja_colunas_celular / loja_colunas_computador), de
+// Configurações > Dados da loja. Padrão 3 no celular e 4 no computador (como sempre foi).
+// No tablet (de 640px até 1023px) a vitrine usa o do celular, com no mínimo 3 e no
+// máximo o do computador, para os cards não ficarem enormes nem espremidos.
+const COLUNAS = {
+  celular: { min: 1, max: 4, padrao: 3 },
+  computador: { min: 2, max: 6, padrao: 4 },
+};
 
 // Textos de hoje da Nix Glasses: a empresa padrão continua igual sem mexer em nada.
 const PADRAO_NIX = {
@@ -42,6 +50,8 @@ const PADRAO_NIX = {
   nicho: 'oculos',
   oculos: true,
   provador: true,
+  colunas_celular: COLUNAS.celular.padrao,
+  colunas_computador: COLUNAS.computador.padrao,
 };
 
 // Textos de partida de uma loja de roupas (só onde a empresa não escreveu os seus).
@@ -67,7 +77,23 @@ function lojaPadrao(empresa) {
     nicho: 'geral',
     oculos: false,
     provador: true,
+    colunas_celular: COLUNAS.celular.padrao,
+    colunas_computador: COLUNAS.computador.padrao,
   };
+}
+
+// Número de produtos por linha válido para o aparelho ('celular' ou 'computador'), ou null.
+function lerColunas(aparelho, v) {
+  const { min, max } = COLUNAS[aparelho];
+  const n = typeof v === 'string' && /^\d+$/.test(v.trim()) ? Number(v) : v;
+  return Number.isInteger(n) && n >= min && n <= max ? n : null;
+}
+
+// Colunas da grade da vitrine em cada largura de tela.
+function colunasVitrine(loja) {
+  const celular = lerColunas('celular', loja.colunas_celular) || COLUNAS.celular.padrao;
+  const computador = lerColunas('computador', loja.colunas_computador) || COLUNAS.computador.padrao;
+  return { celular, tablet: Math.min(computador, Math.max(celular, 3)), computador };
 }
 
 function lerNicho(v) {
@@ -98,6 +124,9 @@ function montarLoja(empresa, linhas) {
   }
   loja.oculos = loja.nicho === 'oculos';
   loja.provador = salvo.get('loja_provador') !== '0';
+  for (const aparelho of Object.keys(COLUNAS)) {
+    loja['colunas_' + aparelho] = lerColunas(aparelho, salvo.get('loja_colunas_' + aparelho)) || COLUNAS[aparelho].padrao;
+  }
   loja.logo = salvo.get('loja_logo') || '';
   return loja;
 }
@@ -110,6 +139,9 @@ function escapeHtml(s) {
 function jsonParaScript(obj) {
   return JSON.stringify(obj).replace(/</g, '\\u003c');
 }
+
+// Com 4 por linha no celular o card fica estreito: o selo (Disponível/Encomenda) diminui para caber.
+const SELO_APERTADO = ' @media (max-width: 639px) { #catalogoGrid .selo-card { font-size: 7px; letter-spacing: 0; padding: 0.0625rem 0.25rem; gap: 0.125rem; } }';
 
 function renderizarPagina(html, loja) {
   let out = html.replace(
@@ -125,7 +157,12 @@ function renderizarPagina(html, loja) {
   );
   out = out.replace(/\salt="NIX"/g, ` alt="${escapeHtml(loja.marca)}"`);
   const publico = { nome: loja.nome, marca: loja.marca, oculos: loja.oculos, nicho: loja.nicho, provador: loja.provador !== false };
-  return out.replace('</head>', `  <script>window.LOJA = ${jsonParaScript(publico)};</script>\n</head>`);
+  // A grade da vitrine já sai com as colunas da loja (sem pular de 3 para outro número)
+  const c = colunasVitrine(loja);
+  const estilo = out.includes('id="catalogoGrid"')
+    ? `  <style>:root { --colunas-celular: ${c.celular}; --colunas-tablet: ${c.tablet}; --colunas-computador: ${c.computador}; }${c.celular >= 4 ? SELO_APERTADO : ''}</style>\n`
+    : '';
+  return out.replace('</head>', `${estilo}  <script>window.LOJA = ${jsonParaScript(publico)};</script>\n</head>`);
 }
 
-module.exports = { CAMPOS_TEXTO, NICHOS, PADRAO_NIX, lojaPadrao, lerNicho, limparTextoLoja, montarLoja, renderizarPagina, escapeHtml };
+module.exports = { CAMPOS_TEXTO, NICHOS, COLUNAS, lerColunas, colunasVitrine, PADRAO_NIX, lojaPadrao, lerNicho, limparTextoLoja, montarLoja, renderizarPagina, escapeHtml };

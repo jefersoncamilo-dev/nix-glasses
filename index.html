@@ -19,6 +19,11 @@
       --nix-muted: #a3a3a3;
     }
     * { font-family: 'Inter', sans-serif; }
+    /* Produtos por linha: o servidor põe --colunas-* com o que a loja escolheu no painel
+       (Configurações > Dados da loja). Sem isso fica 3 no celular/tablet e 4 no computador. */
+    #catalogoGrid { grid-template-columns: repeat(var(--colunas-celular, 3), minmax(0, 1fr)); }
+    @media (min-width: 640px) { #catalogoGrid { grid-template-columns: repeat(var(--colunas-tablet, 3), minmax(0, 1fr)); } }
+    @media (min-width: 1024px) { #catalogoGrid { grid-template-columns: repeat(var(--colunas-computador, 4), minmax(0, 1fr)); } }
     html { scroll-behavior: smooth; }
     @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
     .font-brand { font-family: 'Cinzel', serif; }
@@ -351,7 +356,7 @@
       </div>
       <!-- Orientação: uma linha que muda com o filtro (some quando não há o que dizer) -->
       <p id="guiaCatalogo" class="mb-3 sm:mb-6 text-xs sm:text-sm text-neutral-400" role="status"><span id="guiaCatalogoTexto"></span></p>
-      <div id="catalogoGrid" class="grid grid-cols-3 lg:grid-cols-4 gap-2 sm:gap-5">
+      <div id="catalogoGrid" class="grid gap-2 sm:gap-5">
         <!-- Cards inseridos via JS -->
       </div>
       <div id="emptyState" class="hidden text-center py-12">
