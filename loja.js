@@ -24,6 +24,9 @@ const CAMPOS_TEXTO = {
 // padrão. Desligada, a vitrine esconde o card, o pop-up e o botão "Provar virtualmente";
 // as fotos (inclusive a foto 4 do provador) continuam salvas para religar depois.
 const NICHOS = ['oculos', 'roupas', 'geral'];
+// Instagram da loja (loja_instagram), de Configurações > Dados da loja: guardado só o
+// usuário, sem @ (aceita "@loja", "loja" ou o link do perfil). Vazio = sem botão.
+// O botão de WhatsApp do topo usa o número de pedidos (whatsapp_number); sem número, some.
 // Produtos por linha na vitrine (loja_colunas_celular / loja_colunas_computador), de
 // Configurações > Dados da loja. Padrão 3 no celular e 4 no computador (como sempre foi).
 // No tablet (de 640px até 1023px) a vitrine usa o do celular, com no mínimo 3 e no
@@ -52,6 +55,8 @@ const PADRAO_NIX = {
   provador: true,
   colunas_celular: COLUNAS.celular.padrao,
   colunas_computador: COLUNAS.computador.padrao,
+  instagram: '',
+  whatsapp: '',
 };
 
 // Textos de partida de uma loja de roupas (só onde a empresa não escreveu os seus).
@@ -79,7 +84,23 @@ function lojaPadrao(empresa) {
     provador: true,
     colunas_celular: COLUNAS.celular.padrao,
     colunas_computador: COLUNAS.computador.padrao,
+    instagram: '',
+    whatsapp: '',
   };
+}
+
+// Usuário do Instagram a partir do que a loja digitou: '' (vazio), o usuário sem @, ou
+// null quando não dá para entender (caracteres que o Instagram não aceita).
+function lerInstagram(v) {
+  if (v === null || v === undefined) return '';
+  if (typeof v !== 'string') return null;
+  let t = v.trim();
+  if (!t) return '';
+  const link = t.match(/^(?:https?:\/\/)?(?:www\.|m\.)?(?:instagram\.com|instagr\.am)\/([^/?#\s]+)\/?(?:[?#].*)?$/i);
+  if (link) t = link[1];
+  t = t.replace(/^@/, '');
+  if (!/^[A-Za-z0-9._]{1,30}$/.test(t) || /^\.|\.$|\.\./.test(t)) return null;
+  return t.toLowerCase();
 }
 
 // Número de produtos por linha válido para o aparelho ('celular' ou 'computador'), ou null.
@@ -127,6 +148,8 @@ function montarLoja(empresa, linhas) {
   for (const aparelho of Object.keys(COLUNAS)) {
     loja['colunas_' + aparelho] = lerColunas(aparelho, salvo.get('loja_colunas_' + aparelho)) || COLUNAS[aparelho].padrao;
   }
+  loja.instagram = lerInstagram(salvo.get('loja_instagram')) || '';
+  loja.whatsapp = String(salvo.get('whatsapp_number') || '').replace(/\D/g, '');
   loja.logo = salvo.get('loja_logo') || '';
   return loja;
 }
@@ -156,7 +179,8 @@ function renderizarPagina(html, loja) {
       .join('') + fecha
   );
   out = out.replace(/\salt="NIX"/g, ` alt="${escapeHtml(loja.marca)}"`);
-  const publico = { nome: loja.nome, marca: loja.marca, oculos: loja.oculos, nicho: loja.nicho, provador: loja.provador !== false };
+  const publico = { nome: loja.nome, marca: loja.marca, oculos: loja.oculos, nicho: loja.nicho,
+    instagram: loja.instagram || '', whatsapp: loja.whatsapp || '', provador: loja.provador !== false };
   // A grade da vitrine já sai com as colunas da loja (sem pular de 3 para outro número)
   const c = colunasVitrine(loja);
   const estilo = out.includes('id="catalogoGrid"')
@@ -165,4 +189,4 @@ function renderizarPagina(html, loja) {
   return out.replace('</head>', `${estilo}  <script>window.LOJA = ${jsonParaScript(publico)};</script>\n</head>`);
 }
 
-module.exports = { CAMPOS_TEXTO, NICHOS, COLUNAS, lerColunas, colunasVitrine, PADRAO_NIX, lojaPadrao, lerNicho, limparTextoLoja, montarLoja, renderizarPagina, escapeHtml };
+module.exports = { CAMPOS_TEXTO, NICHOS, lerInstagram, COLUNAS, lerColunas, colunasVitrine, PADRAO_NIX, lojaPadrao, lerNicho, limparTextoLoja, montarLoja, renderizarPagina, escapeHtml };

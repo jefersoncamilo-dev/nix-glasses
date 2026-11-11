@@ -7,7 +7,7 @@ const crypto = require('crypto');
 const fs = require('fs');
 const { criarPool, initTables } = require('./db');
 const { lerEmpresas, empresaDoHost, normalizarHost, identidadeBanco, hostInterno } = require('./empresas');
-const { CAMPOS_TEXTO, COLUNAS, lerColunas, lerNicho, limparTextoLoja, montarLoja, renderizarPagina } = require('./loja');
+const { CAMPOS_TEXTO, COLUNAS, lerColunas, lerInstagram, lerNicho, limparTextoLoja, montarLoja, renderizarPagina } = require('./loja');
 const master = require('./master');
 const { importarProduto, baixarImagem, ErroImportacao } = require('./importar-produto');
 const { lerPedidoPdf, ErroPedidoPdf } = require('./pedido-fornecedor');
@@ -91,7 +91,7 @@ app.use(escolherEmpresa);
 const cacheLoja = new Map();
 async function lojaDaEmpresa(empresa) {
   if (!cacheLoja.has(empresa.slug)) {
-    const { rows } = await empresa.pool.query(`SELECT chave, valor FROM configuracoes WHERE chave LIKE 'loja\\_%'`);
+    const { rows } = await empresa.pool.query(`SELECT chave, valor FROM configuracoes WHERE chave LIKE 'loja\\_%' OR chave = 'whatsapp_number'`);
     cacheLoja.set(empresa.slug, montarLoja(empresa, rows));
   }
   return cacheLoja.get(empresa.slug);
@@ -3264,6 +3264,8 @@ async function startServer() {
          ON CONFLICT (chave) DO UPDATE SET valor = $1`,
         [whatsapp]
       );
+      // O botão de WhatsApp do topo da vitrine sai do cache dos dados da loja
+      if (req.empresa) cacheLoja.delete(req.empresa.slug);
       res.json({ sucesso: true, success: true, whatsapp, valor: whatsapp });
     } catch (err) {
       console.error(err);
@@ -3316,6 +3318,12 @@ async function startServer() {
     if (corpo.provador !== undefined) {
       if (typeof corpo.provador !== 'boolean') return res.status(400).json({ error: 'Campo "provador" inválido' });
       pares.push(['loja_provador', corpo.provador ? '1' : '0']);
+    }
+    // Instagram da loja (botão no topo da vitrine). Vazio tira o botão.
+    if (corpo.instagram !== undefined) {
+      const ig = lerInstagram(corpo.instagram);
+      if (ig === null) return res.status(400).json({ error: 'Instagram inválido: use o @ da loja (ex.: @nixglasses) ou o link do perfil' });
+      pares.push(['loja_instagram', ig]);
     }
     // Produtos por linha na vitrine (celular 1 a 4, computador 2 a 6)
     for (const aparelho of Object.keys(COLUNAS)) {
