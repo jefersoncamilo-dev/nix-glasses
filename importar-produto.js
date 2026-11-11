@@ -487,6 +487,174 @@ function codigoDoLink(urlPagina) {
   }
 }
 
+// ---------- Cores (variações) e fotos da galeria ----------
+
+// Array JSON que começa em `inicio` ("[" ... "]" balanceado, respeitando strings) -> valor ou null
+function jsonBalanceado(t, inicio) {
+  let nivel = 0;
+  let emString = false;
+  for (let i = inicio; i < t.length && i < inicio + 400000; i++) {
+    const ch = t[i];
+    if (emString) {
+      if (ch === '\\') i++;
+      else if (ch === '"') emString = false;
+    } else if (ch === '"') emString = true;
+    else if (ch === '[' || ch === '{') nivel++;
+    else if (ch === ']' || ch === '}') {
+      nivel--;
+      if (nivel === 0) {
+        try { return JSON.parse(t.slice(inicio, i + 1)); } catch { return null; }
+      }
+    }
+  }
+  return null;
+}
+
+// Link de imagem: "//cdn..." vira https, e foto da Nuvemshop em tamanho pequeno
+// (".../foto-480-0.webp") vira a grande ("-1024-1024")
+function urlImagem(bruto, base) {
+  if (typeof bruto !== 'string' || !bruto.trim()) return '';
+  try {
+    const u = new URL(decodificarEntidades(bruto.trim()), base);
+    if (u.protocol !== 'https:' && u.protocol !== 'http:') return '';
+    if (/mitiendanube|nuvemshop|tiendanube/i.test(u.hostname)) {
+      u.pathname = u.pathname.replace(/-(\d{2,4})-(\d{1,4})(\.(?:webp|jpe?g|png))$/i, '-1024-1024$3');
+    }
+    return u.href;
+  } catch {
+    return '';
+  }
+}
+
+// Variações da Nuvemshop: atributo data-variants='[{"option0":"Preto","image_url":...,
+// "available":true,...}]' no produto (ou "variants": [...] num script).
+function variacoesNuvemshop(pagina) {
+  const m = /\bdata-variants\s*=\s*("([^"]*)"|'([^']*)')/i.exec(pagina);
+  if (m) {
+    try {
+      const lista = JSON.parse(decodificarEntidades(m[2] ?? m[3]));
+      if (Array.isArray(lista)) return lista;
+    } catch {
+      // atributo quebrado: tenta o script
+    }
+  }
+  const s = /["']?variants["']?\s*[:=]\s*\[\s*\{/.exec(pagina);
+  if (s) {
+    const lista = jsonBalanceado(pagina, pagina.indexOf('[', s.index));
+    if (Array.isArray(lista) && lista.some((v) => v && typeof v === 'object' && ('option0' in v || 'values' in v))) return lista;
+  }
+  return [];
+}
+
+// Nome de cada opção ("Cor", "Tamanho"): rótulo antes do select name="variation[N]"
+// ou dentro do bloco data-variation-id="N". -> { 0: 'Cor', ... }
+function rotulosDasOpcoes(pagina) {
+  const rotulos = {};
+  for (const m of pagina.matchAll(/\bdata-variation-id\s*=\s*["']?(\d)["']?[^>]*>/gi)) {
+    const depois = pagina.slice(m.index + m[0].length, m.index + m[0].length + 800);
+    const r = /<(?:label|span|div|h\d)\b[^>]*>\s*([^<]{1,40}?)\s*:?\s*</i.exec(depois);
+    if (r && !(m[1] in rotulos)) rotulos[m[1]] = limpar(r[1]);
+  }
+  for (const m of pagina.matchAll(/name\s*=\s*["']variation\[(\d)\]["']/gi)) {
+    if (m[1] in rotulos) continue;
+    const antes = pagina.slice(Math.max(0, m.index - 600), m.index);
+    const r = [...antes.matchAll(/<label\b[^>]*>\s*([^<]{1,40}?)\s*:?\s*</gi)].pop();
+    if (r) rotulos[m[1]] = limpar(r[1]);
+  }
+  return rotulos;
+}
+
+const PALAVRAS_COR = /(^|[^a-z])(pret[oa]|branc[oa]|marrom|azul|verde|vermelh[oa]|rosa|rose|amarel[oa]|dourad[oa]|prata|pratead[oa]|cinza|fume|tartaruga|demi|transparente|cristal|nude|bege|vinho|roxo|lilas|laranja|grafite|chumbo|onca|animal print|multicolor|colorid[oa]|espelhad[oa]|degrade|gold|silver|black|white|brown|blue|green|red|pink)([^a-z]|$)/;
+
+// Cores do produto: [{ cor, imagem, disponivel, preco, sku }] na ordem da loja,
+// uma por cor (a primeira variação de cada cor), ou [] quando o produto não varia por cor.
+function extrairCores(pagina, urlPagina, ld) {
+  let variacoes = variacoesNuvemshop(pagina)
+    .filter((v) => v && typeof v === 'object')
+    .map((v) => ({
+      opcoes: [v.option0, v.option1, v.option2].map((o) => (typeof o === 'string' || typeof o === 'number' ? limpar(String(o)) : '')),
+      imagemId: v.image ?? v.image_id ?? null,
+      imagem: urlImagem(v.image_url, urlPagina),
+      disponivel: v.available !== false && !(typeof v.stock === 'number' && v.stock <= 0),
+      preco: lerPrecoTexto(v.price_number ?? v.price ?? null),
+      sku: texto(v.sku),
+    }));
+  let indice = -1;
+  if (variacoes.length) {
+    const rotulos = rotulosDasOpcoes(pagina);
+    const usadas = [0, 1, 2].filter((i) => variacoes.some((v) => v.opcoes[i]));
+    indice = usadas.find((i) => /(^|[^a-z])cor(es)?([^a-z]|$)|colou?r/.test(sem(rotulos[i] || ''))) ?? -1;
+    if (indice < 0 && !usadas.some((i) => rotulos[i])) {
+      // Sem os rótulos: a opção cujos valores parecem cores (ou a única opção)
+      indice = usadas.find((i) => variacoes.some((v) => PALAVRAS_COR.test(sem(v.opcoes[i])))) ?? (usadas.length === 1 ? usadas[0] : -1);
+    }
+  } else {
+    // JSON-LD ProductGroup com hasVariant (schema.org): color + image de cada variação
+    const lista = Array.isArray(ld.hasVariant) ? ld.hasVariant : [];
+    variacoes = lista.filter((v) => v && typeof v === 'object' && texto(v.color)).map((v) => {
+      const ofertas = Array.isArray(v.offers) ? v.offers[0] : v.offers;
+      return {
+        opcoes: [texto(v.color)],
+        imagemId: null,
+        imagem: urlsImagens(v.image, urlPagina)[0] || '',
+        disponivel: !(ofertas && /OutOfStock|SoldOut/i.test(String(ofertas.availability || ''))),
+        preco: precoDasOfertas(v.offers),
+        sku: texto(v.sku),
+      };
+    });
+    if (variacoes.length) indice = 0;
+  }
+  if (indice < 0) return [];
+  const fotosPorId = fotosDaGaleria(pagina, urlPagina).porId;
+  const cores = [];
+  for (const v of variacoes) {
+    const cor = v.opcoes[indice];
+    if (!cor) continue;
+    const imagem = v.imagem || (v.imagemId !== null && fotosPorId.get(String(v.imagemId))) || '';
+    const ja = cores.find((c) => sem(c.cor) === sem(cor));
+    if (ja) {
+      // Mesma cor em outro tamanho/opção: disponível se alguma estiver
+      ja.disponivel = ja.disponivel || v.disponivel;
+      if (!ja.imagem) ja.imagem = imagem;
+      continue;
+    }
+    cores.push({ cor: cor.slice(0, 100), imagem, disponivel: v.disponivel, preco: v.preco, sku: v.sku.slice(0, 100) });
+  }
+  return cores.slice(0, 20);
+}
+
+// Fotos da galeria do produto (Nuvemshop: slides com data-image="<id>" e links
+// data-fancybox="product-gallery"). -> { lista: [url...], porId: Map(id -> url) }
+function fotosDaGaleria(pagina, urlPagina) {
+  const lista = [];
+  const porId = new Map();
+  const add = (url, id) => {
+    if (!url) return;
+    if (!lista.includes(url)) lista.push(url);
+    if (id && !porId.has(id)) porId.set(id, url);
+  };
+  const primeiraImagem = (trecho) => {
+    const m = /(?:href|data-src|data-zoom|data-srcset|srcset|src)\s*=\s*["']([^"'\s]+\.(?:webp|jpe?g|png)(?:\?[^"'\s]*)?)/i.exec(trecho);
+    return m ? urlImagem(m[1], urlPagina) : '';
+  };
+  for (const m of pagina.matchAll(/<[a-z]+\b[^>]*\bdata-image\s*=\s*["']?(\d+)["']?[^>]*>/gi)) {
+    add(primeiraImagem(m[0]) || primeiraImagem(pagina.slice(m.index + m[0].length, m.index + m[0].length + 2000)), m[1]);
+  }
+  for (const m of pagina.matchAll(/<a\b[^>]*data-fancybox\s*=\s*["'][^"']*product-gallery[^"']*["'][^>]*>/gi)) {
+    add(primeiraImagem(m[0]));
+  }
+  return { lista: lista.slice(0, 30), porId };
+}
+
+// Código do modelo escrito no nome ("Óculos de Sol NV1720 Geométrico" -> "NV1720"):
+// letras maiúsculas seguidas de números; UV400 não conta
+function codigoDoNome(nome) {
+  for (const m of String(nome || '').matchAll(/(?<![\w-])([A-Z]{1,5}-?\d{2,6}[A-Z]?)(?![\w-])/g)) {
+    if (!/^UV-?\d/.test(m[1])) return m[1];
+  }
+  return '';
+}
+
 function extrairDadosProduto(html, urlPagina) {
   const pagina = String(html || '');
   const metas = metaTags(pagina);
@@ -512,7 +680,7 @@ function extrairDadosProduto(html, urlPagina) {
   const mpn = texto(ld.mpn) || metas['itemprop:mpn'] || '';
   const gtin = texto(ld.gtin13 || ld.gtin || ld.gtin12 || ld.gtin14 || ld.gtin8) || '';
   const marca = texto(ld.brand) || metas['product:brand'] || '';
-  const referencia = (sku || mpn || texto(ld.productID) || gtin || codigoDoLink(urlPagina)).slice(0, 100);
+  const referencia = (sku || mpn || texto(ld.productID) || gtin || codigoDoNome(nome) || codigoDoLink(urlPagina)).slice(0, 100);
 
   return {
     nome,
@@ -525,6 +693,18 @@ function extrairDadosProduto(html, urlPagina) {
     preco_venda_sugerido: precoSugerido(pagina),
     imagens: [...urlsImagens(ld.image, urlPagina), ...urlsImagens(metas['og:image'], urlPagina)]
       .filter((u, i, todas) => todas.indexOf(u) === i).slice(0, 4),
+    ...coresEFotos(pagina, urlPagina, ld),
+  };
+}
+
+// Cores com a foto de cada uma e as fotos comuns (da galeria, que não são de nenhuma cor)
+function coresEFotos(pagina, urlPagina, ld) {
+  const cores = extrairCores(pagina, urlPagina, ld);
+  const daCor = new Set(cores.map((c) => c.imagem).filter(Boolean));
+  const galeria = fotosDaGaleria(pagina, urlPagina).lista;
+  return {
+    cores,
+    fotos_comuns: cores.length ? galeria.filter((u) => !daCor.has(u)).slice(0, 6) : [],
   };
 }
 
@@ -537,4 +717,4 @@ async function importarProduto(url, opcoes) {
   return { ...dados, link_fornecedor: lerUrlProduto(url).href };
 }
 
-module.exports = { importarProduto, baixarPagina, baixarImagem, extrairDadosProduto, extrairEspecificacoes, lerPrecoTexto, enderecoBloqueado, ErroImportacao };
+module.exports = { importarProduto, extrairCores, baixarPagina, baixarImagem, extrairDadosProduto, extrairEspecificacoes, lerPrecoTexto, enderecoBloqueado, ErroImportacao };

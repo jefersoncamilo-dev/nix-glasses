@@ -2075,6 +2075,8 @@
         else if (caminho(a.link_fornecedor) && caminho(a.link_fornecedor) === caminho(b.link_fornecedor)) motivo = 'Mesmo link do fornecedor';
         if (!motivo) return null;
         const corDiferente = norm(a.cor_armacao) && norm(b.cor_armacao) && norm(a.cor_armacao) !== norm(b.cor_armacao);
+        // Outra cor do mesmo modelo (mesmo Código do modelo, como as cores importadas de um link): não precisa conferir
+        if (corDiferente && norm(a.grade) && norm(a.grade) === norm(b.grade) && norm(a.codigo_sku) !== norm(b.codigo_sku)) return null;
         return corDiferente ? { motivo: `${motivo}, mas a cor é diferente`, sugestao: 'novo' } : { motivo, sugestao: 'mesmo' };
       };
       const conflitos = [];
@@ -2244,14 +2246,15 @@
       const urls = campo.value.split(/\s+/).map(u => u.trim()).filter(Boolean);
       if (!urls.length || !urls.every(linkSeguro)) return mostrarToast('Cole links começando com http:// ou https:// (um por linha)', 'error');
       btn.disabled = true;
-      const resumo = { novos: 0, repostos: 0, repetidos: 0, falhas: [] };
+      const resumo = { novos: 0, repostos: 0, repetidos: 0, falhas: [], cores: [] };
       const restantes = [];
       try {
         for (const [n, url] of urls.entries()) {
           status.textContent = `Buscando ${n + 1} de ${urls.length}...`;
           try {
             const r = await importarLinkLote(url);
-            resumo[r]++;
+            ['novos', 'repostos', 'repetidos'].forEach(k => { resumo[k] += r[k] || 0; });
+            if (r.cores) resumo.cores.push(r.cores);
           } catch (err) {
             resumo.falhas.push(`${url}: ${err.message}`);
             restantes.push(url);
@@ -2264,25 +2267,40 @@
           resumo.novos && `${resumo.novos} produto(s) novo(s)`,
           resumo.repostos && `${resumo.repostos} já cadastrado(s), como reposição`,
           resumo.repetidos && `${resumo.repetidos} link(s) repetido(s), somados na quantidade`,
+          resumo.cores.length && `cores: ${resumo.cores.join(' | ')}`,
           resumo.falhas.length && `${resumo.falhas.length} não importado(s) (ficaram no campo): ${resumo.falhas.join(' | ')}`,
         ].filter(Boolean).join('; ') + (resumo.novos ? '. Confira nome, SKU e venda antes de salvar.' : '');
         if (resumo.falhas.length) mostrarToast('Alguns links não foram importados', 'error');
       }
     });
-    // Um link do fornecedor -> linha do lote. Produto novo: nome e SKU no padrão Nix.
+    // Um link do fornecedor -> linha(s) do lote. Produto novo: nome e SKU no padrão Nix.
     // Já cadastrado: reposição de 1 peça no SKU que existe. Link que já está no lote:
-    // soma 1 na quantidade daquela linha. -> 'novos' | 'repostos' | 'repetidos'
+    // soma 1 na quantidade das linhas dele. Produto com cores na loja (Tassia, Nuvemshop):
+    // uma linha por cor, com a foto da cor (linhasDasCores).
+    // -> { novos, repostos, repetidos, cores: texto para o resumo }
     async function importarLinkLote(url) {
       const caminho = v => { try { return new URL(v).pathname.replace(/\/+$/, '').toLowerCase(); } catch { return ''; } };
-      const noLote = linhasLote.find(l => caminho(l.link_fornecedor) && caminho(l.link_fornecedor) === caminho(url));
-      if (noLote) {
-        noLote.quantidade = String((Number(noLote.quantidade) || 1) + 1);
+      const doLink = linhasLote.filter(l => caminho(l.link_fornecedor) && caminho(l.link_fornecedor) === caminho(url));
+      if (doLink.length) {
+        doLink.forEach(l => { l.quantidade = String((Number(l.quantidade) || 1) + 1); });
         renderizarLote();
-        return 'repetidos';
+        return { repetidos: 1 };
       }
-      const c = camposDaImportacao(await buscarImportacao(url));
+      const dados = await buscarImportacao(url);
+      const c = camposDaImportacao(dados);
       const fornecedorTodos = document.getElementById('loteFornecedorTodos').value.trim();
       const linha = { ...linhaLoteVazia(), ...c, fornecedor: fornecedorTodos || c.fornecedor, preco_custo: c.preco_custo.replace('.', ','), preco_venda: c.preco_venda.replace('.', ',') };
+      if (Array.isArray(dados.cores) && dados.cores.length) {
+        const r = linhasDasCores(linha, dados, todosProdutos, linhasLote.map(l => l.codigo_sku));
+        adicionarLinhasLote(r.linhas);
+        const repostos = r.linhas.filter(l => !l.cadastrar_novo).length;
+        const nome = linha.codigo_fornecedor || linha.nome_fornecedor;
+        return {
+          novos: r.linhas.length - repostos,
+          repostos,
+          cores: `${nome}: ${r.linhas.length} cor(es) (${r.linhas.map(l => l.cor_armacao).join(', ')})${r.esgotadas.length ? `, fora as esgotadas no site: ${r.esgotadas.join(', ')}` : ''}`,
+        };
+      }
       const existente = produtoJaCadastrado(todosProdutos, linha);
       if (existente) {
         Object.assign(linha, { nome: existente.nome, codigo_sku: existente.codigo_sku, quantidade: '1' });
@@ -2292,7 +2310,66 @@
         else linha.codigo_sku = proximoSku(todosProdutos, linhasLote.map(l => l.codigo_sku));
       }
       adicionarLinhasLote([linha]);
-      return existente ? 'repostos' : 'novos';
+      return existente ? { repostos: 1 } : { novos: 1 };
+    }
+
+    // Produto com cores na loja do fornecedor -> uma linha do lote por cor. As esgotadas no
+    // site ficam de fora (a não ser que todas estejam). Todas com o mesmo Código do modelo
+    // (o SKU Nix do modelo), nome e SKU com a cor, a foto da cor como capa e até 2 fotos
+    // comuns da página (fotos 2 e 3; a 4 é do provador). Cor já cadastrada: reposição de 1.
+    // `base`: linha montada da importação. -> { linhas, esgotadas: [nomes] }
+    function linhasDasCores(base, dados, produtos = [], usados = []) {
+      const norm = v => String(v ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().toLowerCase();
+      const caminho = v => { try { return new URL(v).pathname.replace(/\/+$/, '').toLowerCase(); } catch { return ''; } };
+      const todas = (Array.isArray(dados.cores) ? dados.cores : []).filter(c => c && String(c.cor ?? '').trim())
+        .filter((c, i, lista) => lista.findIndex(x => norm(x.cor) === norm(c.cor)) === i);
+      const disponiveis = todas.filter(c => c.disponivel !== false);
+      const cores = disponiveis.length ? disponiveis : todas;
+      const esgotadas = disponiveis.length ? todas.filter(c => c.disponivel === false).map(c => String(c.cor).trim()) : [];
+      const extras = (Array.isArray(dados.fotos_comuns) ? dados.fotos_comuns : []).map(linkSeguro).filter(Boolean).slice(0, 2);
+      const modelo = nomeTematico({ ...base, cor_armacao: '' }, produtos, []);
+      const grade = (modelo && modelo.codigo_sku) || String(base.codigo_fornecedor || '').trim() || proximoSku(produtos, usados);
+      const usadosAgora = [...usados];
+      const linhas = cores.map(item => {
+        const cor = String(item.cor).trim().slice(0, 100);
+        const linha = {
+          ...base,
+          cor_armacao: cor,
+          nome_fornecedor: base.nome_fornecedor ? `${base.nome_fornecedor} - ${cor}`.slice(0, 255) : '',
+          imagem_fornecedor: linkSeguro(item.imagem) || base.imagem_fornecedor || '',
+          imagens_extras: extras,
+          grade,
+        };
+        const preco = Number(item.preco);
+        if (item.preco !== null && item.preco !== undefined && Number.isFinite(preco) && preco > 0) {
+          linha.preco_custo = preco.toFixed(2).replace('.', ',');
+          linha.preco_venda = precoVendaPadrao(preco).replace('.', ',');
+        }
+        const link = caminho(linha.link_fornecedor);
+        const existente = produtos.find(p => norm(p.cor_armacao) === norm(cor) && (
+          (norm(p.grade) && norm(p.grade) === norm(grade))
+          || (link && caminho(p.link_fornecedor) === link)
+          || (norm(linha.codigo_fornecedor) && norm(p.codigo_fornecedor) === norm(linha.codigo_fornecedor) && norm(p.fornecedor) === norm(linha.fornecedor))));
+        if (existente) {
+          Object.assign(linha, { nome: existente.nome, codigo_sku: existente.codigo_sku, quantidade: '1' });
+        } else {
+          const tema = nomeTematico(linha, produtos, usadosAgora);
+          let nome = tema ? tema.nome : (linha.nome || base.nome_fornecedor || grade);
+          // Cor que o padrão Nix não conhece: entra como está no nome e no SKU
+          if (!/\s-\s/.test(nome)) nome = `${nome} - ${cor}`;
+          let sku = tema ? tema.codigo_sku : grade;
+          if (norm(sku).replace(/-\d+$/, '') === norm(grade)) {
+            const sufixo = norm(cor).toUpperCase().replace(/[^A-Z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 20) || 'COR';
+            const existentes = new Set([...produtos.map(p => p.codigo_sku), ...usadosAgora].map(norm));
+            sku = `${grade}-${sufixo}`;
+            for (let n = 2; existentes.has(norm(sku)); n++) sku = `${grade}-${sufixo}-${n}`;
+          }
+          Object.assign(linha, { nome: nome.slice(0, 255), codigo_sku: sku, cadastrar_novo: true });
+        }
+        usadosAgora.push(linha.codigo_sku);
+        return linha;
+      });
+      return { linhas, esgotadas };
     }
 
     document.getElementById('btnLoteFornecedorTodos').addEventListener('click', () => {
@@ -2348,12 +2425,24 @@
         (async () => {
           const naPasta = await permissaoPasta;
           let anexadas = 0;
+          // Fotos comuns às cores de um modelo: baixadas uma vez só
+          const comuns = new Map();
+          const fotoComum = url => {
+            if (!comuns.has(url)) comuns.set(url, fotoDoFornecedor(url).then(prepararImagem).catch(() => null));
+            return comuns.get(url);
+          };
           for (const p of fotos) {
             const sku = p.codigo_sku.trim();
             try {
               const foto = await fotoDoFornecedor(p.imagem_fornecedor);
               const fd = new FormData();
               fd.append('foto1', await prepararImagem(foto));
+              // Cores importadas: fotos 2 e 3 = fotos comuns da página (a 4 fica para o provador)
+              const extras = Array.isArray(p.imagens_extras) ? p.imagens_extras.slice(0, 2) : [];
+              for (const [k, url] of extras.entries()) {
+                const arquivo = await fotoComum(url);
+                if (arquivo) fd.append(`foto${k + 2}`, arquivo);
+              }
               const res = await fetchAdmin(`/api/produtos/${criados.get(sku.toLowerCase())}`, { method: 'PUT', body: fd });
               if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || 'Erro ao salvar a foto');
               anexadas++;
@@ -3824,7 +3913,7 @@
         translucido: ['Translucent', 'Translucent', ''], fosco: ['Matte', 'Matte', ''],
       };
       const MATERIAIS = /^(metal|acetato|injetado|nylon|tr ?90|policarbonato|madeira|titanio)$/;
-      const FORMATOS = /^(oculos|de|sol|premium|polarizado|polarizada|esportivo|mascara|hexagonal|redondo|oval|aviador|retangular|quadrado|maxi|gatinho|gato|arredondado|borboleta|geometrico|classico|oversized|shield|piloto|octogonal|grau|feminino|masculino|unissex)$/;
+      const FORMATOS = /^(oculos|de|sol|premium|polarizado|polarizada|esportivo|esporte|mascara|hexagonal|redondo|oval|aviador|retangular|quadrado|maxi|gatinho|gato|arredondado|borboleta|geometrico|classico|oversized|shield|piloto|octogonal|grau|feminino|masculino|unissex)$/;
       const semAcento = t => String(t || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
       const titulo = String(c.nome_fornecedor || '').trim();
       if (!titulo) return null;
@@ -3969,6 +4058,28 @@
         const r = aplicarImportacao(atuais, c, ultimaImportacao);
         campos.forEach(campo => { document.getElementById(campo).value = r.valores[campo]; });
         ultimaImportacao = r.importados;
+        // Produto com cores na loja (Nuvemshop): preenche "Cores e quantidades" com as cores
+        // disponíveis e a foto de cada uma; a foto do produto passa a ser uma foto comum
+        const coresLoja = (Array.isArray(dados.cores) ? dados.cores : []).filter(x => x && String(x.cor || '').trim());
+        const coresDisp = coresLoja.some(x => x.disponivel !== false) ? coresLoja.filter(x => x.disponivel !== false) : coresLoja;
+        let coresImportadas = 0;
+        if (!produtoEditando && !existente && coresDisp.length && !coresForm.some(x => String(x.cor || '').trim() || x.file)) {
+          coresForm = coresDisp.slice(0, MAX_CORES).map(x => ({ cor: String(x.cor).trim().slice(0, 100), estoque: '', file: null }));
+          coresImportadas = coresForm.length;
+          desenharCores();
+          coresDisp.slice(0, MAX_CORES).forEach((x, i) => {
+            const linkFoto = linkSeguro(x.imagem);
+            if (!linkFoto) return;
+            const alvo = coresForm[i];
+            fotoDoFornecedor(linkFoto).then(foto => {
+              if (coresForm[i] !== alvo || alvo.file || modalProduto.classList.contains('hidden')) return;
+              alvo.file = foto;
+              desenharCores();
+            }).catch(() => {});
+          });
+          const comum = (Array.isArray(dados.fotos_comuns) ? dados.fotos_comuns : []).map(linkSeguro).find(Boolean);
+          if (comum) c.imagem_fornecedor = comum;
+        }
         imagemImportada = c.imagem_fornecedor;
         const preenchidos = r.preenchidos;
         // Produto novo: a foto principal já entra como capa (ou na primeira posição livre)
@@ -3987,6 +4098,7 @@
         const sugerido = dados.preco_venda_sugerido;
         status.textContent = `Preenchido: ${preenchidos.map(x => nomes[x]).join(', ')}.${c.preco_custo ? '' : ' Preço não encontrado na página.'}`
           + (sugerido ? ` Venda sugerida pelo fornecedor: ${sugerido.min === sugerido.max ? formatarMoeda(sugerido.min) : `${formatarMoeda(sugerido.min)} a ${formatarMoeda(sugerido.max)}`}.` : '')
+          + (coresImportadas ? ` ${coresImportadas} cor(es) da loja em Cores e quantidades: ${coresForm.map(x => x.cor).join(', ')} (informe a quantidade de cada).` : '')
           + ' Confira antes de salvar.';
         if (existente) {
           // Já cadastrado: em vez de um produto novo, registra a compra no que já existe
