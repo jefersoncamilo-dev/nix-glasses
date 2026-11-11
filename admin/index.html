@@ -145,6 +145,7 @@
             <option value="DISPONIVEL">Disponível</option>
             <option value="CONDICIONAL">Condicional</option>
             <option value="ESGOTADO">Esgotado</option>
+            <option value="EM_CONFERENCIA">Em conferência (fora da vitrine)</option>
           </select>
           <select id="filtroDisponibilidadeAdmin" class="w-full sm:w-auto px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500">
             <option value="">Todas as Disponibilidades</option>
@@ -335,7 +336,7 @@
           </details>
           <div class="bg-white rounded-xl border border-gray-200 p-4">
             <p class="font-medium text-gray-900 mb-1">Adicionar pelo link do fornecedor</p>
-            <p class="text-xs text-gray-500 mb-2">Cole um ou vários links de produtos na loja do fornecedor (um por linha): cada um vira uma linha com nome e SKU no padrão Nix, nome fornec., custo, venda, código e as especificações. Ao salvar, a foto principal entra no produto. Link repetido soma 1 na quantidade.</p>
+            <p class="text-xs text-gray-500 mb-2">Cole um ou vários links de produtos na loja do fornecedor (um por linha): cada um vira uma linha com nome e SKU no padrão Nix, nome fornec., custo, venda, código e as especificações. Produto com cores na loja vira uma linha só, com a quantidade de cada cor em Cores (cor:qtd) e a foto de cada cor. Ao salvar, o produto fica <strong>Em conferência</strong> (fora da vitrine) até você liberar em Produtos. Link repetido soma 1 na quantidade.</p>
             <div class="flex flex-col sm:flex-row gap-2">
               <textarea id="loteImportarUrl" rows="2" class="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-orange-500" placeholder="https://loja-do-fornecedor.com.br/produto/..."></textarea>
               <button id="btnLoteImportarUrl" class="self-start bg-gray-100 hover:bg-gray-200 text-gray-700 px-4 py-2 rounded-lg text-sm font-medium transition-colors">Importar</button>
@@ -1852,6 +1853,8 @@
       { campo: 'grade', titulo: 'Código do modelo', largura: 'w-32' },
       // Nome do produto na loja do fornecedor (preenchido pelo link)
       { campo: 'nome_fornecedor', titulo: 'Nome fornec.', largura: 'w-64' },
+      // Cores do modelo com a quantidade de cada ("Preto:2, Rosa:1"): um produto só, estoque por cor
+      { campo: 'cores', titulo: 'Cores (cor:qtd)', largura: 'w-72' },
     ];
     const CAMPOS_MEDIDA = ['diametro_cm', 'ponte_cm', 'largura_total_cm'];
     const MAX_LOTE = 100;
@@ -1865,11 +1868,11 @@
     }
 
     function linhaLoteVazia() {
-      return { nome: '', codigo_sku: '', fornecedor: '', codigo_fornecedor: '', link_fornecedor: '', preco_custo: '', preco_venda: '', disponibilidade: 'PRONTA_ENTREGA', status: 'DISPONIVEL', formato: '', estilo: '', cor_armacao: '', diametro_cm: '', ponte_cm: '', largura_total_cm: '', material: '', tipo: '', nome_curto: '', genero: '', quantidade: '', pedido_fornecedor: '', data_compra: '', tamanho: '', grade: '', nome_fornecedor: '' };
+      return { nome: '', codigo_sku: '', fornecedor: '', codigo_fornecedor: '', link_fornecedor: '', preco_custo: '', preco_venda: '', disponibilidade: 'PRONTA_ENTREGA', status: 'DISPONIVEL', formato: '', estilo: '', cor_armacao: '', diametro_cm: '', ponte_cm: '', largura_total_cm: '', material: '', tipo: '', nome_curto: '', genero: '', quantidade: '', pedido_fornecedor: '', data_compra: '', tamanho: '', grade: '', nome_fornecedor: '', cores: '' };
     }
 
     function linhaLoteEstaVazia(l) {
-      return ['nome', 'codigo_sku', 'fornecedor', 'codigo_fornecedor', 'link_fornecedor', 'preco_custo', 'preco_venda', 'formato', 'estilo', 'cor_armacao', 'diametro_cm', 'ponte_cm', 'largura_total_cm', 'material', 'tipo', 'nome_curto', 'tamanho', 'grade', 'nome_fornecedor'].every(c => !String(l[c] || '').trim());
+      return ['nome', 'codigo_sku', 'fornecedor', 'codigo_fornecedor', 'link_fornecedor', 'preco_custo', 'preco_venda', 'formato', 'estilo', 'cor_armacao', 'diametro_cm', 'ponte_cm', 'largura_total_cm', 'material', 'tipo', 'nome_curto', 'tamanho', 'grade', 'nome_fornecedor', 'cores'].every(c => !String(l[c] || '').trim());
     }
 
     // "R$ 1.234,56", "199,90" ou "199.90" -> 1234.56 / 199.9. Vazio ou inválido -> NaN.
@@ -1946,6 +1949,7 @@
       if (/^status/.test(t)) return 'status';
       if (/^formato/.test(t)) return 'formato';
       if (/^estilo/.test(t)) return 'estilo';
+      if (/^cores/.test(t)) return 'cores';
       if (/^cor/.test(t)) return 'cor_armacao';
       if (/^diam/.test(t)) return 'diametro_cm';
       if (/^ponte/.test(t)) return 'ponte_cm';
@@ -2011,6 +2015,8 @@
         const qtd = String(l.quantidade ?? '').trim();
         if (qtd && !(/^\d{1,6}$/.test(qtd) && Number(qtd) >= 1)) erros.quantidade = 'Quantidade inválida (número inteiro a partir de 1)';
         if (String(l.data_compra ?? '').trim() && !lerDataCompra(l.data_compra)) erros.data_compra = 'Data inválida (use DD/MM/AAAA)';
+        if (String(l.cores ?? '').trim() && !lerCoresLote(l.cores)) erros.cores = 'Cores inválidas: cada cor uma vez, com a quantidade (ex.: Preto:2, Rosa:1), até 20 cores';
+        if (String(l.cores ?? '').trim() && String(l.tamanho ?? '').trim()) erros.cores = 'Use cores ou tamanho na linha, não os dois';
         if (String(l.link_fornecedor || '').trim() && !linkSeguro(l.link_fornecedor)) erros.link_fornecedor = 'Link inválido (use http:// ou https://)';
         CAMPOS_MEDIDA.forEach(c => {
           if (Number.isNaN(lerMedida(l[c]))) erros[c] = 'Medida inválida (em cm, ex.: 5,0)';
@@ -2043,6 +2049,7 @@
       const codigosLote = new Map();
       return linhas.map((l, i) => {
         if (linhaLoteEstaVazia(l)) return '';
+        if (String(l.cores ?? '').trim()) return resumoCoresLote(l, produtos);
         const sku = minusc(l.codigo_sku);
         const cod = minusc(l.codigo_fornecedor) ? chave(l.fornecedor, l.codigo_fornecedor) : '';
         let aviso = '';
@@ -2083,6 +2090,8 @@
       const anteriores = [];
       linhas.forEach((l, i) => {
         if (linhaLoteEstaVazia(l)) return;
+        // Modelo com cores: o modelo cadastrado é achado pelo plano das cores (planoCoresLote)
+        if (String(l.cores ?? '').trim()) return;
         if (!l.conferencia) {
           let achou = null;
           for (const j of anteriores) {
@@ -2155,10 +2164,10 @@
           </td>
         </tr>${mensagens.length ? `
         <tr class="lote-erro"><td></td><td colspan="${COLUNAS_LOTE.length + 1}" class="px-2 pb-2 text-xs text-red-600">${mensagens.map(escapeHtml).join(' • ')}</td></tr>` : ''}${avisos[i] ? `
-        <tr class="lote-aviso"><td></td><td colspan="${COLUNAS_LOTE.length + 1}" class="px-2 pb-2 text-xs ${l.conferencia ? 'text-green-700' : 'text-amber-700'}">${l.conferencia ? '✓' : '⚠'} ${escapeHtml(avisos[i])}${l.conferencia ? ` <button type="button" data-acao="reconferir" data-linha="${i}" class="ml-1 underline hover:text-green-900">Conferir de novo</button>` : ''}</td></tr>` : ''}`;
+        <tr class="lote-aviso"><td></td><td colspan="${COLUNAS_LOTE.length + 1}" class="px-2 pb-2 text-xs ${l.conferencia ? 'text-green-700' : String(l.cores ?? '').trim() ? 'text-gray-700' : 'text-amber-700'}">${l.conferencia ? '✓' : String(l.cores ?? '').trim() ? '🎨' : '⚠'} ${escapeHtml(avisos[i])}${l.conferencia ? ` <button type="button" data-acao="reconferir" data-linha="${i}" class="ml-1 underline hover:text-green-900">Conferir de novo</button>` : ''}</td></tr>` : ''}`;
       }).join('');
       const preenchidas = linhasLote.filter(l => !linhaLoteEstaVazia(l)).length;
-      const duplicados = avisos.filter((a, i) => a && !linhasLote[i].conferencia).length;
+      const duplicados = avisos.filter((a, i) => a && !linhasLote[i].conferencia && !String(linhasLote[i].cores ?? '').trim()).length;
       document.getElementById('loteResumo').textContent = `${preenchidas} produto(s) preenchido(s) de ${linhasLote.length} linha(s)${duplicados ? `, ${duplicados} duplicado(s) para conferir ao salvar` : ''}. Máximo de ${MAX_LOTE} por vez.`;
     }
 
@@ -2273,32 +2282,35 @@
         if (resumo.falhas.length) mostrarToast('Alguns links não foram importados', 'error');
       }
     });
-    // Um link do fornecedor -> linha(s) do lote. Produto novo: nome e SKU no padrão Nix.
+    // Um link do fornecedor -> linha do lote. Produto novo: nome e SKU no padrão Nix.
     // Já cadastrado: reposição de 1 peça no SKU que existe. Link que já está no lote:
-    // soma 1 na quantidade das linhas dele. Produto com cores na loja (Tassia, Nuvemshop):
-    // uma linha por cor, com a foto da cor (linhasDasCores).
+    // soma 1 na quantidade (ou em cada cor) da linha dele. Produto com cores na loja
+    // (Tassia, Nuvemshop): uma linha só, com as cores e a quantidade de cada (linhaDoModeloComCores).
     // -> { novos, repostos, repetidos, cores: texto para o resumo }
     async function importarLinkLote(url) {
       const caminho = v => { try { return new URL(v).pathname.replace(/\/+$/, '').toLowerCase(); } catch { return ''; } };
-      const doLink = linhasLote.filter(l => caminho(l.link_fornecedor) && caminho(l.link_fornecedor) === caminho(url));
-      if (doLink.length) {
-        doLink.forEach(l => { l.quantidade = String((Number(l.quantidade) || 1) + 1); });
+      const noLote = linhasLote.find(l => caminho(l.link_fornecedor) && caminho(l.link_fornecedor) === caminho(url));
+      if (noLote) {
+        const cores = lerCoresLote(noLote.cores);
+        if (cores && cores.length) noLote.cores = textoCoresLote(cores.map(c => ({ ...c, qtd: c.qtd + 1 })));
+        else noLote.quantidade = String((Number(noLote.quantidade) || 1) + 1);
         renderizarLote();
         return { repetidos: 1 };
       }
       const dados = await buscarImportacao(url);
       const c = camposDaImportacao(dados);
       const fornecedorTodos = document.getElementById('loteFornecedorTodos').value.trim();
-      const linha = { ...linhaLoteVazia(), ...c, fornecedor: fornecedorTodos || c.fornecedor, preco_custo: c.preco_custo.replace('.', ','), preco_venda: c.preco_venda.replace('.', ',') };
+      // Importado pelo link: o cadastro vai "em conferência" (fora da vitrine até liberar)
+      const linha = { ...linhaLoteVazia(), ...c, fornecedor: fornecedorTodos || c.fornecedor, preco_custo: c.preco_custo.replace('.', ','), preco_venda: c.preco_venda.replace('.', ','), em_conferencia: true };
       if (Array.isArray(dados.cores) && dados.cores.length) {
-        const r = linhasDasCores(linha, dados, todosProdutos, linhasLote.map(l => l.codigo_sku));
-        adicionarLinhasLote(r.linhas);
-        const repostos = r.linhas.filter(l => !l.cadastrar_novo).length;
+        const r = linhaDoModeloComCores(linha, dados, todosProdutos, linhasLote.map(l => l.codigo_sku));
+        adicionarLinhasLote([r.linha]);
+        const plano = planoCoresLote(r.linha, todosProdutos);
         const nome = linha.codigo_fornecedor || linha.nome_fornecedor;
         return {
-          novos: r.linhas.length - repostos,
-          repostos,
-          cores: `${nome}: ${r.linhas.length} cor(es) (${r.linhas.map(l => l.cor_armacao).join(', ')})${r.esgotadas.length ? `, fora as esgotadas no site: ${r.esgotadas.join(', ')}` : ''}`,
+          novos: plano.base ? 0 : 1,
+          repostos: plano.base ? 1 : 0,
+          cores: `${nome}: ${plano.itens.length} cor(es)${r.esgotadas.length ? `, fora as esgotadas no site: ${r.esgotadas.join(', ')}` : ''}`,
         };
       }
       const existente = produtoJaCadastrado(todosProdutos, linha);
@@ -2313,63 +2325,139 @@
       return existente ? { repostos: 1 } : { novos: 1 };
     }
 
-    // Produto com cores na loja do fornecedor -> uma linha do lote por cor. As esgotadas no
-    // site ficam de fora (a não ser que todas estejam). Todas com o mesmo Código do modelo
-    // (o SKU Nix do modelo), nome e SKU com a cor, a foto da cor como capa e até 2 fotos
-    // comuns da página (fotos 2 e 3; a 4 é do provador). Cor já cadastrada: reposição de 1.
-    // `base`: linha montada da importação. -> { linhas, esgotadas: [nomes] }
-    function linhasDasCores(base, dados, produtos = [], usados = []) {
-      const norm = v => String(v ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().toLowerCase();
-      const caminho = v => { try { return new URL(v).pathname.replace(/\/+$/, '').toLowerCase(); } catch { return ''; } };
+    // "Preto:2, Rosa, Azul claro: 3" -> [{ cor, qtd }] (sem quantidade = 1). Vazio -> [].
+    // Inválido (cor repetida, quantidade que não é número, mais de 20 cores) -> null.
+    function lerCoresLote(texto) {
+      const t = String(texto ?? '').trim();
+      if (!t) return [];
+      const cores = [];
+      const vistos = new Set();
+      for (const parte of t.split(/[,;\n]/).map(x => x.trim()).filter(Boolean)) {
+        const m = /^(.*?)\s*[:=]\s*(\S*)$/.exec(parte);
+        const cor = (m ? m[1] : parte).trim();
+        const qtd = m ? m[2] : '1';
+        const chave = cor.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+        if (!cor || cor.length > 100 || !/^\d{1,6}$/.test(qtd) || Number(qtd) < 1 || vistos.has(chave)) return null;
+        vistos.add(chave);
+        cores.push({ cor, qtd: Number(qtd) });
+      }
+      return cores.length <= 20 ? cores : null;
+    }
+
+    function textoCoresLote(cores) {
+      return cores.map(c => `${c.cor}:${c.qtd}`).join(', ');
+    }
+
+    // Produto com cores na loja do fornecedor -> UMA linha do lote para o modelo, com as cores
+    // em "Cores (cor:qtd)" (1 peça de cada) e a foto de cada cor guardada na linha. As esgotadas
+    // no site ficam de fora (a não ser que todas estejam). Nome e SKU Nix do modelo, sem cor.
+    // Modelo já cadastrado (mesmo cód. do fornecedor ou link): a linha usa o nome e o código dele.
+    // `base`: linha montada da importação. -> { linha, esgotadas: [nomes] }
+    function linhaDoModeloComCores(base, dados, produtos = [], usados = []) {
+      const norm = v => String(v ?? '').normalize('NFD').replace(/[̀-ͯ]/g, '').trim().toLowerCase();
       const todas = (Array.isArray(dados.cores) ? dados.cores : []).filter(c => c && String(c.cor ?? '').trim())
-        .filter((c, i, lista) => lista.findIndex(x => norm(x.cor) === norm(c.cor)) === i);
+        .filter((c, i, lista) => lista.findIndex(x => norm(x.cor) === norm(c.cor)) === i).slice(0, 20);
       const disponiveis = todas.filter(c => c.disponivel !== false);
       const cores = disponiveis.length ? disponiveis : todas;
       const esgotadas = disponiveis.length ? todas.filter(c => c.disponivel === false).map(c => String(c.cor).trim()) : [];
-      const extras = (Array.isArray(dados.fotos_comuns) ? dados.fotos_comuns : []).map(linkSeguro).filter(Boolean).slice(0, 2);
-      const modelo = nomeTematico({ ...base, cor_armacao: '' }, produtos, []);
-      const grade = (modelo && modelo.codigo_sku) || String(base.codigo_fornecedor || '').trim() || proximoSku(produtos, usados);
-      const usadosAgora = [...usados];
-      const linhas = cores.map(item => {
-        const cor = String(item.cor).trim().slice(0, 100);
-        const linha = {
-          ...base,
-          cor_armacao: cor,
-          nome_fornecedor: base.nome_fornecedor ? `${base.nome_fornecedor} - ${cor}`.slice(0, 255) : '',
-          imagem_fornecedor: linkSeguro(item.imagem) || base.imagem_fornecedor || '',
-          imagens_extras: extras,
-          grade,
-        };
-        const preco = Number(item.preco);
-        if (item.preco !== null && item.preco !== undefined && Number.isFinite(preco) && preco > 0) {
-          linha.preco_custo = preco.toFixed(2).replace('.', ',');
-          linha.preco_venda = precoVendaPadrao(preco).replace('.', ',');
-        }
-        const link = caminho(linha.link_fornecedor);
-        const existente = produtos.find(p => norm(p.cor_armacao) === norm(cor) && (
-          (norm(p.grade) && norm(p.grade) === norm(grade))
-          || (link && caminho(p.link_fornecedor) === link)
-          || (norm(linha.codigo_fornecedor) && norm(p.codigo_fornecedor) === norm(linha.codigo_fornecedor) && norm(p.fornecedor) === norm(linha.fornecedor))));
-        if (existente) {
-          Object.assign(linha, { nome: existente.nome, codigo_sku: existente.codigo_sku, quantidade: '1' });
-        } else {
-          const tema = nomeTematico(linha, produtos, usadosAgora);
-          let nome = tema ? tema.nome : (linha.nome || base.nome_fornecedor || grade);
-          // Cor que o padrão Nix não conhece: entra como está no nome e no SKU
-          if (!/\s-\s/.test(nome)) nome = `${nome} - ${cor}`;
-          let sku = tema ? tema.codigo_sku : grade;
-          if (norm(sku).replace(/-\d+$/, '') === norm(grade)) {
-            const sufixo = norm(cor).toUpperCase().replace(/[^A-Z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 20) || 'COR';
-            const existentes = new Set([...produtos.map(p => p.codigo_sku), ...usadosAgora].map(norm));
-            sku = `${grade}-${sufixo}`;
-            for (let n = 2; existentes.has(norm(sku)); n++) sku = `${grade}-${sufixo}-${n}`;
-          }
-          Object.assign(linha, { nome: nome.slice(0, 255), codigo_sku: sku, cadastrar_novo: true });
-        }
-        usadosAgora.push(linha.codigo_sku);
-        return linha;
+      const linha = {
+        ...base,
+        cor_armacao: '',
+        quantidade: '',
+        cores: textoCoresLote(cores.map(c => ({ cor: String(c.cor).trim().slice(0, 100), qtd: 1 }))),
+        fotos_cores: Object.fromEntries(cores.map(c => [norm(c.cor), linkSeguro(c.imagem)]).filter(([, u]) => u)),
+        imagens_extras: (Array.isArray(dados.fotos_comuns) ? dados.fotos_comuns : []).map(linkSeguro).filter(Boolean).slice(0, 2),
+      };
+      // Preço: o da cor mais barata, se a página não trouxe o do produto
+      const precos = cores.map(c => Number(c.preco)).filter(n => Number.isFinite(n) && n > 0);
+      if (!String(linha.preco_custo || '').trim() && precos.length) {
+        const menor = Math.min(...precos);
+        linha.preco_custo = menor.toFixed(2).replace('.', ',');
+        linha.preco_venda = precoVendaPadrao(menor).replace('.', ',');
+      }
+      const existente = produtoJaCadastrado(produtos, linha);
+      if (existente) {
+        const modelo = String(existente.grade || '').trim() || existente.codigo_sku;
+        Object.assign(linha, { nome: nomeDoModelo(existente), codigo_sku: modelo });
+      } else {
+        const tema = nomeTematico({ ...linha, cor_armacao: '' }, produtos, usados);
+        if (tema) Object.assign(linha, tema);
+        else linha.codigo_sku = proximoSku(produtos, usados);
+      }
+      return { linha, esgotadas };
+    }
+
+    // Modelo com cores numa linha do lote -> o que vai acontecer com cada cor.
+    // Modelo já cadastrado (o SKU da linha é o código do modelo / SKU de um produto, ou o
+    // mesmo cód. do fornecedor / link): cor que ele já tem = reposição no SKU dela; cor nova
+    // = incluída no modelo (como "Incluir cores neste modelo"). Modelo novo: um cadastro por
+    // cor por dentro (SKU <modelo>-<COR>), todas com o mesmo Código do modelo, que a vitrine
+    // e o painel mostram como um produto só.
+    // -> { modelo, base (produto do modelo ou null), itens: [{ cor, qtd, acao: 'novo'|'repor'|'incluir', produto, sku }] }
+    function planoCoresLote(l, produtos) {
+      const norm = v => String(v ?? '').normalize('NFD').replace(/[̀-ͯ]/g, '').trim().toLowerCase();
+      const skuDaCor = cor => String(cor).normalize('NFD').replace(/[̀-ͯ]/g, '').toUpperCase()
+        .replace(/[^A-Z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 30) || 'COR';
+      const cores = lerCoresLote(l.cores) || [];
+      const sku = String(l.codigo_sku || '').trim();
+      const base = (norm(sku) && (produtos.find(p => norm(p.grade) === norm(sku)) || produtos.find(p => norm(p.codigo_sku) === norm(sku))))
+        || produtoJaCadastrado(produtos, l) || null;
+      const modelo = base ? (String(base.grade || '').trim() || base.codigo_sku) : sku;
+      const doModelo = base ? produtos.filter(p => p.id === base.id || (norm(p.grade) && norm(p.grade) === norm(modelo))) : [];
+      const usados = new Set(produtos.map(p => norm(p.codigo_sku)));
+      const itens = cores.map(c => {
+        const produto = doModelo.find(p => norm(p.cor_armacao) === norm(c.cor));
+        if (produto) return { ...c, acao: 'repor', produto, sku: produto.codigo_sku };
+        if (base) return { ...c, acao: 'incluir', produto: base, sku: '' };
+        let novo = `${modelo}-${skuDaCor(c.cor)}`;
+        for (let n = 2; usados.has(norm(novo)); n++) novo = `${modelo}-${skuDaCor(c.cor)}-${n}`;
+        usados.add(norm(novo));
+        return { ...c, acao: 'novo', produto: null, sku: novo };
       });
-      return { linhas, esgotadas };
+      return { modelo, base, itens };
+    }
+
+    // Aviso da linha com cores: o que vai ser feito
+    function resumoCoresLote(l, produtos) {
+      const plano = planoCoresLote(l, produtos);
+      if (!plano.itens.length) return '';
+      const lista = itens => itens.map(c => `${c.cor} (${c.qtd})`).join(', ');
+      const repor = plano.itens.filter(c => c.acao === 'repor');
+      const incluir = plano.itens.filter(c => c.acao === 'incluir');
+      const novas = plano.itens.filter(c => c.acao === 'novo');
+      const pecas = plano.itens.reduce((t, c) => t + c.qtd, 0);
+      if (!plano.base) return `Um produto com ${novas.length} cor(es), ${pecas} peça(s): ${lista(novas)}`;
+      return [`Já cadastrado (${plano.base.codigo_sku})`,
+        incluir.length && `inclui a(s) cor(es) ${lista(incluir)}`,
+        repor.length && `soma no estoque de ${lista(repor)}`].filter(Boolean).join(': ').replace(/: soma/, '; soma');
+    }
+
+    // Linhas do lote com cores -> o que vai para a API: linhas por cor (modelo novo e
+    // reposição das cores que o modelo já tem) e as cores a incluir em modelos cadastrados
+    // (POST /api/produtos/:id/cores). `origens[n]` = índice em `linhas` de produtos[n].
+    // -> { produtos, origens, incluir: [{ produto, nome, cores: [{ cor, estoque, foto }], linha }] }
+    function expandirCoresLote(linhas, produtos) {
+      const norm = v => String(v ?? '').normalize('NFD').replace(/[̀-ͯ]/g, '').trim().toLowerCase();
+      const saida = [];
+      const origens = [];
+      const incluir = [];
+      for (const [k, l] of linhas.entries()) {
+        const { cores: _c, fotos_cores: fotos = {}, ...resto } = l;
+        if (!String(l.cores ?? '').trim()) { saida.push(resto); origens.push(k); continue; }
+        const plano = planoCoresLote(l, produtos);
+        const novas = [];
+        for (const c of plano.itens) {
+          const foto = fotos[norm(c.cor)] || '';
+          if (c.acao === 'incluir') { novas.push({ cor: c.cor, estoque: c.qtd, foto }); continue; }
+          const linha = { ...resto, cor_armacao: c.cor, quantidade: String(Math.max(1, c.qtd)), imagem_fornecedor: c.acao === 'novo' ? (foto || resto.imagem_fornecedor || '') : '' };
+          if (c.acao === 'repor') Object.assign(linha, { nome: c.produto.nome, codigo_sku: c.produto.codigo_sku });
+          else Object.assign(linha, { nome: `${String(resto.nome).trim()} - ${c.cor}`.slice(0, 255), codigo_sku: c.sku, grade: plano.modelo, cadastrar_novo: true });
+          saida.push(linha);
+          origens.push(k);
+        }
+        if (novas.length) incluir.push({ produto: plano.base, nome: String(resto.nome || '').trim(), cores: novas, linha: k, conferencia: resto.em_conferencia === true });
+      }
+      return { produtos: saida, origens, incluir };
     }
 
     document.getElementById('btnLoteFornecedorTodos').addEventListener('click', () => {
@@ -2393,24 +2481,29 @@
       // Produto que já existe ou linha repetida: conferir antes de gravar
       if (!(await conferirLote())) return mostrarToast('Confira os produtos repetidos para salvar o lote', 'error');
 
-      const produtos = indices.map(i => {
+      // Linha com cores: uma por cor para a API, e as cores novas de modelo já cadastrado à parte
+      const expandido = expandirCoresLote(indices.map(i => {
         const { conferencia: _conferida, ...l } = linhasLote[i];
+        return l;
+      }), todosProdutos);
+      if (expandido.produtos.length > MAX_LOTE) return mostrarToast(`Máximo de ${MAX_LOTE} produtos/cores por vez`, 'error');
+      const produtos = expandido.produtos.map(l => {
         const medidas = Object.fromEntries(CAMPOS_MEDIDA.map(c => [c, lerMedida(l[c])]));
         return { ...l, ...medidas, preco_custo: lerPreco(l.preco_custo), preco_venda: lerPreco(l.preco_venda) };
       });
       btn.disabled = true;
       try {
-        const res = await fetchAdmin('/api/admin/produtos/lote', {
+        const res = produtos.length ? await fetchAdmin('/api/admin/produtos/lote', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ produtos }),
-        });
-        const data = await res.json();
-        if (!res.ok) {
+        }) : null;
+        const data = res ? await res.json() : { produtos: [], repostos: [], ignorados: [] };
+        if (res && !res.ok) {
           // Erros do servidor vêm pelo índice dentro de `produtos`: volta para a linha da tabela
           errosLote = [];
           (data.erros || []).forEach(e => {
-            const i = indices[e.linha];
+            const i = indices[expandido.origens[e.linha] ?? e.linha];
             errosLote[i] = { ...(errosLote[i] || {}), [e.campo]: e.mensagem };
           });
           renderizarLote();
@@ -2418,6 +2511,29 @@
         }
         const ignorados = data.ignorados || [];
         const repostos = data.repostos || [];
+        // Cores novas de um modelo já cadastrado: incluídas nele, com a foto de cada uma
+        let coresIncluidas = 0;
+        for (const inc of expandido.incluir) {
+          try {
+            const fd = new FormData();
+            fd.append('cores', JSON.stringify(inc.cores.map(c => ({ cor: c.cor, estoque: c.estoque }))));
+            if (inc.conferencia) fd.append('em_conferencia', 'true');
+            if (inc.nome) fd.append('nome_modelo', inc.nome);
+            for (const [k, c] of inc.cores.entries()) {
+              if (!c.foto) continue;
+              try {
+                fd.append(`foto_cor_${k + 1}`, await prepararImagem(await fotoDoFornecedor(c.foto)));
+              } catch (err) {
+                mostrarToast(`Foto da cor ${c.cor}: ${err.message}`, 'error');
+              }
+            }
+            const r = await fetchAdmin(`/api/produtos/${Number(inc.produto.id)}/cores`, { method: 'POST', body: fd });
+            if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || 'Erro ao incluir as cores');
+            coresIncluidas += inc.cores.length;
+          } catch (err) {
+            mostrarToast(`Cores de ${inc.produto.codigo_sku}: ${err.message}`, 'error');
+          }
+        }
         // Produtos novos que vieram de um link: a foto principal entra como capa do produto
         // e também vai para o computador como <SKU>.jpg
         const criados = new Map((data.produtos || []).map(p => [String(p.codigo_sku || '').toLowerCase(), p.id]));
@@ -2456,8 +2572,8 @@
             carregarProdutos();
           }
         })();
-        mostrarToast(`${data.produtos.length} produto(s) cadastrado(s)${repostos.length ? `, ${repostos.length} reposição(ões) somada(s) no estoque` : ''}${ignorados.length ? `, ${ignorados.length} ignorado(s) por duplicidade` : ''}`,
-          data.produtos.length || repostos.length ? 'success' : 'error');
+        mostrarToast(`${data.produtos.length} cadastro(s)${coresIncluidas ? `, ${coresIncluidas} cor(es) incluída(s) em modelo já cadastrado` : ''}${repostos.length ? `, ${repostos.length} reposição(ões) somada(s) no estoque` : ''}${ignorados.length ? `, ${ignorados.length} ignorado(s) por duplicidade` : ''}`,
+          data.produtos.length || repostos.length || coresIncluidas ? 'success' : 'error');
         linhasLote = [linhaLoteVazia(), linhaLoteVazia(), linhaLoteVazia()];
         errosLote = [];
         await carregarProdutos();
@@ -2595,7 +2711,7 @@
     // Mesma tabela do cadastro em lote, preenchida com os produtos já cadastrados.
     // Sem os campos de compra (quantidade, pedido, data) e sem o status: no lugar
     // dele vai o Estoque (peças na loja), e o status sai do estoque.
-    const CAMPOS_SO_CADASTRO = ['status', 'quantidade', 'pedido_fornecedor', 'data_compra'];
+    const CAMPOS_SO_CADASTRO = ['status', 'quantidade', 'pedido_fornecedor', 'data_compra', 'cores'];
     // Depois do preço de venda vêm a Promoção (Configurações > POP Anúncio) e o preço promocional.
     const COLUNAS_EDICAO = COLUNAS_LOTE.filter(c => !CAMPOS_SO_CADASTRO.includes(c.campo))
       .flatMap(c => c.campo === 'disponibilidade' ? [c, { campo: 'estoque', titulo: 'Estoque', largura: 'w-20' }]
@@ -3141,7 +3257,7 @@
 
       const filtrados = todosProdutos.filter(p => {
         if (fornecedorFiltro && p.fornecedor !== fornecedorFiltro) return false;
-        if (statusFiltro && p.status !== statusFiltro) return false;
+        if (statusFiltro === 'EM_CONFERENCIA' ? !p.em_conferencia : statusFiltro && p.status !== statusFiltro) return false;
         if (disponibilidadeFiltro && (p.disponibilidade || 'PRONTA_ENTREGA') !== disponibilidadeFiltro) return false;
         if (formatoFiltro && p.formato !== formatoFiltro) return false;
         if (busca && ![p.nome, p.codigo_sku, p.fornecedor, p.codigo_fornecedor, p.nome_fornecedor].some(v => String(v || '').toLowerCase().includes(busca))) return false;
@@ -3158,7 +3274,114 @@
       }
 
       emptyProdutos.classList.add('hidden');
-      tabelaProdutos.innerHTML = filtrados.map(p => `
+      // As cores de um modelo aparecem numa linha só (no acerto de estoque, uma por cor para marcar)
+      const itens = modoAcertoEstoque ? filtrados.map(p => ({ produto: p })) : agruparCoresPorModelo(filtrados);
+      tabelaProdutos.innerHTML = itens.map(item => item.cores ? htmlLinhaModeloCores(item) : htmlLinhaProduto(item.produto)).join('');
+    }
+
+    // Lista de produtos -> itens da tabela: { produto } ou, para as cores de um mesmo modelo
+    // (mesmo Código do modelo, sem tamanho, 2 ou mais cores na lista), { grade, cores: [produtos] }
+    // no lugar da primeira cor
+    function agruparCoresPorModelo(lista) {
+      const chave = p => (String(p.tamanho || '').trim() ? '' : String(p.grade || '').trim().toLowerCase());
+      const contagem = new Map();
+      lista.forEach(p => { const k = chave(p); if (k) contagem.set(k, (contagem.get(k) || 0) + 1); });
+      const grupos = new Map();
+      const itens = [];
+      for (const p of lista) {
+        const k = chave(p);
+        if (!k || contagem.get(k) < 2) { itens.push({ produto: p }); continue; }
+        if (!grupos.has(k)) {
+          const item = { grade: String(p.grade).trim(), cores: [] };
+          grupos.set(k, item);
+          itens.push(item);
+        }
+        grupos.get(k).cores.push(p);
+      }
+      return itens;
+    }
+
+    // Selo "Em conferência" (importado pelo link, fora da vitrine) com o botão para liberar
+    function htmlEmConferencia(produtos) {
+      const ids = produtos.filter(p => p.em_conferencia).map(p => Number(p.id));
+      if (!ids.length) return '';
+      return `<span class="block w-max mt-1 px-2 py-1 text-xs font-medium rounded-full bg-amber-100 text-amber-800" data-em-conferencia title="Importado pelo link: não aparece na vitrine até liberar">EM CONFERÊNCIA${produtos.length > 1 ? ` (${ids.length})` : ''}</span>
+            <button type="button" onclick="liberarConferencia([${ids.join(',')}])" class="block mt-1 px-2 py-1 text-xs font-medium rounded-lg bg-green-600 text-white hover:bg-green-700" title="Conferido: mostrar na vitrine">Liberar na vitrine</button>`;
+    }
+
+    window.liberarConferencia = async (ids) => {
+      try {
+        const res = await fetchAdmin('/api/admin/produtos/conferencia', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ids: ids.map(Number), em_conferencia: false }),
+        });
+        if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || 'Erro ao liberar');
+        mostrarToast(ids.length > 1 ? `${ids.length} cores liberadas na vitrine` : 'Produto liberado na vitrine');
+        carregarProdutos();
+      } catch (err) {
+        mostrarToast(err.message, 'error');
+      }
+    };
+
+    // Nome do modelo: o nome da cor sem o " - <cor>" do fim
+    function nomeDoModelo(p) {
+      const nome = String(p.nome || '');
+      const cor = String(p.cor_armacao || '').trim();
+      return cor && nome.toLowerCase().endsWith(` - ${cor.toLowerCase()}`) ? nome.slice(0, -(cor.length + 3)) : nome;
+    }
+
+    // Linha de um modelo com cores: estoque por cor (cada cor abre a edição dela) e total
+    function htmlLinhaModeloCores(item) {
+      const p = item.cores[0];
+      const estoque = item.cores.reduce((t, c) => t + (Number(c.estoque) || 0), 0);
+      const emMaleta = item.cores.reduce((t, c) => t + (Number(c.em_maleta) || 0), 0);
+      const status = item.cores.some(c => c.status === 'DISPONIVEL') ? 'DISPONIVEL' : item.cores.some(c => c.status === 'CONDICIONAL') ? 'CONDICIONAL' : 'ESGOTADO';
+      const comFoto = item.cores.find(c => c.imagem_url) || p;
+      const precos = [...new Set(item.cores.map(c => Number(c.preco_venda) || 0))];
+      const chips = item.cores.map(c => `
+              <button type="button" onclick="editarProduto(${Number(c.id)})" data-cor-produto="${Number(c.id)}" class="inline-flex items-center gap-1 pl-0.5 pr-2 py-0.5 border ${Number(c.estoque) > 0 ? 'border-gray-300' : 'border-red-200 bg-red-50'} rounded-full text-xs text-gray-700 hover:border-orange-400" title="Editar a cor ${escapeHtml(c.cor_armacao || c.codigo_sku)} (${escapeHtml(c.codigo_sku)})">
+                ${c.imagem_url ? `<img src="${escapeHtml(c.imagem_url)}" alt="" class="w-5 h-5 rounded-full object-cover" onerror="imgFallback(this)">` : '<span class="w-5 h-5 rounded-full bg-gray-200"></span>'}
+                ${escapeHtml(c.cor_armacao || c.codigo_sku)} <strong class="${Number(c.estoque) > 0 ? 'text-gray-900' : 'text-red-600'}">${Number(c.estoque) || 0}</strong>
+              </button>`).join('');
+      return `
+        <tr class="hover:bg-gray-50" data-modelo-cores="${escapeHtml(item.grade)}">
+          <td class="px-4 sm:px-6 py-4 relative">
+            <span class="absolute top-2 left-2 sm:left-4 z-10 bg-black/70 text-white text-[10px] font-medium px-1.5 rounded" title="${item.cores.length} cores">${item.cores.length} cores</span>
+            ${comFoto.imagem_url ? `<img src="${escapeHtml(comFoto.imagem_url)}" alt="${escapeHtml(nomeDoModelo(p))}" class="w-12 h-12 sm:w-16 sm:h-16 object-cover rounded" onerror="imgFallback(this)">` : '<div class="w-12 h-12 sm:w-16 sm:h-16 bg-gray-100 rounded"></div>'}
+          </td>
+          <td class="px-4 sm:px-6 py-4">
+            <p class="font-medium text-gray-900 text-sm sm:text-base">${escapeHtml(nomeDoModelo(p))}</p>
+            <p class="text-xs sm:text-sm text-gray-500">Modelo ${escapeHtml(item.grade)} • ${item.cores.length} cores</p>
+            ${p.fornecedor || p.codigo_fornecedor ? `<p class="text-xs text-gray-400">Forn.: ${escapeHtml(p.fornecedor || '-')}${p.codigo_fornecedor ? ' • Cód. ' + escapeHtml(p.codigo_fornecedor) : ''}</p>` : ''}
+            <div class="mt-2 flex flex-wrap gap-1" aria-label="Estoque por cor">${chips}</div>
+          </td>
+          <td class="hidden md:table-cell px-4 sm:px-6 py-4 text-sm text-gray-500">
+            ${escapeHtml(p.formato || '-')} ${p.estilo ? '• ' + escapeHtml(p.estilo) : ''}
+          </td>
+          <td class="px-4 sm:px-6 py-4">
+            <p class="text-gray-900 font-medium text-sm sm:text-base">${precos.length > 1 ? `${formatarMoeda(Math.min(...precos))} a ${formatarMoeda(Math.max(...precos))}` : formatarMoeda(p.preco_venda)}</p>
+            <p class="text-xs sm:text-sm text-gray-500">Custo: ${formatarMoeda(p.preco_custo)}</p>
+          </td>
+          <td class="px-4 sm:px-6 py-4">
+            <span class="px-2 py-1 text-xs font-medium rounded-full ${statusClass(status)}">${escapeHtml(status)}</span>
+            ${htmlEmConferencia(item.cores)}
+            <span class="block mt-1 text-xs text-gray-500">${estoque} em estoque (todas as cores)${emMaleta ? ` • ${emMaleta} em maleta` : ''}</span>
+            ${p.disponibilidade === 'SOB_ENCOMENDA' ? '<span class="block w-max mt-1 px-2 py-1 text-xs font-medium rounded-full bg-blue-100 text-blue-700">SOB ENCOMENDA</span>' : ''}
+            ${htmlPromocaoProduto(p)}
+          </td>
+          <td class="hidden sm:table-cell px-4 sm:px-6 py-4 text-gray-900 font-medium">${item.cores.reduce((t, c) => t + (Number(c.vezes_em_maleta) || 0), 0)}</td>
+          <td class="px-4 sm:px-6 py-4">
+            <div class="flex items-center space-x-1">
+              <button onclick="editarProduto(${Number(p.id)})" class="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors" title="Editar o modelo (ou toque numa cor para editar só ela)"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg></button>
+              ${botaoLinkFornecedor(p.link_fornecedor)}
+            </div>
+          </td>
+        </tr>`;
+    }
+
+    function htmlLinhaProduto(p) {
+      return `
         <tr class="hover:bg-gray-50${modoAcertoEstoque && marcadosAcerto.has(Number(p.id)) ? ' bg-red-50' : ''}">
           ${modoAcertoEstoque ? `<td class="pl-4 py-4 w-10"><input type="checkbox" data-acerto-estoque="${Number(p.id)}" class="h-5 w-5 accent-red-600" aria-label="Marcar ${escapeHtml(p.nome)}"${marcadosAcerto.has(Number(p.id)) ? ' checked' : ''}></td>` : ''}
           <td class="px-4 sm:px-6 py-4 relative">
@@ -3183,6 +3406,7 @@
           </td>
           <td class="px-4 sm:px-6 py-4">
             <span class="px-2 py-1 text-xs font-medium rounded-full ${statusClass(p.status)}">${escapeHtml(p.status)}</span>
+            ${htmlEmConferencia([p])}
             <span class="block mt-1 text-xs text-gray-500">${Number(p.estoque) || 0} em estoque${Number(p.em_maleta) ? ` • ${Number(p.em_maleta)} em maleta` : ''}</span>
             ${p.disponibilidade === 'SOB_ENCOMENDA' ? '<span class="block w-max mt-1 px-2 py-1 text-xs font-medium rounded-full bg-blue-100 text-blue-700">SOB ENCOMENDA</span>' : ''}
             ${htmlPromocaoProduto(p)}
@@ -3197,7 +3421,7 @@
             </div>
           </td>
         </tr>
-      `).join('');
+      `;
     }
 
     // Filtros
@@ -3646,6 +3870,7 @@
       ultimaImportacao = {};
       imagemImportada = '';
       fotoImportada = null;
+      importadoDoLink = false;
       document.getElementById('produtoId').value = '';
       iniciarSlotsFotos(produto);
 
@@ -4010,6 +4235,8 @@
     // ainda está igual a eles é trocado (ou apagado, se a nova página não tiver), para não
     // sobrar dado do produto anterior. O que você digitou não é mexido.
     let ultimaImportacao = {};
+    // Cadastro (ou cores novas) vindo da importação pelo link: vai "em conferência", fora da vitrine
+    let importadoDoLink = false;
     // Foto principal da última importação: baixada como <SKU>.jpg quando o produto novo é salvo
     let imagemImportada = '';
     // Arquivo da foto do fornecedor posto num espaço de foto (trocado numa nova importação)
@@ -4064,7 +4291,7 @@
         const coresDisp = coresLoja.some(x => x.disponivel !== false) ? coresLoja.filter(x => x.disponivel !== false) : coresLoja;
         let coresImportadas = 0;
         if (!produtoEditando && !existente && coresDisp.length && !coresForm.some(x => String(x.cor || '').trim() || x.file)) {
-          coresForm = coresDisp.slice(0, MAX_CORES).map(x => ({ cor: String(x.cor).trim().slice(0, 100), estoque: '', file: null }));
+          coresForm = coresDisp.slice(0, MAX_CORES).map(x => ({ cor: String(x.cor).trim().slice(0, 100), estoque: '1', file: null }));
           coresImportadas = coresForm.length;
           desenharCores();
           coresDisp.slice(0, MAX_CORES).forEach((x, i) => {
@@ -4081,6 +4308,7 @@
           if (comum) c.imagem_fornecedor = comum;
         }
         imagemImportada = c.imagem_fornecedor;
+        if (!produtoEditando && !existente) importadoDoLink = true;
         const preenchidos = r.preenchidos;
         // Produto novo: a foto principal já entra como capa (ou na primeira posição livre)
         if (!produtoEditando && !existente && c.imagem_fornecedor) {
@@ -4115,6 +4343,36 @@
             if (c.preco_custo) document.getElementById('reposicaoCusto').value = c.preco_custo.replace('.', ',');
           });
           aviso.appendChild(botao);
+          // Mesmo código do fornecedor e a loja tem cores: inclui as cores que o modelo ainda não tem
+          const norm = v => String(v ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().toLowerCase();
+          const modelo = String(existente.grade || '').trim();
+          const jaTem = new Set(todosProdutos.filter(x => x.id === existente.id || (modelo && norm(x.grade) === norm(modelo))).map(x => norm(x.cor_armacao)));
+          const coresNovas = coresDisp.filter(x => !jaTem.has(norm(x.cor))).slice(0, MAX_CORES);
+          if (coresNovas.length && !String(existente.tamanho || '').trim()) {
+            const incluir = document.createElement('button');
+            incluir.type = 'button';
+            incluir.className = 'ml-2 underline text-orange-600 hover:text-orange-700';
+            incluir.textContent = `Incluir ${coresNovas.length} cor(es) nova(s) neste modelo`;
+            incluir.addEventListener('click', () => {
+              fecharModal();
+              window.editarProduto(existente.id);
+              importadoDoLink = true;
+              coresForm = coresNovas.map(x => ({ cor: String(x.cor).trim().slice(0, 100), estoque: '1', file: null }));
+              desenharCores();
+              coresNovas.forEach((x, i) => {
+                const linkFoto = linkSeguro(x.imagem);
+                const alvo = coresForm[i];
+                if (!linkFoto) return;
+                fotoDoFornecedor(linkFoto).then(foto => {
+                  if (coresForm[i] !== alvo || alvo.file) return;
+                  alvo.file = foto;
+                  desenharCores();
+                }).catch(() => {});
+              });
+              document.getElementById('coresProduto').scrollIntoView({ block: 'center' });
+            });
+            aviso.appendChild(incluir);
+          }
           status.appendChild(aviso);
         }
       } catch (err) {
@@ -4212,6 +4470,7 @@
       }
       // Fotos já salvas que continuam (null = posição vazia ou removida)
       formData.append('fotos_manter', JSON.stringify(slotsFotos.map(s => (s.file ? null : s.url))));
+      if (!id && importadoDoLink) formData.append('em_conferencia', 'true');
 
       // Edição com cores novas: conferidas antes de salvar o produto
       const coresNovas = id ? lerCoresFormulario() : [];
@@ -4230,6 +4489,7 @@
         if (id && coresNovas.length) {
           const formCores = new FormData();
           formCores.append('cores', JSON.stringify(coresNovas.map(c => ({ cor: c.cor, estoque: c.estoque }))));
+          if (importadoDoLink) formCores.append('em_conferencia', 'true');
           for (const [i, c] of coresNovas.entries()) {
             if (c.file) formCores.append(`foto_cor_${i + 1}`, await prepararImagem(c.file));
           }

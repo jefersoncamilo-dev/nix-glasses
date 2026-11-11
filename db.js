@@ -96,6 +96,13 @@ async function initTables(pool) {
       ADD COLUMN IF NOT EXISTS nome_fornecedor VARCHAR(255) NOT NULL DEFAULT ''
     `);
 
+    // Produto importado pelo link do fornecedor fica "em conferência" (fora da vitrine)
+    // até ser liberado no painel.
+    await client.query(`
+      ALTER TABLE produtos
+      ADD COLUMN IF NOT EXISTS em_conferencia BOOLEAN NOT NULL DEFAULT false
+    `);
+
     // Especificações técnicas mostradas ao cliente. Medidas em cm, com uma casa
     // decimal (ex.: diâmetro 5,0); vazio = não informado.
     await client.query(`

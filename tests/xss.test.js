@@ -138,7 +138,7 @@ describe('painel (admin/index.html) escapa dados de produto', () => {
 
   it('na tabela de produtos', () => {
     const tabelaProdutos = elemento();
-    const ctx = carregar('admin/index.html', ['escapeHtml', 'linkSeguro', 'botaoLinkFornecedor', 'variacaoCusto', 'htmlVariacao', 'htmlUltimaCompra', 'contarFotos', 'atualizarBarraAcertoEstoque', 'anuncioPorId', 'temPrecoPromocional', 'htmlPromocaoProduto', 'renderizarTabela'], {
+    const ctx = carregar('admin/index.html', ['escapeHtml', 'linkSeguro', 'botaoLinkFornecedor', 'variacaoCusto', 'htmlVariacao', 'htmlUltimaCompra', 'contarFotos', 'atualizarBarraAcertoEstoque', 'anuncioPorId', 'temPrecoPromocional', 'htmlPromocaoProduto', 'renderizarTabela', 'agruparCoresPorModelo', 'nomeDoModelo', 'htmlLinhaModeloCores', 'htmlLinhaProduto', 'htmlEmConferencia'], {
       URL,
       // Acerto de estoque ligado: a caixinha de marcar leva o nome do produto
       modoAcertoEstoque: true,
@@ -165,6 +165,37 @@ describe('painel (admin/index.html) escapa dados de produto', () => {
       atualizarRelatorioEstoque: () => {},
     });
     ctx.renderizarTabela();
+    semInjecao(tabelaProdutos.innerHTML);
+    assert.doesNotMatch(tabelaProdutos.innerHTML, /href="javascript:/i);
+  });
+
+  it('na linha do modelo com as cores juntas', () => {
+    const tabelaProdutos = elemento();
+    const ctx = carregar('admin/index.html', ['escapeHtml', 'linkSeguro', 'botaoLinkFornecedor', 'variacaoCusto', 'htmlVariacao', 'htmlUltimaCompra', 'contarFotos', 'atualizarBarraAcertoEstoque', 'anuncioPorId', 'temPrecoPromocional', 'htmlPromocaoProduto', 'renderizarTabela', 'agruparCoresPorModelo', 'nomeDoModelo', 'htmlLinhaModeloCores', 'htmlLinhaProduto', 'htmlEmConferencia'], {
+      URL,
+      modoAcertoEstoque: false,
+      marcadosAcerto: new Set(),
+      btnExcluirMarcados: elemento(),
+      marcarTodosAcerto: elemento(),
+      document: { getElementById: elemento },
+      formatarDia: v => String(v),
+      todosProdutos: [
+        produtoMalicioso({ grade: PAYLOAD, tamanho: '', imagem_url: PAYLOAD, link_fornecedor: 'javascript:alert(1)', em_conferencia: true }),
+        produtoMalicioso({ id: 8, grade: PAYLOAD, tamanho: '', cor_armacao: `${PAYLOAD}2`, fornecedor: PAYLOAD, codigo_fornecedor: PAYLOAD }),
+      ],
+      filtroStatusAdmin: elemento(),
+      filtroDisponibilidadeAdmin: elemento(),
+      filtroFormatoAdmin: elemento(),
+      filtroFornecedorAdmin: elemento(),
+      buscaAdmin: elemento(),
+      tabelaProdutos,
+      emptyProdutos: elemento(),
+      formatarMoeda,
+      statusClass: () => '',
+      atualizarRelatorioEstoque: () => {},
+    });
+    ctx.renderizarTabela();
+    assert.match(tabelaProdutos.innerHTML, /data-modelo-cores=/);
     semInjecao(tabelaProdutos.innerHTML);
     assert.doesNotMatch(tabelaProdutos.innerHTML, /href="javascript:/i);
   });
