@@ -138,7 +138,7 @@ describe('painel (admin/index.html) escapa dados de produto', () => {
 
   it('na tabela de produtos', () => {
     const tabelaProdutos = elemento();
-    const ctx = carregar('admin/index.html', ['escapeHtml', 'linkSeguro', 'botaoLinkFornecedor', 'variacaoCusto', 'htmlVariacao', 'htmlUltimaCompra', 'contarFotos', 'atualizarBarraAcertoEstoque', 'anuncioPorId', 'temPrecoPromocional', 'htmlPromocaoProduto', 'renderizarTabela', 'agruparCoresPorModelo', 'nomeDoModelo', 'htmlLinhaModeloCores', 'htmlLinhaProduto'], {
+    const ctx = carregar('admin/index.html', ['escapeHtml', 'linkSeguro', 'botaoLinkFornecedor', 'variacaoCusto', 'htmlVariacao', 'htmlUltimaCompra', 'contarFotos', 'atualizarBarraAcertoEstoque', 'anuncioPorId', 'temPrecoPromocional', 'htmlPromocaoProduto', 'renderizarTabela', 'agruparCoresPorModelo', 'nomeDoModelo', 'htmlLinhaModeloCores', 'htmlLinhaProduto', 'htmlEmConferencia'], {
       URL,
       // Acerto de estoque ligado: a caixinha de marcar leva o nome do produto
       modoAcertoEstoque: true,
@@ -171,7 +171,7 @@ describe('painel (admin/index.html) escapa dados de produto', () => {
 
   it('na linha do modelo com as cores juntas', () => {
     const tabelaProdutos = elemento();
-    const ctx = carregar('admin/index.html', ['escapeHtml', 'linkSeguro', 'botaoLinkFornecedor', 'variacaoCusto', 'htmlVariacao', 'htmlUltimaCompra', 'contarFotos', 'atualizarBarraAcertoEstoque', 'anuncioPorId', 'temPrecoPromocional', 'htmlPromocaoProduto', 'renderizarTabela', 'agruparCoresPorModelo', 'nomeDoModelo', 'htmlLinhaModeloCores', 'htmlLinhaProduto'], {
+    const ctx = carregar('admin/index.html', ['escapeHtml', 'linkSeguro', 'botaoLinkFornecedor', 'variacaoCusto', 'htmlVariacao', 'htmlUltimaCompra', 'contarFotos', 'atualizarBarraAcertoEstoque', 'anuncioPorId', 'temPrecoPromocional', 'htmlPromocaoProduto', 'renderizarTabela', 'agruparCoresPorModelo', 'nomeDoModelo', 'htmlLinhaModeloCores', 'htmlLinhaProduto', 'htmlEmConferencia'], {
       URL,
       modoAcertoEstoque: false,
       marcadosAcerto: new Set(),
@@ -180,7 +180,7 @@ describe('painel (admin/index.html) escapa dados de produto', () => {
       document: { getElementById: elemento },
       formatarDia: v => String(v),
       todosProdutos: [
-        produtoMalicioso({ grade: PAYLOAD, tamanho: '', imagem_url: PAYLOAD, link_fornecedor: 'javascript:alert(1)' }),
+        produtoMalicioso({ grade: PAYLOAD, tamanho: '', imagem_url: PAYLOAD, link_fornecedor: 'javascript:alert(1)', em_conferencia: true }),
         produtoMalicioso({ id: 8, grade: PAYLOAD, tamanho: '', cor_armacao: `${PAYLOAD}2`, fornecedor: PAYLOAD, codigo_fornecedor: PAYLOAD }),
       ],
       filtroStatusAdmin: elemento(),

@@ -825,6 +825,8 @@ function validarProdutoLote(linha) {
     data_compra: lerDataCompra(l.data_compra),
     // Conferido no painel como produto diferente: o mesmo cód. do fornecedor não junta
     cadastrar_novo: l.cadastrar_novo === true,
+    // Importado pelo link: fica fora da vitrine até ser liberado no painel
+    em_conferencia: l.em_conferencia === true,
   };
   const { espec, erro: erroEspec } = lerEspecificacoes(l);
   Object.assign(produto, { diametro_cm: null, ponte_cm: null, largura_total_cm: null, material: '', tipo: '', nome_curto: '', genero: '', tamanho: '', grade: '' }, espec);
@@ -898,6 +900,14 @@ function lerCores(v) {
 function skuDaCor(cor) {
   return String(cor).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase()
     .replace(/[^A-Z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 30) || 'COR';
+}
+
+// Cadastro vindo da importação pelo link (em_conferencia = "true"): os produtos criados
+// ficam fora da vitrine até serem liberados no painel. Atualiza a lista `criados`.
+async function marcarEmConferencia(client, flag, criados) {
+  if (!(flag === true || flag === 'true') || !criados.length) return;
+  await client.query('UPDATE produtos SET em_conferencia = true WHERE id = ANY($1)', [criados.map((p) => p.id)]);
+  criados.forEach((p) => { p.em_conferencia = true; });
 }
 
 // Data da compra em AAAA-MM-DD ou DD/MM/AAAA: vazio = null, inválida = false.
@@ -1008,12 +1018,12 @@ async function gravarLote(client, produtos) {
     // ON CONFLICT cobre outro cadastro do mesmo SKU entre a checagem e o INSERT
     const r = await client.query(
       `INSERT INTO produtos (nome, codigo_sku, preco_custo, preco_venda, status, disponibilidade, formato, estilo, cor_armacao, fornecedor, codigo_fornecedor, link_fornecedor,
-                             diametro_cm, ponte_cm, largura_total_cm, material, tipo, nome_curto, genero, estoque, tamanho, grade, nome_fornecedor)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23)
+                             diametro_cm, ponte_cm, largura_total_cm, material, tipo, nome_curto, genero, estoque, tamanho, grade, nome_fornecedor, em_conferencia)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24)
        ON CONFLICT (codigo_sku) DO NOTHING
        RETURNING *`,
       [p.nome, p.codigo_sku, p.preco_custo, p.preco_venda, p.status, p.disponibilidade, p.formato, p.estilo, p.cor_armacao, p.fornecedor, p.codigo_fornecedor, p.link_fornecedor,
-        p.diametro_cm, p.ponte_cm, p.largura_total_cm, p.material, p.tipo, p.nome_curto, p.genero, compra.quantidade, p.tamanho, p.grade, p.nome_fornecedor]
+        p.diametro_cm, p.ponte_cm, p.largura_total_cm, p.material, p.tipo, p.nome_curto, p.genero, compra.quantidade, p.tamanho, p.grade, p.nome_fornecedor, p.em_conferencia === true]
     );
     if (!r.rows.length) {
       ignorados.push({ linha: i, codigo_sku: p.codigo_sku, codigo_fornecedor: p.codigo_fornecedor, campo: 'codigo_sku', motivo: 'SKU já cadastrado' });
@@ -1397,7 +1407,7 @@ async function startServer() {
                 ${anuncios.sqlPrecoPromocional('p')} AS preco_promocional
          FROM produtos p
          LEFT JOIN anuncios a ON a.id = p.anuncio_id
-         WHERE p.status IN ('DISPONIVEL', 'CONDICIONAL')
+         WHERE p.status IN ('DISPONIVEL', 'CONDICIONAL') AND NOT p.em_conferencia
          ORDER BY p.created_at DESC`
       );
       const { oculos } = await lojaDaEmpresa(req.empresa);
@@ -1416,7 +1426,7 @@ async function startServer() {
         `SELECT p.id, p.nome, p.nome_curto, p.codigo_sku, p.preco_custo, p.preco_venda, p.imagem_url, p.fotos, p.status, p.disponibilidade,
                 p.formato, p.estilo, p.cor_armacao, p.diametro_cm, p.ponte_cm, p.largura_total_cm, p.material, p.tipo, p.genero, p.tamanho, p.grade,
                 p.fornecedor, p.codigo_fornecedor, p.nome_fornecedor, p.link_fornecedor, p.vezes_em_maleta, p.pedido_condicional_id,
-                p.estoque, p.anuncio_id, p.preco_promocional, COALESCE(mp.pedidos, '{}') AS maletas, COALESCE(cardinality(mp.pedidos), 0)::int AS em_maleta,
+                p.estoque, p.anuncio_id, p.preco_promocional, p.em_conferencia, COALESCE(mp.pedidos, '{}') AS maletas, COALESCE(cardinality(mp.pedidos), 0)::int AS em_maleta,
                 to_char(uc.data_compra, 'YYYY-MM-DD') AS ultima_compra, uc.preco_custo AS custo_ultima_compra,
                 ca.preco_custo AS custo_compra_anterior, COALESCE(nc.total, 0)::int AS total_compras
          FROM produtos p
@@ -1552,6 +1562,7 @@ async function startServer() {
         await registrarCompraCadastro(client, result.rows[0], { quantidade: peca.estoque || 1 });
         criados.push(...(await recalcularStatus(client, [result.rows[0].id])));
       }
+      await marcarEmConferencia(client, req.body.em_conferencia, criados);
       await client.query('COMMIT');
       // Um produto: a resposta de sempre. Grade: o 1º tamanho e a lista completa.
       res.status(201).json(variacoes ? { ...criados[0], produtos: criados } : criados[0]);
@@ -1565,6 +1576,23 @@ async function startServer() {
       res.status(500).json({ error: 'Erro ao cadastrar produto' });
     } finally {
       if (client) client.release();
+    }
+  }
+
+  // Produtos importados "em conferência": liberar (aparecem na vitrine) ou voltar para conferência.
+  // Body { ids: [..], em_conferencia: false|true } -> { atualizados }
+  async function handleConferenciaProdutos(req, res) {
+    const ids = Array.isArray(req.body && req.body.ids) ? req.body.ids.map(Number) : [];
+    if (!ids.length || ids.length > 500 || !ids.every((n) => Number.isInteger(n) && n > 0)) {
+      return res.status(400).json({ error: 'Informe os produtos' });
+    }
+    const flag = req.body.em_conferencia === true;
+    try {
+      const r = await req.db.query('UPDATE produtos SET em_conferencia = $2, updated_at = CURRENT_TIMESTAMP WHERE id = ANY($1) RETURNING id', [ids, flag]);
+      res.json({ atualizados: r.rowCount });
+    } catch (err) {
+      console.error(err);
+      res.status(500).json({ error: 'Erro ao atualizar os produtos' });
     }
   }
 
@@ -1629,6 +1657,7 @@ async function startServer() {
         await registrarCompraCadastro(client, result.rows[0], { quantidade: c.estoque || 1 });
         criados.push(...(await recalcularStatus(client, [result.rows[0].id])));
       }
+      await marcarEmConferencia(client, req.body.em_conferencia, criados);
       await client.query('COMMIT');
       res.status(201).json({ grade, produtos: criados });
     } catch (err) {
@@ -4406,6 +4435,7 @@ async function startServer() {
   app.put('/api/admin/produtos/lote', exigirArea('produtos'), handleUpdateLote);
   app.post('/api/admin/produtos/excluir/conferir', exigirArea('produtos'), handleConferirExclusao);
   app.post('/api/admin/produtos/excluir', exigirArea('produtos'), handleExcluirProdutos);
+  app.post('/api/admin/produtos/conferencia', exigirArea('produtos'), handleConferenciaProdutos);
   // Conferência de estoque: vendido, baixa, Sob Encomenda ou esgotado (com conferência antes)
   const conferencia = conferenciaEstoque.criarHandlers({ recalcularStatus, textoCurto });
   app.post('/api/admin/estoque/conferencia/conferir', exigirArea('produtos'), conferencia.handleConferir);

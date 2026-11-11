@@ -220,3 +220,63 @@ describe('painel: Cadastro em Lote com as cores do link (um produto, estoque por
     assert.equal(ctx.nomeDoModelo(lista[0]), 'Nix A');
   });
 });
+
+// ---------- Em conferência: importado pelo link fica fora da vitrine ----------
+const h = require('./helpers');
+describe('API: produto importado fica em conferência até liberar', () => {
+  let srv;
+  let token;
+  const { before, after } = require('node:test');
+  before(async () => {
+    await h.limparBanco();
+    srv = await h.iniciarServidor();
+    token = await h.login(srv);
+  });
+  after(async () => {
+    await srv.parar();
+    await h.fecharBanco();
+  });
+  const api = (p, opts = {}) => fetch(srv.url(p), { ...opts, headers: { Authorization: `Bearer ${token}`, ...(opts.headers || {}) } });
+  const vitrine = async () => (await (await fetch(srv.url('/api/produtos'))).json()).map((p) => p.codigo_sku);
+
+  it('lote com em_conferencia não aparece na vitrine; liberar mostra', async () => {
+    const base = { preco_custo: 29.9, preco_venda: 129.9, quantidade: '2' };
+    const res = await api('/api/admin/produtos/lote', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ produtos: [
+        { ...base, nome: 'Nix A - Preto', codigo_sku: 'NIX-A-PRETO', cor_armacao: 'Preto', grade: 'NIX-A', em_conferencia: true },
+        { ...base, nome: 'Avulso', codigo_sku: 'AVULSO' },
+      ] }),
+    });
+    assert.equal(res.status, 201);
+    const criados = (await res.json()).produtos;
+    assert.deepEqual(await vitrine(), ['AVULSO']);
+    const admin = await (await api('/api/admin/produtos')).json();
+    assert.equal(admin.find((p) => p.codigo_sku === 'NIX-A-PRETO').em_conferencia, true);
+
+    // cores novas incluídas pela importação também ficam em conferência
+    const preto = criados.find((p) => p.codigo_sku === 'NIX-A-PRETO');
+    const fd = new FormData();
+    fd.append('cores', JSON.stringify([{ cor: 'Rosa', estoque: 1 }]));
+    fd.append('em_conferencia', 'true');
+    const rc = await api(`/api/produtos/${preto.id}/cores`, { method: 'POST', body: fd });
+    assert.equal(rc.status, 201);
+    const rosa = (await rc.json()).produtos[0];
+    assert.equal(rosa.em_conferencia, true);
+    assert.deepEqual(await vitrine(), ['AVULSO']);
+
+    const lib = await api('/api/admin/produtos/conferencia', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ids: [preto.id, rosa.id], em_conferencia: false }),
+    });
+    assert.deepEqual(await lib.json(), { atualizados: 2 });
+    assert.deepEqual((await vitrine()).sort(), ['AVULSO', 'NIX-A-PRETO', 'NIX-A-ROSA']);
+  });
+
+  it('liberar exige login e ids válidos', async () => {
+    const semLogin = await fetch(srv.url('/api/admin/produtos/conferencia'), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{"ids":[1]}' });
+    assert.equal(semLogin.status, 401);
+    const r = await api('/api/admin/produtos/conferencia', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{"ids":["x"]}' });
+    assert.equal(r.status, 400);
+  });
+});
