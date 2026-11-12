@@ -7,6 +7,7 @@ const crypto = require('crypto');
 const fs = require('fs');
 const { criarPool, initTables } = require('./db');
 const ajustePrecosOculos = require('./ajuste-precos-oculos');
+const ajusteNomesCurtos = require('./ajuste-nomes-curtos');
 const { lerEmpresas, empresaDoHost, normalizarHost, identidadeBanco, hostInterno } = require('./empresas');
 const { CAMPOS_TEXTO, COLUNAS, lerColunas, lerInstagram, lerNicho, limparTextoLoja, montarLoja, renderizarPagina } = require('./loja');
 const master = require('./master');
@@ -1300,6 +1301,7 @@ async function conectarBanco(slug, databaseUrl) {
     await initTables(pool);
     await conferirDonoDoBanco({ slug, pool });
     await ajustePrecosOculos.aplicarUmaVez(slug, pool);
+    await ajusteNomesCurtos.aplicarUmaVez(slug, pool);
     return pool;
   } catch (err) {
     await pool.end().catch(() => {});
