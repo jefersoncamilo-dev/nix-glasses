@@ -1217,8 +1217,9 @@
     }
 
     // Etiquetas discretas do card: material, formato e cor, só o que foi preenchido
+    // Linha curta do card: só material e tipo (formato da lente e cor ficam nos detalhes).
     function tagsCard(p) {
-      return [p.material, p.formato, p.cor_armacao].map(v => String(v ?? '').trim()).filter(Boolean);
+      return [p.material, p.tipo].map(v => String(v ?? '').trim()).filter(Boolean);
     }
 
     // Botão do card. O mesmo HTML é usado para trocar só o botão logo após o clique.
