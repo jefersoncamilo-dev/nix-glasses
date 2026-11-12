@@ -133,7 +133,8 @@ describe('cadastro em lote', () => {
     assert.equal(a.fornecedor, 'Forn A');
     assert.equal(a.codigo_fornecedor, 'A-1');
     assert.equal(a.disponibilidade, 'SOB_ENCOMENDA');
-    assert.equal(a.status, 'CONDICIONAL');
+    // Sob Encomenda vende pelo estoque do fornecedor: fica disponível mesmo com a peça na maleta
+    assert.equal(a.status, 'DISPONIVEL');
     assert.equal(a.formato, 'Redondo');
     assert.equal(b.status, 'DISPONIVEL');
     assert.equal(b.disponibilidade, 'PRONTA_ENTREGA');

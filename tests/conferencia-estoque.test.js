@@ -136,20 +136,22 @@ describe('API: conferência de estoque', () => {
     assert.equal(met.body.totalEstoque, 0);
   });
 
-  it('quantidade maior que a loja, produto sem peça ou Sob Encomenda barra tudo (409)', async () => {
+  it('quantidade maior que a loja, produto sem peça ou Sob Encomenda sem peça guardada barra tudo (409)', async () => {
     const a = await produto('A1', 1);
     const b = await produto('B2', 3);
     const c = await produto('C3', 0);
-    const d = await produto('D4', 1, { disponibilidade: 'SOB_ENCOMENDA' });
+    const d = await produto('D4', 0, { disponibilidade: 'SOB_ENCOMENDA' });
+    const e = await produto('E5', 2, { disponibilidade: 'SOB_ENCOMENDA' });
     const r = await api('POST', '/api/admin/estoque/conferencia', {
-      acao: 'BAIXA', itens: [{ id: a.id, quantidade: 2 }, { id: b.id, quantidade: 1 }, { id: c.id }, { id: d.id }],
+      acao: 'BAIXA', itens: [{ id: a.id, quantidade: 2 }, { id: b.id, quantidade: 1 }, { id: c.id }, { id: d.id }, { id: e.id }],
     });
     assert.equal(r.status, 409);
     const por = Object.fromEntries(r.body.itens.map((i) => [i.codigo_sku, i]));
     assert.match(por.A1.bloqueios[0], /Só tem 1 peça/);
     assert.deepEqual(por.B2.bloqueios, []);
     assert.match(por.C3.bloqueios[0], /Não tem peça/);
-    assert.match(por.D4.bloqueios[0], /Sob Encomenda/);
+    assert.match(por.D4.bloqueios[0], /Sob Encomenda e não tem peça guardada/);
+    assert.deepEqual(por.E5.bloqueios, [], 'Sob Encomenda com peça guardada na loja pode dar baixa');
     assert.equal((await linha(b.id)).estoque, 3, 'nada foi gravado');
     assert.equal((await movimentos()).length, 0);
   });
@@ -177,30 +179,43 @@ describe('API: conferência de estoque', () => {
     assert.equal((await linha(b.id)).estoque, 1);
   });
 
-  it('disponibilizar para encomenda: só sem peça na loja', async () => {
+  it('disponibilizar para encomenda: não precisa zerar, as peças da loja ficam guardadas', async () => {
     const a = await produto('A1', 0);
     const b = await produto('B2', 2);
-    const bloqueado = await api('POST', '/api/admin/estoque/conferencia', { acao: 'ENCOMENDA', itens: [{ id: a.id }, { id: b.id }] });
-    assert.equal(bloqueado.status, 409);
-    assert.match(bloqueado.body.itens.find((i) => i.id === b.id).bloqueios[0], /Ainda tem 2 peças/);
+    const conf = await api('POST', '/api/admin/estoque/conferencia/conferir', { acao: 'ENCOMENDA', itens: [{ id: a.id }, { id: b.id }] });
+    const doB = conf.body.itens.find((i) => i.id === b.id);
+    assert.deepEqual(doB.bloqueios, []);
+    assert.match(doB.avisos.join(' '), /2 peças ficam guardadas/);
+    assert.match(doB.resultado, /Sob Encomenda \(2 peças guardadas na loja\)/);
 
-    const r = await api('POST', '/api/admin/estoque/conferencia', { acao: 'ENCOMENDA', itens: [{ id: a.id }] });
+    const r = await api('POST', '/api/admin/estoque/conferencia', { acao: 'ENCOMENDA', itens: [{ id: a.id }, { id: b.id }] });
     assert.equal(r.status, 200);
-    assert.deepEqual(await linha(a.id), { estoque: 1, status: 'DISPONIVEL', disponibilidade: 'SOB_ENCOMENDA' });
-    assert.deepEqual((await movimentos()).map((m) => [m.tipo, m.quantidade]), [['ENCOMENDA', 0]]);
+    assert.deepEqual(await linha(a.id), { estoque: 0, status: 'DISPONIVEL', disponibilidade: 'SOB_ENCOMENDA' });
+    assert.deepEqual(await linha(b.id), { estoque: 2, status: 'DISPONIVEL', disponibilidade: 'SOB_ENCOMENDA' });
+    assert.deepEqual(await vitrine(), ['A1', 'B2'], 'na vitrine como encomenda, mesmo com 0 na loja');
+    assert.deepEqual((await movimentos()).map((m) => [m.codigo_sku, m.tipo, m.quantidade, m.estoque_antes, m.estoque_depois]),
+      [['A1', 'ENCOMENDA', 0, 0, 0], ['B2', 'ENCOMENDA', 0, 2, 2]]);
+
+    // Vender a última peça guardada: continua Sob Encomenda (o fornecedor tem)
+    const v = await api('POST', '/api/admin/estoque/conferencia', { acao: 'VENDIDO', depois: 'ESGOTADO', itens: [{ id: b.id, quantidade: 2 }] });
+    assert.equal(v.status, 200, JSON.stringify(v.body));
+    assert.deepEqual(await linha(b.id), { estoque: 0, status: 'DISPONIVEL', disponibilidade: 'SOB_ENCOMENDA' });
   });
 
   it('marcar como esgotado: zera a loja (vira baixa) e tira Sob Encomenda da vitrine', async () => {
     const a = await produto('A1', 2);
     const b = await produto('B2', 1, { disponibilidade: 'SOB_ENCOMENDA' });
     const c = await produto('C3', 0);
-    const r = await api('POST', '/api/admin/estoque/conferencia', { acao: 'ESGOTADO', itens: [{ id: a.id }, { id: b.id }, { id: c.id }] });
+    const d = await produto('D4', 0, { disponibilidade: 'SOB_ENCOMENDA' });
+    const r = await api('POST', '/api/admin/estoque/conferencia', { acao: 'ESGOTADO', itens: [{ id: a.id }, { id: b.id }, { id: c.id }, { id: d.id }] });
     assert.equal(r.status, 200, JSON.stringify(r.body));
     assert.deepEqual(await linha(a.id), { estoque: 0, status: 'ESGOTADO', disponibilidade: 'PRONTA_ENTREGA' });
     assert.deepEqual(await linha(b.id), { estoque: 0, status: 'ESGOTADO', disponibilidade: 'PRONTA_ENTREGA' });
+    assert.deepEqual(await linha(d.id), { estoque: 0, status: 'ESGOTADO', disponibilidade: 'PRONTA_ENTREGA' });
     assert.deepEqual(await vitrine(), []);
     assert.deepEqual((await movimentos()).map((m) => [m.codigo_sku, m.tipo, m.quantidade, m.motivo]),
-      [['A1', 'BAIXA', 2, 'Marcado como esgotado'], ['B2', 'ESGOTADO', 0, '']], 'C3 já estava zerado: nada muda');
+      [['A1', 'BAIXA', 2, 'Marcado como esgotado'], ['B2', 'BAIXA', 1, 'Marcado como esgotado'], ['D4', 'ESGOTADO', 0, '']],
+      'C3 já estava zerado: nada muda; a peça guardada do Sob Encomenda vira baixa');
   });
 
   it('histórico continua depois que o produto é excluído', async () => {

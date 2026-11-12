@@ -1646,14 +1646,14 @@
               <input type="number" id="estoque" name="estoque" min="0" step="1" value="1" required class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500">
               <p id="estoqueMaleta" class="text-xs text-gray-500 mt-1">O status sai do estoque: com peça na loja fica Disponível; zerado, Esgotado.</p>
             </div>
-            <!-- Sob Encomenda: não tem peça para contar (o cadastro guarda 1 só para aparecer na vitrine) -->
-            <p id="estoqueEncomenda" class="hidden px-4 py-2 rounded-lg border border-blue-200 bg-blue-50 text-sm font-medium text-blue-800">Sem estoque físico</p>
+            <!-- Sob Encomenda: a vitrine vende pelo estoque do fornecedor; o número acima são as peças guardadas na loja -->
+            <p id="estoqueEncomenda" class="hidden mt-1 px-3 py-2 rounded-lg border border-blue-200 bg-blue-50 text-xs text-blue-800">Sob Encomenda: a vitrine vende pelo estoque do fornecedor. O número acima são as peças que você tem guardadas na loja (pode ser 0, não precisa zerar).</p>
           </div>
           <div id="campoDisponibilidadeProduto">
             <label class="block text-sm font-medium text-gray-700 mb-1">Disponibilidade *</label>
             <select id="disponibilidade" name="disponibilidade" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500" required>
               <option value="PRONTA_ENTREGA">Pronta Entrega</option>
-              <option value="SOB_ENCOMENDA">Sob Encomenda (sem estoque físico)</option>
+              <option value="SOB_ENCOMENDA">Sob Encomenda (estoque do fornecedor)</option>
             </select>
             <p id="avisoSinal" class="text-xs text-blue-800 mt-1 hidden"></p>
           </div>
@@ -3005,27 +3005,15 @@
       return l;
     }
 
-    // Sob Encomenda guarda 1 no estoque (só para aparecer na vitrine). Voltando para Pronta
-    // Entrega, o estoque volta ao que era (ou 0, se já era Sob Encomenda: não tinha peça)
-    function ajustarEstoqueEdicao(l) {
-      const original = originaisEdicao.get(l.id);
-      if (l.disponibilidade === 'SOB_ENCOMENDA') l.estoque = '1';
-      else l.estoque = !original || original.disponibilidade === 'SOB_ENCOMENDA' ? '0' : original.estoque;
-    }
-
     function linhaEdicaoAlterada(l, original) {
       return !!original && COLUNAS_EDICAO.some(c => String(l[c.campo] ?? '').trim() !== String(original[c.campo] ?? '').trim());
     }
 
-    // Erros de uma linha da edição: as regras do cadastro em lote + estoque
-    // original = a linha como veio do banco (para não virar Sob Encomenda com peça na loja)
-    function validarLinhaEdicao(l, original) {
+    // Erros de uma linha da edição: as regras do cadastro em lote + estoque.
+    // Sob Encomenda pode ter peças guardadas na loja (o estoque não precisa ser zerado).
+    function validarLinhaEdicao(l) {
       const erros = { ...validarLote([{ ...l, quantidade: '', data_compra: '' }])[0] };
       if (!/^\d{1,6}$/.test(String(l.estoque ?? '').trim())) erros.estoque = 'Estoque inválido (número inteiro a partir de 0)';
-      const pecasAntes = original && original.disponibilidade !== 'SOB_ENCOMENDA' ? Number(original.estoque) || 0 : 0;
-      if (l.disponibilidade === 'SOB_ENCOMENDA' && pecasAntes > 0) {
-        erros.disponibilidade = `Ainda tem ${pecasAntes} peça(s) na loja: venda ou dê baixa antes (Produtos > Conferência de estoque). Sob Encomenda é sem estoque físico.`;
-      }
       const promo = String(l.preco_promocional ?? '').trim();
       if (promo) {
         const n = lerPreco(promo);
@@ -3072,8 +3060,6 @@
     function valorOrdenacaoEdicao(l, campo) {
       const v = String(l[campo] ?? '').trim();
       if (!v) return null;
-      // Sob Encomenda não tem peça: no fim, como estoque vazio
-      if (campo === 'estoque' && l.disponibilidade === 'SOB_ENCOMENDA') return null;
       if (CAMPOS_NUMERO_EDICAO.includes(campo)) {
         const n = CAMPOS_MEDIDA.includes(campo) ? lerMedida(v) : campo === 'estoque' ? Number(v) : lerPreco(v);
         return Number.isFinite(n) ? n : null;
@@ -3115,7 +3101,6 @@
         const antes = JSON.stringify([l[campo], l.preco_promocional]);
         l[campo] = valor;
         if (campo === 'anuncio_id' && !valor) l.preco_promocional = '';
-        if (campo === 'disponibilidade' && typeof ajustarEstoqueEdicao === 'function') ajustarEstoqueEdicao(l);
         if (JSON.stringify([l[campo], l.preco_promocional]) !== antes) mudou++;
       });
       return mudou;
@@ -3160,10 +3145,6 @@
         const erro = erros[col.campo];
         const borda = erro ? 'border-red-500 bg-red-50' : 'border-gray-300';
         const attrs = `data-id="${l.id}" data-campo="${col.campo}" class="edicao-campo ${col.largura} px-2 py-1.5 border ${borda} rounded focus:outline-none focus:ring-2 focus:ring-orange-500" title="${escapeHtml(erro || '')}"`;
-        // Sob Encomenda: não tem peça para digitar
-        if (col.campo === 'estoque' && l.disponibilidade === 'SOB_ENCOMENDA') {
-          return `<td class="px-2 py-2 align-top"><span data-estoque-encomenda class="inline-block ${col.largura} px-2 py-1 rounded border border-blue-200 bg-blue-50 text-[11px] leading-tight text-blue-800" title="${ajudaSobEncomenda()}">sem estoque físico</span></td>`;
-        }
         return `<td class="px-2 py-2 align-top">${htmlCampoEdicao(col, String(l[col.campo] ?? ''), attrs)}</td>`;
       }).join('');
       const mensagens = Object.values(erros);
@@ -3236,7 +3217,7 @@
       } else {
         tabelaEdicao.innerHTML = agruparLinhasEdicao(linhas, grupoEdicao, v => rotuloGrupoEdicao(grupoEdicao, v)).map(g => {
           const fechado = gruposFechadosEdicao.has(g.chave);
-          const estoque = g.linhas.reduce((s, l) => s + (l.disponibilidade === 'SOB_ENCOMENDA' ? 0 : Number(l.estoque) || 0), 0);
+          const estoque = g.linhas.reduce((s, l) => s + (Number(l.estoque) || 0), 0);
           const nEnc = g.linhas.filter(l => l.disponibilidade === 'SOB_ENCOMENDA').length;
           const alteradas = g.linhas.filter(l => linhaEdicaoAlterada(l, originaisEdicao.get(l.id))).length;
           return `
@@ -3244,7 +3225,7 @@
           <td colspan="${total}" class="px-3 py-2">
             <div class="sticky left-3 inline-flex flex-wrap items-center gap-3">
               <button type="button" data-grupo-edicao="${escapeHtml(g.chave)}" class="font-semibold text-gray-900 hover:text-orange-700" aria-expanded="${!fechado}">${fechado ? '▸' : '▾'} ${escapeHtml(g.titulo)}</button>
-              <span class="text-xs text-gray-600">${g.linhas.length} produto(s) • ${estoque} peça(s) na loja${nEnc ? ` • ${nEnc} sob encomenda (sem estoque físico)` : ''}${alteradas ? ` • <span class="text-amber-700 font-medium">${alteradas} alterado(s)</span>` : ''}</span>
+              <span class="text-xs text-gray-600">${g.linhas.length} produto(s) • ${estoque} peça(s) na loja${nEnc ? ` • ${nEnc} sob encomenda (estoque do fornecedor)` : ''}${alteradas ? ` • <span class="text-amber-700 font-medium">${alteradas} alterado(s)</span>` : ''}</span>
               ${massaCampo ? `<button type="button" data-massa-grupo="${escapeHtml(g.chave)}" class="px-2 py-1 text-xs border border-gray-400 rounded-md bg-white hover:bg-gray-50">Aplicar neste grupo</button>` : ''}
             </div>
           </td>
@@ -3307,17 +3288,6 @@
       const l = linhasEdicao.find(x => x.id === Number(el.dataset.id));
       if (!l) return;
       l[el.dataset.campo] = el.value;
-      // Trocou a disponibilidade: o Estoque vira "sem estoque físico" (ou volta a ser número)
-      if (el.dataset.campo === 'disponibilidade') {
-        ajustarEstoqueEdicao(l);
-        const td = el.closest('tr').querySelector('[data-campo="estoque"], [data-estoque-encomenda]')?.closest('td');
-        if (td) {
-          const tmp = document.createElement('tbody');
-          tmp.innerHTML = htmlLinhaEdicao(l);
-          const novo = tmp.querySelector('tr').children[td.cellIndex];
-          if (novo) td.replaceWith(novo);
-        }
-      }
       // Sem promoção não tem preço promocional
       if (el.dataset.campo === 'anuncio_id' && !el.value && l.preco_promocional) {
         l.preco_promocional = '';
@@ -3591,21 +3561,23 @@
     }
 
     // ---------- Sob Encomenda no painel ----------
-    // Sob Encomenda não tem peça de verdade: a cliente paga parte do sinal (50%) e só
-    // então o pedido vai para o fornecedor. O estoque do cadastro dele (1) só deixa o
-    // produto aparecer na vitrine: não é peça, e não conta no estoque, no relatório nem nas Métricas.
+    // Sob Encomenda vende pelo estoque do FORNECEDOR: a cliente paga parte do sinal (50%) e
+    // então o pedido vai para o fornecedor. Fica na vitrine mesmo com 0 na loja; as peças que a
+    // loja tiver dele ficam guardadas no estoque (não precisa zerar) e contam como peça.
     function ajudaSobEncomenda() {
-      return 'Sem estoque físico. Você recebe parte do sinal e só então faz o pedido ao fornecedor.';
+      return 'Vende pelo estoque do fornecedor: você recebe parte do sinal e faz o pedido a ele. As peças que você tem na loja ficam guardadas no estoque.';
     }
     function ehSobEncomendaAdmin(p) {
       return !!p && p.disponibilidade === 'SOB_ENCOMENDA';
     }
     function seloSobEncomenda(extra = '') {
-      return `<span data-selo-encomenda class="inline-block w-max px-2 py-1 text-xs font-medium rounded-full bg-blue-100 text-blue-800 border border-blue-200${extra ? ' ' + extra : ''}" title="${ajudaSobEncomenda()}">SOB ENCOMENDA · sem estoque físico</span>`;
+      return `<span data-selo-encomenda class="inline-block w-max px-2 py-1 text-xs font-medium rounded-full bg-blue-100 text-blue-800 border border-blue-200${extra ? ' ' + extra : ''}" title="${ajudaSobEncomenda()}">SOB ENCOMENDA · estoque do fornecedor</span>`;
     }
-    // "3 em estoque" ou, no Sob Encomenda, "sem estoque físico"
+    // "3 em estoque" ou, no Sob Encomenda, "sob encomenda (fornecedor)" + as peças guardadas na loja
     function textoEstoqueAdmin(p) {
-      return ehSobEncomendaAdmin(p) ? 'sob encomenda, sem estoque físico' : `${Number(p.estoque) || 0} em estoque`;
+      const n = Number(p.estoque) || 0;
+      if (!ehSobEncomendaAdmin(p)) return `${n} em estoque`;
+      return n > 0 ? `sob encomenda (fornecedor) • ${n} guardada${n === 1 ? '' : 's'} na loja` : 'sob encomenda (estoque do fornecedor)';
     }
 
     // ---------- Em conferência: campos a ajustar antes de liberar na vitrine ----------
@@ -3825,8 +3797,9 @@
     // Linha de um modelo com cores: estoque por cor (cada cor abre a edição dela) e total
     function htmlLinhaModeloCores(item) {
       const p = item.cores[0];
-      // Cor Sob Encomenda não tem peça: fica fora da soma do estoque
+      // Cor Sob Encomenda vende pelo fornecedor: as peças dela na loja aparecem à parte (guardadas)
       const estoque = item.cores.reduce((t, c) => t + (ehSobEncomendaAdmin(c) ? 0 : Number(c.estoque) || 0), 0);
+      const guardadas = item.cores.reduce((t, c) => t + (ehSobEncomendaAdmin(c) ? Number(c.estoque) || 0 : 0), 0);
       const nEncomenda = item.cores.filter(ehSobEncomendaAdmin).length;
       const emMaleta = item.cores.reduce((t, c) => t + (Number(c.em_maleta) || 0), 0);
       const status = item.cores.some(c => c.status === 'DISPONIVEL') ? 'DISPONIVEL' : item.cores.some(c => c.status === 'CONDICIONAL') ? 'CONDICIONAL' : 'ESGOTADO';
@@ -3835,9 +3808,9 @@
       const chips = item.cores.map(c => {
         const enc = ehSobEncomendaAdmin(c);
         return `
-              <button type="button" onclick="editarProduto(${Number(c.id)})" data-cor-produto="${Number(c.id)}" class="inline-flex items-center gap-1 pl-0.5 pr-2 py-0.5 border ${enc ? 'border-blue-200 bg-blue-50' : Number(c.estoque) > 0 ? 'border-gray-300' : 'border-red-200 bg-red-50'} rounded-full text-xs text-gray-700 hover:border-orange-400" title="Editar a cor ${escapeHtml(c.cor_armacao || c.codigo_sku)} (${escapeHtml(c.codigo_sku)})${enc ? ' · Sob Encomenda: sem estoque físico' : ''}">
+              <button type="button" onclick="editarProduto(${Number(c.id)})" data-cor-produto="${Number(c.id)}" class="inline-flex items-center gap-1 pl-0.5 pr-2 py-0.5 border ${enc ? 'border-blue-200 bg-blue-50' : Number(c.estoque) > 0 ? 'border-gray-300' : 'border-red-200 bg-red-50'} rounded-full text-xs text-gray-700 hover:border-orange-400" title="Editar a cor ${escapeHtml(c.cor_armacao || c.codigo_sku)} (${escapeHtml(c.codigo_sku)})${enc ? ' · Sob Encomenda: estoque do fornecedor' : ''}">
                 ${c.imagem_url ? `<img src="${escapeHtml(c.imagem_url)}" alt="" class="w-5 h-5 rounded-full object-cover" onerror="imgFallback(this)">` : '<span class="w-5 h-5 rounded-full bg-gray-200"></span>'}
-                ${escapeHtml(c.cor_armacao || c.codigo_sku)} ${enc ? '<strong class="text-blue-700">encomenda</strong>' : `<strong class="${Number(c.estoque) > 0 ? 'text-gray-900' : 'text-red-600'}">${Number(c.estoque) || 0}</strong>`}
+                ${escapeHtml(c.cor_armacao || c.codigo_sku)} ${enc ? `<strong class="text-blue-700">encomenda</strong>${Number(c.estoque) > 0 ? ` <span class="text-blue-700" title="Peças guardadas na loja">+${Number(c.estoque)}</span>` : ''}` : `<strong class="${Number(c.estoque) > 0 ? 'text-gray-900' : 'text-red-600'}">${Number(c.estoque) || 0}</strong>`}
               </button>`;
       }).join('');
       return `
@@ -3863,7 +3836,7 @@
             <span class="px-2 py-1 text-xs font-medium rounded-full ${statusClass(status)}">${escapeHtml(status)}</span>
             ${htmlEmConferencia(item.cores)}
             ${htmlArquivado(item.cores)}
-            <span class="block mt-1 text-xs text-gray-500">${nEncomenda === item.cores.length ? 'Sob encomenda, sem estoque físico' : `${estoque} em estoque (${nEncomenda ? 'cores pronta entrega' : 'todas as cores'})`}${nEncomenda && nEncomenda < item.cores.length ? ` • ${nEncomenda} ${nEncomenda === 1 ? 'cor' : 'cores'} sob encomenda` : ''}${emMaleta ? ` • ${emMaleta} em maleta` : ''}</span>
+            <span class="block mt-1 text-xs text-gray-500">${nEncomenda === item.cores.length ? 'Sob encomenda (estoque do fornecedor)' : `${estoque} em estoque (${nEncomenda ? 'cores pronta entrega' : 'todas as cores'})`}${nEncomenda && nEncomenda < item.cores.length ? ` • ${nEncomenda} ${nEncomenda === 1 ? 'cor' : 'cores'} sob encomenda` : ''}${guardadas ? ` • ${guardadas} guardada${guardadas === 1 ? '' : 's'} na loja (cores sob encomenda)` : ''}${emMaleta ? ` • ${emMaleta} em maleta` : ''}</span>
             ${nEncomenda ? seloSobEncomenda('block mt-1') : ''}
             ${htmlPromocaoProduto(p)}
           </td>
@@ -3906,7 +3879,7 @@
             ${ehSobEncomendaAdmin(p) && p.status === 'DISPONIVEL' ? seloSobEncomenda() : `<span class="px-2 py-1 text-xs font-medium rounded-full ${statusClass(p.status)}">${escapeHtml(p.status)}</span>`}
             ${htmlEmConferencia([p])}
             ${htmlArquivado([p])}
-            <span class="block mt-1 text-xs ${ehSobEncomendaAdmin(p) ? 'text-blue-700' : 'text-gray-500'}">${ehSobEncomendaAdmin(p) ? 'Sem estoque físico: pede ao fornecedor depois do sinal' : textoEstoqueAdmin(p)}${Number(p.em_maleta) ? ` • ${Number(p.em_maleta)} em maleta` : ''}</span>
+            <span class="block mt-1 text-xs ${ehSobEncomendaAdmin(p) ? 'text-blue-700' : 'text-gray-500'}">${ehSobEncomendaAdmin(p) ? `Estoque do fornecedor: pede a ele depois do sinal${Number(p.estoque) > 0 ? ` • ${Number(p.estoque)} guardada${Number(p.estoque) === 1 ? '' : 's'} na loja` : ''}` : textoEstoqueAdmin(p)}${Number(p.em_maleta) ? ` • ${Number(p.em_maleta)} em maleta` : ''}</span>
             ${ehSobEncomendaAdmin(p) && p.status !== 'DISPONIVEL' ? seloSobEncomenda('block mt-1') : ''}
             ${htmlPromocaoProduto(p)}
           </td>
@@ -3928,11 +3901,10 @@
     [filtroStatusAdmin, filtroDisponibilidadeAdmin, filtroFormatoAdmin, filtroFornecedorAdmin, buscaAdmin].forEach(el => el.addEventListener('input', renderizarTabela));
 
     // ---------- Relatório de estoque (totais da lista filtrada) ----------
-    // Mesma regra das Métricas: peça = estoque na loja + peças em maletas.
-    // Sob Encomenda ainda não foi comprado: o estoque do cadastro dele não conta
-    // (nem custo, nem venda, nem lucro); peça dele que estiver numa maleta conta.
+    // Mesma regra das Métricas: peça = estoque na loja + peças em maletas. No Sob Encomenda
+    // o estoque do cadastro são as peças guardadas na loja (as do fornecedor não contam).
     function pecasRelatorio(p) {
-      const loja = p.disponibilidade === 'SOB_ENCOMENDA' ? 0 : Math.max(0, Number(p.estoque) || 0);
+      const loja = Math.max(0, Number(p.estoque) || 0);
       const maleta = Math.max(0, Number(p.em_maleta) || 0);
       return { loja, maleta, total: loja + maleta };
     }
@@ -3945,7 +3917,7 @@
       return { ...pecas, custo, venda, investido: custo * pecas.total, valorVenda: venda * pecas.total, lucro: (venda - custo) * pecas.total };
     }
 
-    // Totais em reais. encomendas = produtos Sob Encomenda da lista (fora dos valores)
+    // Totais em reais. encomendas = produtos Sob Encomenda da lista
     function totaisRelatorioEstoque(lista) {
       const t = { produtos: 0, pecas: 0, pecasLoja: 0, pecasMaleta: 0, investido: 0, venda: 0, lucro: 0, encomendas: 0 };
       for (const p of lista) {
@@ -3984,7 +3956,7 @@
     }
 
     const ROTULO_STATUS_RELATORIO = { DISPONIVEL: 'Disponível', CONDICIONAL: 'Condicional', ESGOTADO: 'Esgotado' };
-    const rotuloDisponibilidade = (d) => d === 'SOB_ENCOMENDA' ? 'Sob Encomenda (sem estoque físico)' : 'Pronta Entrega';
+    const rotuloDisponibilidade = (d) => d === 'SOB_ENCOMENDA' ? 'Sob Encomenda (estoque do fornecedor)' : 'Pronta Entrega';
 
     // Planilha (CSV com ; e vírgula decimal, como o Excel em português abre)
     function csvRelatorioEstoque(lista, rotuloFormato = 'Formato') {
@@ -4011,7 +3983,7 @@
     }
 
     function notaEncomendasRelatorio(n) {
-      return n ? `${n} ${n === 1 ? 'produto Sob Encomenda não entra' : 'produtos Sob Encomenda não entram'} em peças, valor investido, venda nem lucro: não ${n === 1 ? 'tem' : 'têm'} estoque físico (o pedido ao fornecedor só sai depois do sinal da cliente; só conta peça que estiver em maleta).` : '';
+      return n ? `${n} ${n === 1 ? 'produto está' : 'produtos estão'} Sob Encomenda (vende pelo estoque do fornecedor): só entram as peças guardadas na loja e as que estiverem em maleta.` : '';
     }
 
     function atualizarRelatorioEstoque(lista) {
@@ -4308,16 +4280,15 @@
       atualizarResumoCores();
     }
 
-    // Campo Qtd de uma cor: Esgotado fica 0 e travado; Sob Encomenda fica vazio e travado
-    // (sem estoque físico: vai gravado com 1 só para aparecer na vitrine)
+    // Campo Qtd de uma cor: Esgotado fica 0 e travado; Sob Encomenda continua editável
+    // (vende pelo estoque do fornecedor; a quantidade são as peças guardadas na loja, pode ser 0)
     function marcarQtdCor(qtd, disponibilidade, estoque) {
       const enc = disponibilidade === 'SOB_ENCOMENDA';
-      qtd.value = enc ? '' : disponibilidade === 'ESGOTADO' ? '0' : estoque;
-      qtd.disabled = enc || disponibilidade === 'ESGOTADO';
-      qtd.placeholder = enc ? 'sem estoque' : 'Qtd';
-      qtd.title = enc ? 'Sob Encomenda: sem estoque físico. Você recebe parte do sinal e só então faz o pedido ao fornecedor.' : '';
+      qtd.value = disponibilidade === 'ESGOTADO' ? '0' : estoque;
+      qtd.disabled = disponibilidade === 'ESGOTADO';
+      qtd.placeholder = enc ? '0' : 'Qtd';
+      qtd.title = enc ? 'Sob Encomenda: vende pelo estoque do fornecedor. Aqui ficam as peças que você tem guardadas na loja (pode ser 0).' : '';
       qtd.classList.toggle('bg-blue-50', enc);
-      qtd.classList.toggle('text-[11px]', enc);
     }
 
     // ---------- Cores de um modelo já cadastrado (edição): [{ produto, cor, estoque, disponibilidade }] ----------
@@ -4363,8 +4334,8 @@
       const saida = [];
       for (const c of cores) {
         const cor = String(c.cor || '').trim();
-        // Sob Encomenda: sem estoque físico, grava 1 só para aparecer na vitrine
-        const estoque = c.disponibilidade === 'ESGOTADO' ? 0 : c.disponibilidade === 'SOB_ENCOMENDA' ? 1 : Number(String(c.estoque ?? '').trim() || 0);
+        // Sob Encomenda guarda as peças da loja como estão (vazio = 0)
+        const estoque = c.disponibilidade === 'ESGOTADO' ? 0 : Number(String(c.estoque ?? '').trim() || 0);
         if (!cor || vistos.has(cor.toLowerCase()) || !Number.isInteger(estoque) || estoque < 0) return null;
         vistos.add(cor.toLowerCase());
         saida.push({ produto: c.produto, cor, estoque, disponibilidade: c.disponibilidade === 'SOB_ENCOMENDA' ? 'SOB_ENCOMENDA' : 'PRONTA_ENTREGA' });
@@ -4408,7 +4379,7 @@
         const qtd = String(c.estoque ?? '').trim();
         if (!cor && !qtd && !c.file) continue;
         const disponibilidade = c.disponibilidade || 'PRONTA_ENTREGA';
-        const estoque = disponibilidade === 'SOB_ENCOMENDA' ? 1 : qtd === '' || disponibilidade === 'ESGOTADO' ? 0 : Number(qtd);
+        const estoque = qtd === '' || disponibilidade === 'ESGOTADO' ? 0 : Number(qtd);
         if (!cor || !Number.isInteger(estoque) || estoque < 0 || vistos.has(cor.toLowerCase())) return null;
         vistos.add(cor.toLowerCase());
         cores.push({ cor, estoque, disponibilidade, file: c.file || null });
@@ -4426,7 +4397,7 @@
       else {
         const semFoto = cores.filter(c => !c.file).length;
         const enc = (c) => c.disponibilidade === 'SOB_ENCOMENDA';
-        resumo.textContent = `Vai cadastrar ${cores.length} cor(es), ${cores.reduce((t, c) => t + (enc(c) ? 0 : c.estoque), 0)} peça(s): ${cores.map(c => `${sku}-${skuCor(c.cor)} (${enc(c) ? 'sob encomenda, sem estoque físico' : c.estoque})`).join(', ')}. ${produtoEditando ? ' Elas são incluídas ao salvar.' : ' O estoque e a cor lá de cima não valem: cada cor usa os seus.'}${semFoto ? ` ${semFoto} cor(es) sem foto usam a foto 1.` : ''}`;
+        resumo.textContent = `Vai cadastrar ${cores.length} cor(es), ${cores.reduce((t, c) => t + c.estoque, 0)} peça(s) na loja: ${cores.map(c => `${sku}-${skuCor(c.cor)} (${enc(c) ? `sob encomenda${c.estoque ? `, ${c.estoque} guardada(s)` : ''}` : c.estoque})`).join(', ')}. ${produtoEditando ? ' Elas são incluídas ao salvar.' : ' O estoque e a cor lá de cima não valem: cada cor usa os seus.'}${semFoto ? ` ${semFoto} cor(es) sem foto usam a foto 1.` : ''}`;
       }
     }
 
@@ -4527,7 +4498,7 @@
       if (produto) {
         const grade = String(produto.grade || '').trim();
         const doModelo = grade ? todosProdutos.filter(p => String(p.grade || '').trim() === grade) : [produto];
-        const lista = doModelo.map(p => `${p.cor_armacao || 'sem cor'} (${ehSobEncomendaAdmin(p) ? 'sob encomenda' : Number(p.estoque) || 0})`).join(', ');
+        const lista = doModelo.map(p => `${p.cor_armacao || 'sem cor'} (${ehSobEncomendaAdmin(p) ? `sob encomenda${Number(p.estoque) > 0 ? ` + ${Number(p.estoque)} na loja` : ''}` : Number(p.estoque) || 0})`).join(', ');
         document.getElementById('coresExistentes').textContent = `Cores que o modelo já tem: ${lista}.`;
       }
       // Modelo com cores: um cadastro só (preços e especificações valem para todas as cores)
@@ -4553,28 +4524,19 @@
       document.body.style.overflow = 'hidden';
     }
 
-    // Sob Encomenda no formulário: explica que não tem estoque físico, mostra quanto fica
-    // o sinal (50%, arredondado para centavos) e troca o campo Estoque por "Sem estoque físico"
+    // Sob Encomenda no formulário: explica que vende pelo estoque do fornecedor, mostra quanto
+    // fica o sinal (50%, arredondado para centavos); o campo Estoque continua (peças guardadas)
     function textoAvisoSinal(preco) {
-      return `${ajudaSobEncomenda()} Sinal de ${formatarMoeda(Math.round((Number(preco) || 0) * 50) / 100)} (50%) + restante na entrega. Não conta como peça no estoque, no relatório nem nas Métricas.`;
+      return `${ajudaSobEncomenda()} Sinal de ${formatarMoeda(Math.round((Number(preco) || 0) * 50) / 100)} (50%) + restante na entrega.`;
     }
     function atualizarAvisoSinal() {
       const aviso = document.getElementById('avisoSinal');
       const encomenda = document.getElementById('disponibilidade').value === 'SOB_ENCOMENDA';
       aviso.textContent = textoAvisoSinal(document.getElementById('preco_venda').value);
       aviso.classList.toggle('hidden', !encomenda);
-      document.getElementById('estoqueCaixa').classList.toggle('hidden', encomenda);
       document.getElementById('estoqueEncomenda').classList.toggle('hidden', !encomenda);
-      document.getElementById('estoque').required = !encomenda;
     }
 
-    // Produto com peça de verdade na loja não vira Sob Encomenda direto: as peças sumiriam
-    // do estoque. Mesma regra da Conferência de estoque. Devolve a mensagem ou ''.
-    function erroVirarEncomenda(original, disponibilidade) {
-      if (!original || disponibilidade !== 'SOB_ENCOMENDA' || ehSobEncomendaAdmin(original)) return '';
-      const n = Number(original.estoque) || 0;
-      return n > 0 ? `${original.cor_armacao ? original.cor_armacao + ': a' : 'A'}inda tem ${n} peça(s) na loja. Venda ou dê baixa antes (Produtos > Conferência de estoque) ou deixe Pronta Entrega: Sob Encomenda é sem estoque físico.` : '';
-    }
     // Botão "Abrir ↗" ao lado do link do fornecedor no formulário
     function atualizarAbrirLink() {
       const a = document.getElementById('abrirLinkFornecedor');
@@ -5116,12 +5078,8 @@
         const val = document.getElementById(field).value;
         if (val) formData.append(field, val);
       });
-      // Sob Encomenda não tem peça: o cadastro guarda 1 só para o produto aparecer na vitrine
-      if (document.getElementById('disponibilidade').value === 'SOB_ENCOMENDA' && !(id && coresModelo.length)) {
-        const erro = erroVirarEncomenda(id ? produtoEditando : null, 'SOB_ENCOMENDA');
-        if (erro) return mostrarToast(erro, 'error');
-        formData.set('estoque', '1');
-      }
+      // Sob Encomenda guarda o estoque como está (peças da loja; 0 também vai)
+      if (!formData.has('estoque')) formData.set('estoque', '0');
       // Sempre enviados, para que apagar o fornecedor ou uma especificação na edição também valha
       ['nome_curto', 'fornecedor', 'codigo_fornecedor', 'nome_fornecedor', 'link_fornecedor', ...CAMPOS_MEDIDA, 'material', 'tipo', 'genero', 'tamanho', 'grade'].forEach(field => formData.append(field, document.getElementById(field).value.trim()));
       // Promoção: marcada pede qual; desmarcada tira a promoção
@@ -5179,10 +5137,6 @@
       // cores; cada cor guarda a sua quantidade e disponibilidade (e o seu SKU por dentro)
       const modelo = id && coresModelo.length ? lerCoresModelo(coresModelo, coresNovas) : null;
       if (id && coresModelo.length && !modelo) return mostrarToast('Confira as cores do modelo: cada cor com nome, uma vez só, e a quantidade em número', 'error');
-      for (const c of (modelo || [])) {
-        const erro = erroVirarEncomenda(c.produto, c.disponibilidade);
-        if (erro) return mostrarToast(erro, 'error');
-      }
       const nomeModelo = document.getElementById('nome').value.trim();
       if (modelo) {
         formData.set('nome', `${nomeModelo} - ${modelo[0].cor}`);
@@ -5937,10 +5891,10 @@
         document.getElementById('metricaInvestido').textContent = formatarMoeda(m.valorInvestido);
         document.getElementById('metricaLucro').textContent = formatarMoeda(m.lucroPotencial);
         document.getElementById('metricaRua').textContent = formatarMoeda(m.valorEmRua);
-        // Sob Encomenda ainda não foi comprado: fica fora de estoque, investido e lucro
+        // Sob Encomenda vende pelo estoque do fornecedor: só contam as peças guardadas na loja
         const nEnc = Number(m.modelosSobEncomenda) || 0;
         const nota = document.getElementById('notaMetricasEncomenda');
-        nota.textContent = nEnc ? `${nEnc} ${nEnc === 1 ? 'produto Sob Encomenda não entra' : 'produtos Sob Encomenda não entram'} em estoque, valor investido nem lucro: não ${nEnc === 1 ? 'tem' : 'têm'} estoque físico (o pedido ao fornecedor só sai depois do sinal da cliente).` : '';
+        nota.textContent = nEnc ? `${nEnc} ${nEnc === 1 ? 'produto está' : 'produtos estão'} Sob Encomenda (vende pelo estoque do fornecedor): no estoque, valor investido e lucro só entram as peças guardadas na loja.` : '';
         nota.classList.toggle('hidden', !nEnc);
         const desde = document.getElementById('metricasDesde');
         desde.textContent = m.metricasDesde ? 'Contando desde ' + formatarDataHora(m.metricasDesde) + ' (testes limpos)' : '';
@@ -9350,7 +9304,7 @@
         if (p.arquivado) return false;
         if (conf.pedido && !conf.doPedido.has(Number(p.id))) return false;
         const enc = p.disponibilidade === 'SOB_ENCOMENDA';
-        const loja = enc ? 0 : Number(p.estoque) || 0;
+        const loja = Number(p.estoque) || 0;
         if (situacao === 'loja' && !(loja > 0)) return false;
         if (situacao === 'zerado' && (enc || loja > 0)) return false;
         if (situacao === 'maleta' && !(Number(p.em_maleta) > 0)) return false;
@@ -9382,7 +9336,7 @@
       document.getElementById('confLista').innerHTML = lista.map(p => {
         const id = Number(p.id);
         const enc = p.disponibilidade === 'SOB_ENCOMENDA';
-        const loja = enc ? 0 : Math.max(0, Number(p.estoque) || 0);
+        const loja = Math.max(0, Number(p.estoque) || 0);
         const maleta = Number(p.em_maleta) || 0;
         const marcado = conf.marcados.has(id);
         const qtd = Math.min(Math.max(1, conf.qtd.get(id) || 1), Math.max(1, loja));
