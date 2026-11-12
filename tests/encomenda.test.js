@@ -99,7 +99,7 @@ function extrairFuncao(html, nome) {
   }
 }
 
-const FUNCOES = ['ordemTamanho', 'agruparCards', 'grupoDoProduto', 'variaPorCor', 'coresCard', 'botoesCor', 'promocaoDoGrupo', 'htmlSeloPromocao', 'nomeModelo', 'tamanhosCard', 'botaoGrupoCard', 'escapeHtml', 'fotosDoProduto', 'fotoProvador', 'indiceCircular', 'ehSobEncomenda', 'calcularSinal', 'precoDe', 'precoAntes', 'passaFiltroStatus', 'etiquetaProduto',
+const FUNCOES = ['ordemTamanho', 'agruparCards', 'grupoDoProduto', 'variaPorCor', 'coresCard', 'botoesCor', 'promocaoDoGrupo', 'htmlSeloPromocao', 'nomeModelo', 'tamanhosCard', 'botaoGrupoCard', 'escapeHtml', 'fotosDoProduto', 'fotoProvador', 'indiceCircular', 'ehSobEncomenda', 'calcularSinal', 'prazoEncomenda', 'precoDe', 'precoAntes', 'passaFiltroStatus', 'etiquetaProduto',
   'nomeCard', 'tagsCard', 'botaoMaletaCard', 'atualizarCardMaleta', 'itemEhEncomenda', 'resumoMaleta', 'passaFiltroGenero', 'ordemDisponibilidade', 'ordenarCardsVitrine', 'renderizarCatalogo', 'toggleMaleta', 'salvarMaleta', 'textoGuiaCatalogo', 'anuncioPorId', 'atualizarGuias', 'atualizarBarraMaleta', 'atualizarMaletaUI', 'montarTextoWhatsapp'];
 
 function elemento() {

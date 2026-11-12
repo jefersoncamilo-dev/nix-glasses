@@ -632,7 +632,7 @@
           </span>
         </li>
       </ol>
-      <p data-como-funciona-encomenda class="mx-5 mb-4 px-3 py-2.5 rounded-xl text-xs leading-snug text-sky-200" style="background:rgba(37,99,235,0.14)">Sob encomenda: você reserva com sinal de 50% e paga o restante na entrega.</p>
+      <p data-como-funciona-encomenda class="mx-5 mb-4 px-3 py-2.5 rounded-xl text-xs leading-snug text-sky-200" style="background:rgba(37,99,235,0.14)">Sob encomenda: você reserva com sinal de 50% e paga o restante na entrega. <span data-loja="prazo_encomenda">Fazemos o pedido ao fornecedor junto com o próximo lote. Depois disso, o envio leva de 3 a 5 dias úteis.</span></p>
       <div class="px-5 pb-5">
         <button type="button" id="entendiComoFunciona" class="btn btn-primario w-full">Entendi, ver modelos</button>
       </div>
@@ -1160,6 +1160,12 @@
       return ((i % total) + total) % total;
     }
 
+    // Prazo das encomendas, de Configurações > Dados da loja ('' = não mostra)
+    function prazoEncomenda() {
+      const t = globalThis.LOJA?.prazo_encomenda;
+      return typeof t === 'string' ? t.trim() : '';
+    }
+
     function ehSobEncomenda(p) {
       return p.disponibilidade === 'SOB_ENCOMENDA';
     }
@@ -1614,6 +1620,7 @@
             <div data-aviso-encomenda class="rounded-xl border border-blue-200 bg-blue-50 px-3 py-2.5 mb-4">
               <p class="flex flex-wrap items-center gap-2 text-sm font-semibold text-blue-900"><span class="px-2 py-0.5 rounded-full bg-blue-600 text-white text-[11px] font-bold tracking-wide">SOB ENCOMENDA</span>Reserva com sinal de 50%</p>
               <p class="mt-1.5 text-sm text-blue-900">Você paga <strong>${formatarMoeda(calcularSinal(precoDe(produto)))}</strong> de sinal ao fechar pelo WhatsApp e <strong>${formatarMoeda(Math.round(precoDe(produto) * 100 - calcularSinal(precoDe(produto)) * 100) / 100)}</strong> na entrega.</p>
+              ${prazoEncomenda() ? `<p data-prazo-encomenda class="mt-1.5 text-xs text-blue-800">⏱ ${escapeHtml(prazoEncomenda())}</p>` : ''}
             </div>` : ''}
             ${porCor ? `
             <h4 class="text-sm font-semibold text-gray-900 mb-2">Cor: <span class="font-normal">${escapeHtml(produto.cor_armacao || '')}</span> <span class="font-normal text-gray-500">· ${grupo.length} cores</span></h4>
@@ -2542,6 +2549,7 @@
           msg += `    Sinal: ${formatarMoeda(sinal)} | Na entrega: ${formatarMoeda((centavos(item.preco) - centavos(sinal)) / 100)}\n`;
         });
         msg += `Total das encomendas: ${formatarMoeda(resumo.totalEncomendas)}\n`;
+        if (prazoEncomenda()) msg += `_Prazo: ${prazoEncomenda()}_\n`;
       }
 
       msg += `\n${linha}\n*RESUMO*\n`;

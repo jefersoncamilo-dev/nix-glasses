@@ -13,6 +13,7 @@ const CAMPOS_TEXTO = {
   descricao: 300,
   sobre_titulo: 80,
   sobre: 2000,
+  prazo_encomenda: 200,
 };
 // Tipo de loja (loja_nicho): troca os campos do produto e os textos de cada nicho.
 //   oculos: provador virtual, medidas da armação, formato da lente, 🕶️ nas mensagens.
@@ -24,6 +25,10 @@ const CAMPOS_TEXTO = {
 // padrão. Desligada, a vitrine esconde o card, o pop-up e o botão "Provar virtualmente";
 // as fotos (inclusive a foto 4 do provador) continuam salvas para religar depois.
 const NICHOS = ['oculos', 'roupas', 'geral'];
+// Prazo das encomendas (loja_prazo_encomenda), de Configurações > Dados da loja: aparece
+// na vitrine (produto Sob Encomenda e Como funciona) e na mensagem do WhatsApp.
+// O pedido ao fornecedor só sai quando o lote fecha o pedido mínimo, por isso o texto padrão.
+const PRAZO_ENCOMENDA = 'Fazemos o pedido ao fornecedor junto com o próximo lote. Depois disso, o envio leva de 3 a 5 dias úteis.';
 // Instagram da loja (loja_instagram), de Configurações > Dados da loja: guardado só o
 // usuário, sem @ (aceita "@loja", "loja" ou o link do perfil). Vazio = sem botão.
 // O botão de WhatsApp do topo usa o número de pedidos (whatsapp_number); sem número, some.
@@ -50,6 +55,7 @@ const PADRAO_NIX = {
     'Todos nossos modelos possuem lentes com proteção UV400, armações em acetato italiano ou metal premium, e passam por rigoroso controle de qualidade.',
     'Trabalhamos com o sistema de maleta: você experimenta em casa, escolhe seus favoritos e finaliza o pedido pelo WhatsApp.',
   ].join('\n\n'),
+  prazo_encomenda: PRAZO_ENCOMENDA,
   nicho: 'oculos',
   oculos: true,
   provador: true,
@@ -79,6 +85,7 @@ function lojaPadrao(empresa) {
     descricao: 'Monte sua maleta com os produtos que quiser e finalize o pedido pelo WhatsApp.',
     sobre_titulo: 'Sobre nós',
     sobre: 'Trabalhamos com o sistema de maleta: você escolhe os produtos, recebe em casa e finaliza o pedido pelo WhatsApp.',
+    prazo_encomenda: PRAZO_ENCOMENDA,
     nicho: 'geral',
     oculos: false,
     provador: true,
@@ -180,7 +187,8 @@ function renderizarPagina(html, loja) {
   );
   out = out.replace(/\salt="NIX"/g, ` alt="${escapeHtml(loja.marca)}"`);
   const publico = { nome: loja.nome, marca: loja.marca, oculos: loja.oculos, nicho: loja.nicho,
-    instagram: loja.instagram || '', whatsapp: loja.whatsapp || '', provador: loja.provador !== false };
+    instagram: loja.instagram || '', whatsapp: loja.whatsapp || '', provador: loja.provador !== false,
+    prazo_encomenda: loja.prazo_encomenda || '' };
   // A grade da vitrine já sai com as colunas da loja (sem pular de 3 para outro número)
   const c = colunasVitrine(loja);
   const estilo = out.includes('id="catalogoGrid"')

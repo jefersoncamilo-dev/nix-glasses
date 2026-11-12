@@ -28,7 +28,7 @@ function carregar(funcoes, globais = {}) {
 const formatarMoeda = (v) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v).replace(/\u00a0/g, ' ');
 
 describe('vitrine: detalhes do produto', () => {
-  const FUNCOES = ['escapeHtml', 'fotosDoProduto', 'fotoProvador', 'provadorLigado', 'indiceCircular', 'ehSobEncomenda', 'calcularSinal', 'precoDe', 'precoAntes',
+  const FUNCOES = ['escapeHtml', 'fotosDoProduto', 'fotoProvador', 'provadorLigado', 'indiceCircular', 'ehSobEncomenda', 'calcularSinal', 'prazoEncomenda', 'precoDe', 'precoAntes',
     'etiquetaProduto', 'especificacoesProduto', 'renderizarDetalhes', 'ordemTamanho', 'agruparCards', 'variaPorCor', 'coresCard', 'botoesCor', 'promocaoDoGrupo', 'htmlSeloPromocao', 'nomeModelo', 'grupoDoProduto', 'botoesTamanho'];
 
   function detalhesDe(produto, detalhes = {}, itens = []) {
@@ -119,7 +119,7 @@ describe('vitrine: maleta no topo e na gaveta lateral', () => {
     const el = () => ({ innerHTML: '', textContent: '', classList: { add() {}, remove() {} } });
     const porId = {};
     const btnMaleta = { atributos: {}, setAttribute(k, v) { this.atributos[k] = v; } };
-    const ctx = carregar(['escapeHtml', 'calcularSinal', 'precoDe', 'precoAntes', 'itemEhEncomenda', 'resumoMaleta', 'textoGuiaCatalogo', 'anuncioPorId', 'atualizarGuias', 'atualizarBarraMaleta', 'atualizarMaletaUI'], {
+    const ctx = carregar(['escapeHtml', 'calcularSinal', 'prazoEncomenda', 'precoDe', 'precoAntes', 'itemEhEncomenda', 'resumoMaleta', 'textoGuiaCatalogo', 'anuncioPorId', 'atualizarGuias', 'atualizarBarraMaleta', 'atualizarMaletaUI'], {
       maletaVazia: el(), maletaItens: el(), maletaFormulario: el(), maletaFooter: el(), maletaTotal: el(), maletaSinal: el(),
       maleta: { itens: [{ id: 1, nome: 'Aviador', preco: 100 }, { id: 2, nome: 'Cat Eye', preco: 200, encomenda: true }] },
       filtroStatus: { value: '' }, NICHO: 'oculos', formatarMoeda, btnMaleta,

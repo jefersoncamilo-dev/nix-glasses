@@ -113,7 +113,7 @@ describe('vitrine: botão Voltar fecha o modal', () => {
 
 // ---------- Card do produto ----------
 
-const VITRINE = ['ordemTamanho', 'agruparCards', 'grupoDoProduto', 'variaPorCor', 'coresCard', 'botoesCor', 'promocaoDoGrupo', 'htmlSeloPromocao', 'nomeModelo', 'tamanhosCard', 'botaoGrupoCard', 'escapeHtml', 'fotosDoProduto', 'fotoProvador', 'indiceCircular', 'ehSobEncomenda', 'calcularSinal', 'precoDe', 'precoAntes', 'passaFiltroStatus', 'etiquetaProduto',
+const VITRINE = ['ordemTamanho', 'agruparCards', 'grupoDoProduto', 'variaPorCor', 'coresCard', 'botoesCor', 'promocaoDoGrupo', 'htmlSeloPromocao', 'nomeModelo', 'tamanhosCard', 'botaoGrupoCard', 'escapeHtml', 'fotosDoProduto', 'fotoProvador', 'indiceCircular', 'ehSobEncomenda', 'calcularSinal', 'prazoEncomenda', 'precoDe', 'precoAntes', 'passaFiltroStatus', 'etiquetaProduto',
   'nomeCard', 'tagsCard', 'botaoMaletaCard', 'atualizarCardMaleta', 'passaFiltroGenero', 'ordemDisponibilidade', 'ordenarCardsVitrine', 'renderizarCatalogo', 'toggleMaleta'];
 
 function elemento() {
