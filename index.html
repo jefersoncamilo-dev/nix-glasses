@@ -209,7 +209,14 @@
       #filtroPilulas .chips-formato { gap: 0.25rem; }
     }
     /* Celular: sem tamanho/gênero para escolher, a linha dos seletores some */
-    @media (max-width: 639px) { .linha-selecao:not(:has(select:not(.hidden))) { display: none; } }
+    @media (max-width: 639px) { .linha-selecao:not(:has(select:not(.hidden), .chips-genero:not(.hidden))) { display: none; } }
+    /* Gênero: três chips juntos (Todos / Feminino / Masculino), do tamanho dos chips de modelo */
+    .chips-genero { display: flex; gap: 0.5rem; flex: none; }
+    .chips-genero.hidden { display: none; }
+    @media (max-width: 639px) {
+      .chips-genero { gap: 0.25rem; }
+      .chips-genero .chip-formato { min-height: 26px; padding: 0 0.6rem; font-size: 0.625rem; letter-spacing: -0.01em; }
+    }
     .chip-formato:not([aria-pressed="true"]):hover { border-color: rgba(255,255,255,0.32); color: #fff; }
     .chip-formato:focus-visible { outline: 2px solid #8f8f8f; outline-offset: 2px; }
     /* Catálogo escuro: o card é uma moldura neutra, a foto ganha respiro e cantos
@@ -391,9 +398,14 @@
           <select id="filtroTamanho" class="hidden flex-1 sm:flex-none min-w-0 px-3 sm:px-4 py-1.5 sm:py-2 text-sm text-neutral-200 border border-white/15 rounded-full focus:outline-none focus:ring-2 focus:ring-neutral-500" aria-label="Tamanho">
             <option value="">Todos os tamanhos</option>
           </select>
-          <select id="filtroGenero" class="hidden flex-1 sm:flex-none min-w-0 px-3 sm:px-4 py-1.5 sm:py-2 text-sm text-neutral-200 border border-white/15 rounded-full focus:outline-none focus:ring-2 focus:ring-neutral-500" aria-label="Gênero">
-            <option value="">Todos os gêneros</option>
-          </select>
+          <!-- Gênero escolhido nos chips ao lado; o catálogo lê este valor.
+               Masculino e Feminino também mostram os Unissex. -->
+          <input type="hidden" id="filtroGenero" value="">
+          <div id="chipsGenero" class="hidden chips-genero" role="group" aria-label="Gênero">
+            <button type="button" data-genero="" aria-pressed="true" class="chip-formato">Todos</button>
+            <button type="button" data-genero="FEMININO" aria-pressed="false" class="chip-formato">Feminino</button>
+            <button type="button" data-genero="MASCULINO" aria-pressed="false" class="chip-formato">Masculino</button>
+          </div>
         </div>
        </div>
         <div id="filtrosRolagem" class="chips-formato -mx-4 px-4 sm:mx-0 sm:px-0">
@@ -745,6 +757,7 @@
     const filtroFormato = document.getElementById('filtroFormato');
     const chipsFormato = document.getElementById('chipsFormato');
     const filtroGenero = document.getElementById('filtroGenero');
+    const chipsGenero = document.getElementById('chipsGenero');
     const filtroTamanho = document.getElementById('filtroTamanho');
     const modalMaleta = document.getElementById('modalMaleta');
     const btnMaleta = document.getElementById('btnMaleta');
@@ -886,6 +899,7 @@
           mostrarToast(saiu === 1 ? '1 peça saiu da maleta porque não está mais disponível' : `${saiu} peças saíram da maleta porque não estão mais disponíveis`);
         }
         renderizarPromocoes();
+        preencherFiltroGenero();
         preencherFiltroFormato();
         preencherFiltroTamanho();
         atualizarContagemFiltros();
@@ -980,7 +994,7 @@
     // Com uma promoção escolhida, só os formatos que têm produto na promoção.
     // O escolhido fica em #filtroFormato (campo escondido), que o catálogo lê.
     function preencherFiltroFormato() {
-      const base = promocaoFiltro ? produtos.filter(p => Number(p.anuncio_id) === promocaoFiltro) : produtos;
+      const base = produtosDoGenero(promocaoFiltro ? produtos.filter(p => Number(p.anuncio_id) === promocaoFiltro) : produtos, filtroGenero.value);
       const formatos = [...new Set(base.map(p => p.formato).filter(Boolean))].sort((a, b) => String(a).localeCompare(String(b), 'pt-BR'));
       // O formato escolhido sumiu do catálogo (produto vendido/apagado): volta para "Todos"
       if (!formatos.includes(filtroFormato.value)) filtroFormato.value = '';
@@ -1081,10 +1095,41 @@
       return sufixo && nome.endsWith(sufixo) ? nome.slice(0, -sufixo.length) : nome;
     }
 
-    // Gênero: o filtro saiu da tela inicial da vitrine (o <select> fica escondido,
-    // sempre em "Todos"). Escolher Masculino ou Feminino também mostraria os Unissex.
+    // Gênero: chips Todos / Feminino / Masculino ao lado de "Nossa Coleção" (no celular,
+    // uma fileira acima dos modelos). Masculino e Feminino também mostram os Unissex;
+    // produto sem gênero informado só aparece em "Todos".
     function passaFiltroGenero(p, genero) {
       return !genero || p.genero === genero || (p.genero === 'UNISSEX' && genero !== 'UNISSEX');
+    }
+
+    function produtosDoGenero(lista, genero) {
+      return genero ? lista.filter(p => passaFiltroGenero(p, genero)) : lista;
+    }
+
+    // Os chips só aparecem quando há produto marcado como Masculino ou Feminino
+    // (com tudo Unissex ou sem gênero, o filtro não mudaria nada).
+    function temFiltroGenero(lista) {
+      return lista.some(p => p.genero === 'MASCULINO' || p.genero === 'FEMININO');
+    }
+
+    function preencherFiltroGenero() {
+      const mostra = temFiltroGenero(produtos);
+      if (!mostra && filtroGenero.value) filtroGenero.value = '';
+      chipsGenero.querySelectorAll('[data-genero]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.genero === filtroGenero.value)));
+      chipsGenero.classList.toggle('hidden', !mostra);
+    }
+
+    // Um toque no chip troca o gênero. Os modelos (formatos) e as contagens passam a
+    // ser só os do gênero escolhido; se o modelo escolhido não tem nada nele, volta a "TODOS".
+    function aplicarFiltroGenero(genero) {
+      filtroGenero.value = genero;
+      chipsGenero.querySelectorAll('[data-genero]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.genero === genero)));
+      const formatoAntes = filtroFormato.value;
+      preencherFiltroFormato();
+      if (formatoAntes && !filtroFormato.value) marcarFiltroStatus('');
+      atualizarContagemFiltros();
+      renderizarCatalogo();
+      atualizarGuias();
     }
 
     // Escapa texto vindo do banco ou do localStorage antes de ir para innerHTML
@@ -1172,7 +1217,7 @@
 
     function atualizarContagemFiltros() {
       const formato = filtroFormato.value;
-      const daPromocao = promocaoFiltro ? produtos.filter(p => Number(p.anuncio_id) === promocaoFiltro) : produtos;
+      const daPromocao = produtosDoGenero(promocaoFiltro ? produtos.filter(p => Number(p.anuncio_id) === promocaoFiltro) : produtos, filtroGenero.value);
       const doModelo = formato ? daPromocao.filter(p => p.formato === formato) : daPromocao;
       const contagem = contagemFiltros(doModelo);
       document.querySelectorAll('#filtroPilulas [data-contagem]').forEach(el => { el.textContent = doModelo.length ? `(${contagem[el.dataset.contagem]})` : ''; });
@@ -1830,7 +1875,7 @@
       const sessao = ++provador.sessao;
       provador.aberto = true;
       // O provador abre com os filtros que a cliente já escolheu na vitrine
-      provador.filtro = { status: filtroStatus.value || '', formato: filtroFormato.value || '' };
+      provador.filtro = { status: filtroStatus.value || '', formato: filtroFormato.value || '', genero: filtroGenero.value || '' };
       provador.pose = null;
       provador.oculos = null;
       provador.ultimoTempo = -1;
@@ -1920,7 +1965,8 @@
       filtro = filtro || {};
       return lista.filter(p => fotoProvador(p)
         && passaFiltroStatus(p, filtro.status || '')
-        && (!filtro.formato || p.formato === filtro.formato));
+        && (!filtro.formato || p.formato === filtro.formato)
+        && passaFiltroGenero(p, filtro.genero || ''));
     }
 
     // Chips de filtro do provador. Disponibilidade só aparece quando há modelos dos dois
@@ -1945,7 +1991,8 @@
     // Miniaturas da foto do provador de cada modelo (filtrados); o que está no rosto fica marcado
     function renderizarCarrosselProvador() {
       const filtro = provador.filtro || {};
-      const comFoto = produtos.filter(fotoProvador);
+      // Com um gênero escolhido na vitrine, o provador mostra só os modelos dele
+      const comFoto = produtosDoGenero(produtos.filter(fotoProvador), filtro.genero || '');
       carrosselProvadorBox.classList.toggle('hidden', comFoto.length < 2);
       renderizarFiltrosProvador(comFoto, filtro);
       const lista = modelosProvador(produtos, filtro);
@@ -2755,6 +2802,13 @@
     window.addEventListener('scroll', agendarBarraMaleta, { passive: true });
     window.addEventListener('resize', agendarBarraMaleta);
     filtroTamanho.addEventListener('change', renderizarCatalogo);
+    chipsGenero.addEventListener('click', (e) => {
+      const chip = e.target.closest('[data-genero]');
+      if (!chip) return;
+      aplicarFiltroGenero(chip.dataset.genero);
+      const catalogo = document.getElementById('catalogo');
+      if (catalogo.getBoundingClientRect().top < 0) catalogo.scrollIntoView({ behavior: 'smooth' });
+    });
   </script>
 </body>
 </html>

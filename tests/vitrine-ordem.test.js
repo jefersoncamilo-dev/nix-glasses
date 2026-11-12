@@ -56,7 +56,7 @@ describe('ordem dos cards na vitrine', () => {
 describe('promoção escolhida: só os modelos da promoção nos chips', () => {
   const chips = { innerHTML: '', setAttribute() {}, classList: { toggle: (cl, v) => { chips.escondido = v; } } };
   const filtroFormato = { value: '' };
-  const c = contexto(['escapeHtml', 'preencherFiltroFormato'], { chipsFormato: chips, filtroFormato, rotulos: { formato: 'Formato', formatos: 'TODOS' } });
+  const c = contexto(['escapeHtml', 'passaFiltroGenero', 'produtosDoGenero', 'preencherFiltroFormato'], { chipsFormato: chips, filtroFormato, filtroGenero: { value: '' }, rotulos: { formato: 'Formato', formatos: 'TODOS' } });
   const rotulos = () => [...chips.innerHTML.matchAll(/class="chip-formato">([^<]*)</g)].map(m => m[1]);
   const produtos = [
     { formato: 'Aviador', anuncio_id: 7 },
@@ -87,6 +87,6 @@ describe('promoção escolhida: só os modelos da promoção nos chips', () => {
     const f = html.slice(inicio, html.indexOf('\n    }\n', inicio));
     assert.match(f, /renderizarPromocoes\(\);\s*preencherFiltroFormato\(\);\s*atualizarContagemFiltros\(\);/);
     // ao carregar, a promoção é conferida antes de montar os chips
-    assert.match(html, /renderizarPromocoes\(\);\s*preencherFiltroFormato\(\);\s*preencherFiltroTamanho\(\);/);
+    assert.match(html, /renderizarPromocoes\(\);\s*preencherFiltroGenero\(\);\s*preencherFiltroFormato\(\);\s*preencherFiltroTamanho\(\);/);
   });
 });

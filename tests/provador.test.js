@@ -291,7 +291,7 @@ describe('Provador: troca de modelo, maleta e fotos', () => {
   function provadorCtx(extra = {}) {
     const el = () => ({ innerHTML: '', textContent: '', hidden: null, classList: { toggle(c, v) { this.dono.hidden = v; } }, setAttribute() {} });
     const fazer = () => { const e = el(); e.classList.dono = e; return e; };
-    return carregar(['escapeHtml', 'fotosDoProduto', 'fotoProvador', 'ehSobEncomenda', 'passaFiltroStatus', 'modelosProvador', 'renderizarFiltrosProvador', 'renderizarCarrosselProvador', 'textoTamanhoProvador', 'renderizarFotosProvador', 'aplicarFiltroProvador'], {
+    return carregar(['escapeHtml', 'fotosDoProduto', 'fotoProvador', 'ehSobEncomenda', 'passaFiltroStatus', 'passaFiltroGenero', 'produtosDoGenero', 'modelosProvador', 'renderizarFiltrosProvador', 'renderizarCarrosselProvador', 'textoTamanhoProvador', 'renderizarFotosProvador', 'aplicarFiltroProvador'], {
       produtos: produtosTeste,
       provador: { produtoId: 2, fotos: [] },
       carrosselProvador: fazer(),
@@ -374,7 +374,7 @@ describe('Provador: troca de modelo, maleta e fotos', () => {
 
     it('abre com os filtros que já estavam escolhidos na vitrine', () => {
       const html = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
-      assert.match(html, /provador\.filtro = \{ status: filtroStatus\.value \|\| '', formato: filtroFormato\.value \|\| '' \}/);
+      assert.match(html, /provador\.filtro = \{ status: filtroStatus\.value \|\| '', formato: filtroFormato\.value \|\| '', genero: filtroGenero\.value \|\| '' \}/);
       assert.match(html, /<div id="filtrosProvador"/);
     });
   });
