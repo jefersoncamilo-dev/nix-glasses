@@ -2428,7 +2428,7 @@
       if (!String(linha.preco_custo || '').trim() && precos.length) {
         const menor = Math.min(...precos);
         linha.preco_custo = menor.toFixed(2).replace('.', ',');
-        linha.preco_venda = precoVendaPadrao(menor).replace('.', ',');
+        linha.preco_venda = precoVendaPadrao(menor, ehPolarizado(linha.tipo, linha.nome_fornecedor, linha.nome)).replace('.', ',');
       }
       const existente = produtoJaCadastrado(produtos, linha);
       if (existente) {
@@ -4236,11 +4236,19 @@
       return data;
     }
 
-    // Preço de venda padrão: custo + R$ 100,00 (39.90 -> "139.90"). Sem custo: ''.
+    // Preço de venda padrão. Loja de óculos: preço fixo, polarizado R$ 169,90 e os outros
+    // R$ 149,90. Outras lojas: custo + R$ 100,00 (39.90 -> "139.90"). Sem custo: ''.
     const ACRESCIMO_VENDA = 100;
-    function precoVendaPadrao(custo) {
+    function precoVendaPadrao(custo, polarizado) {
       const n = Number(custo);
-      return custo !== '' && custo !== null && custo !== undefined && Number.isFinite(n) && n >= 0 ? (n + ACRESCIMO_VENDA).toFixed(2) : '';
+      if (custo === '' || custo === null || custo === undefined || !Number.isFinite(n) || n < 0) return '';
+      const oculos = typeof nichoPainel !== 'function' || nichoPainel() === 'oculos';
+      if (oculos) return polarizado ? '169.90' : '149.90';
+      return (n + ACRESCIMO_VENDA).toFixed(2);
+    }
+    // Polarizado pelo tipo ou pelo nome ("Polarizado UV400", "Óculos ... Polarizada")
+    function ehPolarizado(...textos) {
+      return textos.some(t => /polariz/i.test(String(t || '')));
     }
 
     // Nome do arquivo da foto: o SKU, só com letras, números, - e _ ("NIX 023/A" -> "NIX_023_A")
@@ -4486,7 +4494,7 @@
         nome: String(dados.nome || ''),
         nome_fornecedor: String(dados.nome_fornecedor || dados.nome || ''),
         preco_custo: dados.preco_custo !== null && dados.preco_custo !== undefined && Number.isFinite(preco) ? preco.toFixed(2) : '',
-        preco_venda: dados.preco_custo !== null && dados.preco_custo !== undefined && Number.isFinite(preco) ? precoVendaPadrao(preco) : '',
+        preco_venda: dados.preco_custo !== null && dados.preco_custo !== undefined && Number.isFinite(preco) ? precoVendaPadrao(preco, ehPolarizado(dados.tipo, dados.nome_fornecedor, dados.nome)) : '',
         codigo_fornecedor: String(dados.codigo_fornecedor || ''),
         fornecedor: String(dados.fornecedor || ''),
         link_fornecedor: linkSeguro(dados.link_fornecedor),
@@ -4669,15 +4677,19 @@
     });
     document.getElementById('disponibilidade').addEventListener('change', atualizarAvisoSinal);
     document.getElementById('preco_venda').addEventListener('input', atualizarAvisoSinal);
-    // Venda = custo + R$ 100,00 enquanto a venda estiver vazia ou ainda com o valor automático
-    document.getElementById('preco_custo').addEventListener('input', () => {
+    // Venda padrão (óculos: 169,90 polarizado / 149,90; outras lojas: custo + R$ 100,00)
+    // enquanto a venda estiver vazia ou ainda com o valor automático
+    function atualizarVendaAutomatica() {
       const venda = document.getElementById('preco_venda');
       if (venda.value.trim() && venda.value.trim() !== ultimaImportacao.preco_venda) return;
-      const auto = precoVendaPadrao(document.getElementById('preco_custo').value);
+      const auto = precoVendaPadrao(document.getElementById('preco_custo').value,
+        ehPolarizado(document.getElementById('tipo').value, document.getElementById('nome_fornecedor').value, document.getElementById('nome').value));
       venda.value = auto;
       ultimaImportacao.preco_venda = auto;
       atualizarAvisoSinal();
-    });
+    }
+    document.getElementById('preco_custo').addEventListener('input', atualizarVendaAutomatica);
+    document.getElementById('tipo').addEventListener('input', atualizarVendaAutomatica);
 
     function fecharModal() {
       modalProduto.classList.add('hidden');
@@ -7201,7 +7213,7 @@
         if (!item.nomeEditado) item.nome = tema ? tema.nome : '';
         const igual = porNome.get(item.nome.trim().toLowerCase());
         if (!item.skuEditado) item.sku = igual ? igual.sku : (tema ? tema.codigo_sku : proximoSku(produtos, usados));
-        if (!item.vendaEditada) item.venda = String(precoVendaPadrao(lerPreco(item.custo)) || '').replace('.', ',');
+        if (!item.vendaEditada) item.venda = String(precoVendaPadrao(lerPreco(item.custo), ehPolarizado(item.tipo, item.descricao, item.modelo)) || '').replace('.', ',');
         if (igual && igual.sku === item.sku) item.codigoNovo = igual.codigoNovo;
         else {
           const base = item.codigo.trim();
