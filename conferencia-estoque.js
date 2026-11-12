@@ -3,9 +3,10 @@
 // marca os produtos e escolhe o que fazer com as peças da LOJA (produtos.estoque):
 //   VENDIDO   vendeu fora do sistema (balcão, Instagram...): tira N peças e registra a venda
 //   BAIXA     saiu sem venda (defeito, quebra, brinde...): tira N peças
-//   ENCOMENDA sem peça na loja: volta para a vitrine como Sob Encomenda
+//   ENCOMENDA passa a vender pelo estoque do fornecedor (Sob Encomenda); as peças da loja ficam guardadas
 //   ESGOTADO  sai da vitrine: zera a loja (o que sobrar vira baixa) e Sob Encomenda volta a pronta entrega
-// Em VENDIDO/BAIXA, quando a loja zera, `depois` diz se fica ESGOTADO ou vai para ENCOMENDA.
+// Em VENDIDO/BAIXA, quando a loja zera, `depois` diz se fica ESGOTADO ou vai para ENCOMENDA
+// (o que já é Sob Encomenda continua Sob Encomenda).
 // Peças em maleta com cliente nunca entram aqui (são do Acerto de Maleta).
 // O servidor confere tudo antes e de novo dentro da transação: se algum produto
 // não puder (sem peça, quantidade maior que a loja, última peça de um pedido
@@ -117,21 +118,25 @@ function criarHandlers({ recalcularStatus, textoCurto }) {
       const avisos = [];
       // q = peças que saem da loja; fica = peças reais que ficam na loja
       let q = 0;
-      let fica = encomenda ? 0 : estoque;
+      // Sob Encomenda vende pelo estoque do fornecedor, mas as peças guardadas na loja são reais
+      let fica = estoque;
       let depois = '';
       let nada = false;
 
       if (pedido.acao === 'VENDIDO' || pedido.acao === 'BAIXA') {
         q = quantidade;
-        if (encomenda) {
-          bloqueios.push('Está Sob Encomenda: não tem peça na loja para vender ou baixar. Para tirar da vitrine, use "Marcar como esgotado".');
+        if (encomenda && estoque === 0) {
+          bloqueios.push('Está Sob Encomenda e não tem peça guardada na loja para vender ou baixar. Para tirar da vitrine, use "Marcar como esgotado".');
         } else if (estoque === 0) {
           bloqueios.push(`Não tem peça na loja (0 em estoque).${emMaleta ? ` ${plural(emMaleta, 'peça está', 'peças estão')} em maleta: essas saem pelo Acerto de Maleta.` : ''}`);
         } else if (q > estoque) {
           bloqueios.push(`Só tem ${plural(estoque, 'peça', 'peças')} na loja e a quantidade é ${q}.`);
         } else {
           fica = estoque - q;
-          if (fica === 0) {
+          // Sob Encomenda continua como encomenda (o fornecedor tem) quando a loja zera
+          if (fica === 0 && encomenda) {
+            depois = 'ENCOMENDA';
+          } else if (fica === 0) {
             depois = pedido.depois;
             if (abertos) bloqueios.push(`É a última peça da loja e está no pedido aberto ${listaIds(abertos)}. Entregue ou cancele o pedido antes.`);
           }
@@ -140,21 +145,20 @@ function criarHandlers({ recalcularStatus, textoCurto }) {
         if (encomenda) {
           nada = true;
           avisos.push('Já está Sob Encomenda. Nada muda.');
-        } else if (estoque > 0) {
-          bloqueios.push(`Ainda tem ${plural(estoque, 'peça', 'peças')} na loja. Venda ou dê baixa antes (dá para escolher "disponível para encomenda" na baixa).`);
         } else {
           depois = 'ENCOMENDA';
+          if (estoque > 0) avisos.push(`${plural(estoque, 'peça fica guardada', 'peças ficam guardadas')} no estoque da loja; a vitrine passa a vender pelo estoque do fornecedor.`);
         }
       } else if (pedido.acao === 'ESGOTADO') {
-        if (encomenda) {
-          depois = 'ESGOTADO';
-          avisos.push('Deixa de ser Sob Encomenda e sai da vitrine.');
-        } else if (estoque > 0) {
+        if (encomenda) avisos.push('Deixa de ser Sob Encomenda e sai da vitrine.');
+        if (estoque > 0) {
           q = estoque;
           fica = 0;
           depois = 'ESGOTADO';
           avisos.push(`${plural(estoque, 'peça da loja sai', 'peças da loja saem')} do estoque (fica registrado como baixa).`);
           if (abertos) bloqueios.push(`Está no pedido aberto ${listaIds(abertos)} e ficaria sem peça na loja. Entregue ou cancele o pedido antes.`);
+        } else if (encomenda) {
+          depois = 'ESGOTADO';
         } else {
           nada = true;
           avisos.push('Já está sem peça na loja. Nada muda.');
@@ -171,7 +175,7 @@ function criarHandlers({ recalcularStatus, textoCurto }) {
       // Como o produto fica depois (texto curto para o resumo)
       let resultado = '';
       if (!bloqueios.length && !nada) {
-        if (depois === 'ENCOMENDA') resultado = 'Fica na vitrine como Sob Encomenda';
+        if (depois === 'ENCOMENDA') resultado = fica > 0 ? `Fica na vitrine como Sob Encomenda (${plural(fica, 'peça guardada', 'peças guardadas')} na loja)` : 'Fica na vitrine como Sob Encomenda';
         else if (depois === 'ESGOTADO') resultado = emMaleta ? 'Esgotado na loja (segue em maleta)' : 'Esgotado: sai da vitrine';
         else resultado = `Fica com ${plural(fica, 'peça', 'peças')} na loja`;
       }
@@ -238,9 +242,8 @@ function criarHandlers({ recalcularStatus, textoCurto }) {
           await client.query('UPDATE produtos SET estoque = estoque - $2 WHERE id = $1', [i.id, i.quantidade]);
         }
         if (i.depois === 'ENCOMENDA') {
-          // Sob Encomenda precisa de 1 no estoque do cadastro para aparecer na vitrine
-          // (as Métricas e o relatório não contam esse estoque como peça)
-          await client.query(`UPDATE produtos SET disponibilidade = 'SOB_ENCOMENDA', estoque = GREATEST(estoque, 1) WHERE id = $1`, [i.id]);
+          // Sob Encomenda vende pelo estoque do fornecedor: as peças da loja continuam no estoque
+          await client.query(`UPDATE produtos SET disponibilidade = 'SOB_ENCOMENDA' WHERE id = $1`, [i.id]);
         } else if (i.depois === 'ESGOTADO' && i.disponibilidade === 'SOB_ENCOMENDA') {
           await client.query(`UPDATE produtos SET disponibilidade = 'PRONTA_ENTREGA', estoque = 0 WHERE id = $1`, [i.id]);
         }
@@ -251,7 +254,7 @@ function criarHandlers({ recalcularStatus, textoCurto }) {
                                            estoque_antes, estoque_depois, depois, motivo, pedido_fornecedor, fornecedor, usuario)
            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)`,
           [i.id, i.nome, i.codigo_sku, tipo, i.quantidade, i.preco_venda, i.preco_custo,
-            i.disponibilidade === 'SOB_ENCOMENDA' ? 0 : i.estoque, i.fica, i.depois, motivo,
+            i.estoque, i.fica, i.depois, motivo,
             pedido.pedido_fornecedor, pedido.fornecedor, usuario]
         );
         mudaram.push(i.id);

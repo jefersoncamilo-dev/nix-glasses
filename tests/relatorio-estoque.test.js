@@ -59,14 +59,14 @@ describe('painel: totais do relatório de estoque', () => {
     assert.equal(t.lucro, 270);
   });
 
-  it('Sob Encomenda: estoque do cadastro fica fora dos valores; peça em maleta conta', () => {
+  it('Sob Encomenda: as peças guardadas na loja e as da maleta contam (as do fornecedor não)', () => {
     const t = f.totaisRelatorioEstoque([
-      prod({ disponibilidade: 'SOB_ENCOMENDA', estoque: 5, em_maleta: 0 }),
-      prod({ disponibilidade: 'SOB_ENCOMENDA', estoque: 5, em_maleta: 1 }),
+      prod({ disponibilidade: 'SOB_ENCOMENDA', estoque: 0, em_maleta: 0 }),
+      prod({ disponibilidade: 'SOB_ENCOMENDA', estoque: 2, em_maleta: 1 }),
     ]);
-    assert.deepEqual([t.produtos, t.pecas, t.encomendas], [2, 1, 2]);
-    assert.equal(t.investido, 50);
-    assert.equal(t.lucro, 89.9);
+    assert.deepEqual([t.produtos, t.pecas, t.pecasLoja, t.encomendas], [2, 3, 2, 2]);
+    assert.equal(t.investido, 150);
+    assert.equal(t.lucro, 269.7);
   });
 
   it('lista vazia dá zero', () => {
@@ -96,7 +96,7 @@ describe('painel: totais do relatório de estoque', () => {
     assert.match(out, /&lt;b&gt;x&lt;\/b&gt;/);
     assert.match(out, /TOTAL: 2 produtos/);
     assert.match(out, /R\$\s100,00/);
-    assert.match(out, /1 produto Sob Encomenda não entra/);
+    assert.match(out, /1 produto está Sob Encomenda \(vende pelo estoque do fornecedor\)/);
   });
 });
 

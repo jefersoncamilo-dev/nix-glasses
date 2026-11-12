@@ -456,6 +456,39 @@ async function initTables(pool) {
       ON CONFLICT (chave) DO NOTHING
     `);
 
+    // Sob Encomenda vende pelo estoque do FORNECEDOR (pedido do Jefe, 2026-11-12): o estoque
+    // do cadastro passa a ser só as peças que a loja tem guardadas, e o produto fica na vitrine
+    // sem precisar de peça. Antes o cadastro guardava 1 de mentira para ele aparecer na
+    // vitrine: uma vez por loja esse 1 vira 0 e todo Sob Encomenda fica DISPONIVEL. A lista do
+    // que mudou fica em configuracoes (chave abaixo) para dar para conferir ou reverter.
+    const MARCA_ENCOMENDA = 'encomenda_estoque_fornecedor_2026_11_12';
+    const feito = await client.query('SELECT 1 FROM configuracoes WHERE chave = $1', [MARCA_ENCOMENDA]);
+    if (!feito.rows.length) {
+      await client.query('BEGIN');
+      try {
+        const zerados = (await client.query(
+          `UPDATE produtos SET estoque = 0, updated_at = CURRENT_TIMESTAMP
+           WHERE disponibilidade = 'SOB_ENCOMENDA' AND estoque = 1
+           RETURNING id, codigo_sku`
+        )).rows;
+        const status = (await client.query(
+          `UPDATE produtos p SET status = 'DISPONIVEL', updated_at = CURRENT_TIMESTAMP
+           FROM produtos o
+           WHERE o.id = p.id AND p.disponibilidade = 'SOB_ENCOMENDA' AND p.status <> 'DISPONIVEL'
+           RETURNING p.id, p.codigo_sku, o.status AS antes`
+        )).rows;
+        await client.query('INSERT INTO configuracoes (chave, valor) VALUES ($1, $2)',
+          [MARCA_ENCOMENDA, JSON.stringify({ data: new Date().toISOString(), estoque_1_para_0: zerados, status_para_disponivel: status })]);
+        await client.query('COMMIT');
+        if (zerados.length || status.length) {
+          console.log(`[encomenda] Sob Encomenda: ${zerados.length} com o 1 de mentira zerado, ${status.length} voltaram a DISPONIVEL (lista em configuracoes.${MARCA_ENCOMENDA})`);
+        }
+      } catch (err) {
+        await client.query('ROLLBACK').catch(() => {});
+        throw err;
+      }
+    }
+
     console.log('Tabelas inicializadas com sucesso');
   } catch (err) {
     console.error('Erro ao inicializar tabelas:', err);

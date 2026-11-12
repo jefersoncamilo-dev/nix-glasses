@@ -158,14 +158,15 @@ describe('excluir encomendas, acessórios e clientes', () => {
   });
 });
 
-describe('métricas sem os produtos Sob Encomenda', () => {
-  it('Sob Encomenda fica fora de peças, investido e lucro', async () => {
+describe('métricas e os produtos Sob Encomenda', () => {
+  it('Sob Encomenda: só as peças guardadas na loja contam (as do fornecedor não)', async () => {
     await criarProduto('PE', { custo: 50, venda: 200, estoque: 2 });
-    await criarProduto('SE', { custo: 80, venda: 300, disponibilidade: 'SOB_ENCOMENDA', estoque: 1 });
+    await criarProduto('SE', { custo: 80, venda: 300, disponibilidade: 'SOB_ENCOMENDA', estoque: 0 });
+    await criarProduto('SG', { custo: 10, venda: 100, disponibilidade: 'SOB_ENCOMENDA', estoque: 1 });
     const m = (await api('GET', '/api/admin/metrics')).body;
-    assert.equal(m.totalEstoque, 2);
-    assert.equal(m.valorInvestido, 100);
-    assert.equal(m.lucroPotencial, 300);
-    assert.equal(m.modelosSobEncomenda, 1);
+    assert.equal(m.totalEstoque, 3);
+    assert.equal(m.valorInvestido, 110);
+    assert.equal(m.lucroPotencial, 390);
+    assert.equal(m.modelosSobEncomenda, 2);
   });
 });

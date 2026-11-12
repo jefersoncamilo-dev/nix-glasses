@@ -1050,13 +1050,14 @@ async function gravarLote(client, produtos) {
 }
 
 // Status sai das contas: peça na loja (estoque) = DISPONIVEL; só em maletas =
-// CONDICIONAL; nenhuma = ESGOTADO. pedido_condicional_id fica com a maleta mais
+// CONDICIONAL; nenhuma = ESGOTADO. Sob Encomenda vende pelo estoque do fornecedor:
+// fica sempre DISPONIVEL, tenha ou não peça guardada na loja. pedido_condicional_id fica com a maleta mais
 // antiga da peça, para as telas que mostram uma só.
 async function recalcularStatus(db, ids) {
   if (!ids.length) return [];
   const { rows } = await db.query(
     `UPDATE produtos p SET
-       status = CASE WHEN p.estoque > 0 THEN 'DISPONIVEL' WHEN m.qtd > 0 THEN 'CONDICIONAL' ELSE 'ESGOTADO' END,
+       status = CASE WHEN p.estoque > 0 OR p.disponibilidade = 'SOB_ENCOMENDA' THEN 'DISPONIVEL' WHEN m.qtd > 0 THEN 'CONDICIONAL' ELSE 'ESGOTADO' END,
        pedido_condicional_id = m.pedido_id,
        updated_at = CURRENT_TIMESTAMP
      FROM (SELECT x.id,
@@ -1076,10 +1077,15 @@ async function recalcularStatus(db, ids) {
 async function aplicarStatusManual(db, produtoId, status) {
   if (status === 'ESGOTADO') {
     await db.query('DELETE FROM maleta_pecas WHERE produto_id = $1', [produtoId]);
-    await db.query('UPDATE produtos SET estoque = 0 WHERE id = $1', [produtoId]);
+    // Esgotado de verdade: nem na loja nem no fornecedor (deixa de ser Sob Encomenda)
+    await db.query(`UPDATE produtos SET estoque = 0, disponibilidade = 'PRONTA_ENTREGA' WHERE id = $1`, [produtoId]);
   } else if (status === 'DISPONIVEL') {
     const fora = (await db.query('DELETE FROM maleta_pecas WHERE produto_id = $1 RETURNING id', [produtoId])).rowCount;
-    await db.query('UPDATE produtos SET estoque = GREATEST(estoque + $2, 1) WHERE id = $1', [produtoId, fora]);
+    // Sob Encomenda não precisa de peça na loja para ficar disponível
+    await db.query(
+      `UPDATE produtos SET estoque = GREATEST(estoque + $2, CASE WHEN disponibilidade = 'SOB_ENCOMENDA' THEN 0 ELSE 1 END) WHERE id = $1`,
+      [produtoId, fora]
+    );
   } else if (status === 'CONDICIONAL') {
     const fora = (await db.query('SELECT 1 FROM maleta_pecas WHERE produto_id = $1 LIMIT 1', [produtoId])).rowCount;
     if (!fora) {
@@ -1710,7 +1716,8 @@ async function startServer() {
     }
     const estoque = lerQuantidade(req.body.estoque);
     if (estoque === false) return res.status(400).json({ error: 'Estoque inválido' });
-    const mexeNoEstoque = status !== undefined || estoque !== null;
+    // Trocar a disponibilidade também refaz o status (Sob Encomenda fica disponível sem peça)
+    const mexeNoEstoque = status !== undefined || estoque !== null || disponibilidade !== undefined;
     const anuncioId = anuncios.lerAnuncioId(req.body.anuncio_id);
     if (anuncioId === false) return res.status(400).json({ error: 'Promoção inválida' });
     // Preço promocional: desmarcar a promoção também tira o preço promocional
@@ -3802,7 +3809,7 @@ async function startServer() {
             ? `Tem encomenda aberta (${num}). Ela continua normalmente.`
             : `Tem encomenda aberta (${num}). Ela continua, com o modelo e o SKU copiados.`);
         }
-        const loja = p.disponibilidade === 'SOB_ENCOMENDA' ? 0 : Number(p.estoque) || 0;
+        const loja = Number(p.estoque) || 0;
         if (acao === 'arquivar' && loja > 0) avisos.push(`Ainda tem ${loja} peça(s) em estoque: elas saem da vitrine e das Métricas junto com o produto.`);
         return { id: p.id, nome: p.nome, codigo_sku: p.codigo_sku, tamanho: p.tamanho, estoque: p.estoque, status: p.status, arquivado: p.arquivado, bloqueios, avisos };
       }),
@@ -4338,15 +4345,13 @@ async function startServer() {
 
   async function handleMetrics(req, res) {
     try {
-      // Peças = estoque na loja + peças em maletas. Produto Sob Encomenda ainda não
-      // foi comprado: o "estoque" dele no cadastro não é peça de verdade, então fica
-      // fora de peças, valor investido e lucro potencial (só entra no resumo à parte).
-      // Peça dele que estiver numa maleta é real e conta.
+      // Peças = estoque na loja + peças em maletas. Sob Encomenda vende pelo estoque do
+      // fornecedor; as peças que a loja tem guardadas dele são de verdade e contam.
       const { rows: [m] } = await req.db.query(
         `WITH u AS (
            SELECT p.preco_custo, p.preco_venda,
                   (p.disponibilidade = 'SOB_ENCOMENDA') AS encomenda,
-                  CASE WHEN p.disponibilidade = 'SOB_ENCOMENDA' THEN 0 ELSE p.estoque END AS loja,
+                  p.estoque AS loja,
                   (SELECT COUNT(*) FROM maleta_pecas mp WHERE mp.produto_id = p.id) AS rua
            FROM produtos p
            WHERE NOT p.arquivado
