@@ -113,7 +113,7 @@ describe('vitrine: botão Voltar fecha o modal', () => {
 
 // ---------- Card do produto ----------
 
-const VITRINE = ['ordemTamanho', 'agruparCards', 'grupoDoProduto', 'variaPorCor', 'coresCard', 'botoesCor', 'promocaoDoGrupo', 'htmlSeloPromocao', 'nomeModelo', 'tamanhosCard', 'botaoGrupoCard', 'escapeHtml', 'fotosDoProduto', 'fotoProvador', 'indiceCircular', 'ehSobEncomenda', 'calcularSinal', 'precoDe', 'precoAntes', 'passaFiltroStatus', 'etiquetaProduto',
+const VITRINE = ['ordemTamanho', 'agruparCards', 'grupoDoProduto', 'variaPorCor', 'coresCard', 'botoesCor', 'promocaoDoGrupo', 'htmlSeloPromocao', 'nomeModelo', 'tamanhosCard', 'botaoGrupoCard', 'escapeHtml', 'fotosDoProduto', 'fotoProvador', 'indiceCircular', 'ehSobEncomenda', 'calcularSinal', 'linkWhatsappEncomenda', 'precoDe', 'precoAntes', 'passaFiltroStatus', 'etiquetaProduto',
   'nomeCard', 'tagsCard', 'botaoMaletaCard', 'atualizarCardMaleta', 'passaFiltroGenero', 'ordemDisponibilidade', 'ordenarCardsVitrine', 'renderizarCatalogo', 'toggleMaleta'];
 
 function elemento() {
@@ -167,10 +167,10 @@ describe('vitrine: card limpo', () => {
     assert.deepEqual([...ctx.tagsCard({ material: '', tipo: 'Proteção UV400', formato: 'Redondo', cor_armacao: 'G15' })], ['Proteção UV400']);
   });
 
-  it('encomenda mostra o preço total e um selo só com o sinal', () => {
+  it('encomenda mostra o preço total e o selo, sem sinal', () => {
     const card = vitrine([hexagonal]).cards[0].innerHTML;
     assert.match(card, /font-bold text-white[^"]*">R\$ 135,00</);
-    assert.match(card, /data-selo-sinal[^>]*>Sinal 50%: R\$ 67,50</);
+    assert.doesNotMatch(card, /data-selo-sinal|Sinal 50%/);
     assert.match(card, /data-selo-encomenda[^>]*>Encomenda</);
     assert.doesNotMatch(card, /50% sinal \+ 50% na entrega|sinal de R\$/);
   });

@@ -223,7 +223,7 @@ function extrairFuncao(html, nome) {
   }
 }
 
-const FUNCOES = ['ordemTamanho', 'agruparCards', 'variaPorCor', 'coresCard', 'botoesCor', 'promocaoDoGrupo', 'htmlSeloPromocao', 'nomeModelo', 'tamanhosCard', 'botaoGrupoCard', 'grupoDoProduto', 'botoesTamanho', 'escapeHtml', 'fotosDoProduto', 'fotoProvador', 'indiceCircular', 'ehSobEncomenda', 'calcularSinal', 'precoDe', 'precoAntes', 'passaFiltroStatus',
+const FUNCOES = ['ordemTamanho', 'agruparCards', 'variaPorCor', 'coresCard', 'botoesCor', 'promocaoDoGrupo', 'htmlSeloPromocao', 'nomeModelo', 'tamanhosCard', 'botaoGrupoCard', 'grupoDoProduto', 'botoesTamanho', 'escapeHtml', 'fotosDoProduto', 'fotoProvador', 'indiceCircular', 'ehSobEncomenda', 'calcularSinal', 'linkWhatsappEncomenda', 'precoDe', 'precoAntes', 'passaFiltroStatus',
   'etiquetaProduto', 'nomeCard', 'tagsCard', 'botaoMaletaCard', 'passaFiltroGenero', 'ordemDisponibilidade', 'ordenarCardsVitrine', 'renderizarCatalogo', 'trocarFotoCard', 'especificacoesProduto', 'renderizarDetalhes', 'mostrarFotoDetalhes'];
 
 function vitrine(produtos) {
@@ -297,12 +297,12 @@ describe('vitrine: carrossel de fotos', () => {
     assert.match(ctx.detalhesConteudo.innerHTML, new RegExp(`<img src="${fotos[0]}"`));
   });
 
-  it('detalhes de encomenda mostram o sinal e o botão de encomendar pela maleta', () => {
+  it('detalhes de encomenda mandam combinar pelo WhatsApp e mantêm o botão de encomendar pela maleta', () => {
     const { ctx } = vitrine([{ ...produto, disponibilidade: 'SOB_ENCOMENDA' }]);
     ctx.detalhes = { id: 1, indice: 0 };
     ctx.renderizarDetalhes();
-    assert.match(ctx.detalhesConteudo.innerHTML, /data-aviso-encomenda[\s\S]*SOB ENCOMENDA[\s\S]*Reserva com sinal de 50%/);
-    assert.match(ctx.detalhesConteudo.innerHTML, /<strong>R\$ 100<\/strong> de sinal ao fechar pelo WhatsApp e <strong>R\$ 99\.99<\/strong> na entrega/);
+    assert.match(ctx.detalhesConteudo.innerHTML, /data-aviso-encomenda[\s\S]*SOB ENCOMENDA[\s\S]*Prazo e condições pelo WhatsApp/);
+    assert.doesNotMatch(ctx.detalhesConteudo.innerHTML, /sinal/i);
     assert.match(ctx.detalhesConteudo.innerHTML, /toggleMaleta\(1\)/);
     assert.match(ctx.detalhesConteudo.innerHTML, /Encomendar \(adicionar à Maleta\)/);
     assert.doesNotMatch(ctx.detalhesConteudo.innerHTML, /encomendarProduto/);

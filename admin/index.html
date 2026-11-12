@@ -586,6 +586,12 @@
             <button id="btnNovaEncomenda" class="bg-orange-500 hover:bg-orange-600 text-white px-4 py-2 rounded-lg font-medium transition-colors">Nova encomenda</button>
           </div>
         </div>
+        <!-- Aguardando pedido: encomendas ainda não pedidas, por fornecedor, com o pedido mínimo -->
+        <section id="filaEncomendas" class="mb-6 hidden" aria-labelledby="filaEncomendasTitulo">
+          <h4 id="filaEncomendasTitulo" class="text-base font-semibold text-gray-900">Aguardando pedido ao fornecedor</h4>
+          <p class="text-sm text-gray-500 mb-3">Encomendas que você ainda não pediu, somadas pelo <strong>preço de custo</strong>. Quando fechar o mínimo, marque as que vão no pedido, copie a lista e marque como pedido.</p>
+          <div id="filaEncomendasGrupos" class="grid lg:grid-cols-2 gap-4"></div>
+        </section>
         <div id="filtrosStatusEncomenda" class="flex flex-wrap gap-2 mb-4"></div>
         <div id="listaEncomendas" class="grid lg:grid-cols-2 gap-4"></div>
       </div>
@@ -6008,6 +6014,7 @@
           <p class="text-sm text-gray-700">${escapeHtml(e.nome_cliente || 'Sem nome')}${e.telefone ? ' • ' + escapeHtml(e.telefone) : ''}</p>
           ${e.especificacoes ? `<p class="text-sm text-gray-600 mt-1 whitespace-pre-line">${escapeHtml(e.especificacoes)}</p>` : ''}
           ${e.observacoes ? `<p class="text-xs text-gray-500 mt-1 whitespace-pre-line">Obs.: ${escapeHtml(e.observacoes)}</p>` : ''}
+          ${e.pedido_fornecedor_em ? `<p data-pedida-fornecedor class="text-xs text-indigo-700 mt-1">Pedida ao fornecedor em ${escapeHtml(formatarData(e.pedido_fornecedor_em))}${e.pedido_fornecedor_ref ? ` · pedido ${escapeHtml(e.pedido_fornecedor_ref)}` : ''}</p>` : ''}
           <div class="mt-3 grid grid-cols-3 gap-2 text-sm">
             <div><p class="text-xs text-gray-500">Valor</p><p class="font-medium text-gray-900">${formatarMoeda(valor)}</p></div>
             <div><p class="text-xs text-gray-500">Sinal pago</p><p class="font-medium text-gray-900">${formatarMoeda(sinal)}</p></div>
@@ -6016,6 +6023,7 @@
           <div class="mt-3 flex flex-wrap gap-2">
             ${proximo ? `<button type="button" data-status-encomenda="${id}" data-novo-status="${proximo[0]}" class="px-3 py-1.5 bg-orange-500 hover:bg-orange-600 text-white rounded-lg text-sm font-medium">${proximo[1]}</button>` : ''}
             ${e.status === 'PRONTO_ENTREGA' && e.telefone ? `<button type="button" data-avisar-encomenda="${id}" class="px-3 py-1.5 bg-green-500 hover:bg-green-600 text-white rounded-lg text-sm font-medium">Avisar no WhatsApp</button>` : ''}
+            ${e.pedido_fornecedor_em && e.status === 'AGUARDANDO_FABRICANTE' ? `<button type="button" data-desfazer-pedido="${id}" class="px-3 py-1.5 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 text-sm font-medium" title="Volta para Aguardando pedido">Desfazer pedido</button>` : ''}
             <button type="button" data-editar-encomenda="${id}" class="px-3 py-1.5 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 text-sm font-medium">Editar</button>
             <button type="button" data-excluir-encomenda="${id}" class="ml-auto px-3 py-1.5 border border-red-200 text-red-600 rounded-lg hover:bg-red-50 text-sm font-medium" title="Excluir definitivamente">Excluir</button>
           </div>
@@ -6066,6 +6074,7 @@
         if (!res.ok) throw new Error('Erro ao carregar encomendas');
         todasEncomendas = await res.json();
         mostrarEncomendas();
+        await carregarFilaEncomendas();
       } catch (err) {
         console.error(err);
         mostrarToast('Erro ao carregar encomendas', 'error');
@@ -6144,6 +6153,18 @@
         if (e) abrirResumoMaleta(`Aviso da encomenda #${Number(e.id)}`, textoAvisoEncomenda(e), e.telefone);
         return;
       }
+      const desfazer = ev.target.closest('[data-desfazer-pedido]');
+      if (desfazer) {
+        try {
+          await marcarPedidoFornecedor([Number(desfazer.dataset.desfazerPedido)], { desfazer: true });
+          mostrarToast('A encomenda voltou para Aguardando pedido');
+        } catch (err) {
+          mostrarToast(err.message, 'error');
+        }
+        await carregarEncomendas();
+        if (perfilAtual) await carregarPerfil(perfilAtual.cliente.id, false);
+        return;
+      }
       const passo = ev.target.closest('[data-status-encomenda]');
       if (!passo || passo.disabled) return;
       passo.disabled = true;
@@ -6158,6 +6179,208 @@
       if (perfilAtual) await carregarPerfil(perfilAtual.cliente.id, false);
     }
     document.getElementById('listaEncomendas').addEventListener('click', aoClicarEncomenda);
+
+    // ---------- Encomendas: aguardando pedido ao fornecedor (pedido mínimo) ----------
+    // A fila vem pronta do servidor (fila-encomendas.js): por fornecedor, custo somado,
+    // quanto falta para o mínimo e para a personalização grátis. Aqui só se escolhe
+    // quais vão no pedido (todas marcadas de início), copia a lista e marca como pedido.
+    let filaEncomendas = [];
+    const desmarcadasFila = new Set();
+
+    // Cor só quando o nome ainda não diz ("Nix Rex Aviador - Preto" já tem a cor)
+    const corForaDoNome = (e) => e.cor && !String(e.modelo || '').toLowerCase().includes(String(e.cor).toLowerCase());
+    const moedaOuTraco = (v) => (v === null || v === undefined ? 'sem custo' : formatarMoeda(v));
+
+    // Marcadas de um grupo e a soma do custo delas
+    function marcadasDoGrupo(g) {
+      const itens = g.encomendas.filter(e => !desmarcadasFila.has(Number(e.id)));
+      return { itens, custo: Math.round(itens.reduce((t, e) => t + Math.round((Number(e.custo) || 0) * 100), 0)) / 100 };
+    }
+
+    // Avisos do pedido mínimo e da personalização, a partir de um custo em R$
+    function avisosPedidoMinimo(regra, custo) {
+      const c = Math.round((Number(custo) || 0) * 100);
+      const minimo = Math.round((Number(regra.minimo) || 0) * 100);
+      const gratis = Math.round((Number(regra.personalizacao_gratis) || 0) * 100);
+      const taxa = Number(regra.taxa_personalizacao) || 0;
+      const avisos = [];
+      if (minimo) {
+        avisos.push(c >= minimo
+          ? { ok: true, texto: `Pedido mínimo de ${formatarMoeda(minimo / 100)} atingido` }
+          : { ok: false, texto: `Faltam ${formatarMoeda((minimo - c) / 100)} para o pedido mínimo de ${formatarMoeda(minimo / 100)}` });
+      }
+      if (gratis) {
+        avisos.push(c >= gratis
+          ? { ok: true, texto: `Personalização grátis (a partir de ${formatarMoeda(gratis / 100)})` }
+          : { ok: false, texto: `Faltam ${formatarMoeda((gratis - c) / 100)} para a personalização grátis (${formatarMoeda(gratis / 100)})${taxa ? `. Abaixo disso, taxa de ${formatarMoeda(taxa)} paga à parte` : ''}` });
+      }
+      return avisos;
+    }
+
+    // Barra até o maior alvo (personalização grátis ou mínimo), com a marca do mínimo
+    function barraPedidoMinimo(regra, custo) {
+      const minimo = Number(regra.minimo) || 0;
+      const alvo = Math.max(minimo, Number(regra.personalizacao_gratis) || 0);
+      if (!alvo) return '';
+      const pct = Math.min(100, Math.round((Number(custo) || 0) / alvo * 100));
+      const marca = minimo && minimo < alvo ? Math.round(minimo / alvo * 100) : null;
+      const cor = (Number(custo) || 0) >= alvo ? 'bg-green-500' : (Number(custo) || 0) >= minimo ? 'bg-blue-500' : 'bg-orange-400';
+      return `
+        <div class="relative h-2.5 rounded-full bg-gray-100 mt-3" role="progressbar" aria-valuemin="0" aria-valuemax="${alvo}" aria-valuenow="${Number(custo) || 0}" aria-label="Custo das encomendas até ${formatarMoeda(alvo)}">
+          <div class="h-2.5 rounded-full ${cor}" style="width:${pct}%"></div>
+          ${marca !== null ? `<span class="absolute -top-1 w-0.5 bg-gray-500" style="left:${marca}%;height:18px" title="Pedido mínimo ${formatarMoeda(minimo)}"></span>` : ''}
+        </div>
+        <div class="flex justify-between text-[11px] text-gray-400 mt-1"><span>R$ 0</span>${marca !== null ? `<span>mínimo ${formatarMoeda(minimo)}</span>` : ''}<span>${formatarMoeda(alvo)}</span></div>`;
+    }
+
+    function htmlGrupoFila(g, i) {
+      const m = marcadasDoGrupo(g);
+      const avisos = g.sem_fornecedor ? [] : avisosPedidoMinimo(g.regra, m.custo);
+      const todas = m.itens.length === g.encomendas.length;
+      const regra = g.regra || {};
+      const v = (n) => (Number(n) ? String(Number(n)).replace('.', ',') : '');
+      return `
+        <div data-grupo-fila="${i}" class="bg-white rounded-xl border ${!g.sem_fornecedor && avisos.length && avisos[0].ok ? 'border-green-300' : 'border-gray-200'} p-4 sm:p-5">
+          <div class="flex justify-between gap-3">
+            <div class="min-w-0">
+              <p class="font-semibold text-gray-900">${escapeHtml(g.fornecedor)}</p>
+              <p class="text-xs text-gray-500">${g.pecas} encomenda${g.pecas === 1 ? '' : 's'} · custo ${formatarMoeda(g.custo_total)} · clientes pagam ${formatarMoeda(g.valor_clientes)}</p>
+            </div>
+            ${g.sem_fornecedor ? '' : `<button type="button" data-regras-fila="${i}" class="self-start text-xs text-orange-600 hover:underline whitespace-nowrap">Pedido mínimo</button>`}
+          </div>
+          ${g.sem_fornecedor ? '<p class="text-xs text-gray-500 mt-2">Encomendas lançadas à mão ou de produto sem fornecedor no cadastro: ligue o fornecedor no produto para entrarem na conta.</p>' : ''}
+          ${g.sem_fornecedor ? '' : barraPedidoMinimo(regra, m.custo)}
+          ${avisos.length ? `<ul class="mt-2 space-y-1 text-sm">${avisos.map(a => `<li data-aviso-minimo class="${a.ok ? 'text-green-700' : 'text-orange-700'}">${a.ok ? '✓' : '•'} ${escapeHtml(a.texto)}</li>`).join('')}</ul>` : ''}
+          ${!g.sem_fornecedor && !avisos.length ? '<p class="text-xs text-gray-500 mt-2">Sem pedido mínimo cadastrado para este fornecedor.</p>' : ''}
+          ${g.sem_custo ? `<p class="text-xs text-gray-500 mt-1">${g.sem_custo} encomenda${g.sem_custo === 1 ? '' : 's'} sem preço de custo (não entra${g.sem_custo === 1 ? '' : 'm'} na soma).</p>` : ''}
+          <form data-form-regras="${i}" class="hidden mt-3 p-3 rounded-lg bg-gray-50 grid grid-cols-3 gap-2 items-end">
+            <label class="text-xs text-gray-600">Pedido mínimo (R$)<input name="minimo" inputmode="decimal" value="${v(regra.minimo)}" class="mt-1 w-full px-2 py-1.5 border border-gray-300 rounded-lg text-sm"></label>
+            <label class="text-xs text-gray-600">Personaliz. grátis a partir de (R$)<input name="personalizacao_gratis" inputmode="decimal" value="${v(regra.personalizacao_gratis)}" class="mt-1 w-full px-2 py-1.5 border border-gray-300 rounded-lg text-sm"></label>
+            <label class="text-xs text-gray-600">Taxa abaixo disso (R$)<input name="taxa_personalizacao" inputmode="decimal" value="${v(regra.taxa_personalizacao)}" class="mt-1 w-full px-2 py-1.5 border border-gray-300 rounded-lg text-sm"></label>
+            <button type="submit" class="col-span-3 sm:col-span-1 px-3 py-1.5 bg-orange-500 hover:bg-orange-600 text-white rounded-lg text-sm font-medium">Salvar</button>
+          </form>
+          <label class="mt-3 flex items-center gap-2 text-xs text-gray-600 border-b border-gray-100 pb-2"><input type="checkbox" data-todas-fila="${i}" ${todas ? 'checked' : ''} class="h-4 w-4 accent-orange-500"> Marcar todas · ${m.itens.length} marcada${m.itens.length === 1 ? '' : 's'} · custo ${formatarMoeda(m.custo)}</label>
+          <ul class="divide-y divide-gray-100">
+            ${g.encomendas.map(e => `
+            <li><label class="flex gap-2 py-2 text-sm cursor-pointer">
+              <input type="checkbox" data-item-fila="${Number(e.id)}" ${desmarcadasFila.has(Number(e.id)) ? '' : 'checked'} class="mt-0.5 h-4 w-4 accent-orange-500 shrink-0">
+              <span class="min-w-0 flex-1">
+                <span class="block text-gray-900">${escapeHtml(e.modelo)}${corForaDoNome(e) ? ` · ${escapeHtml(e.cor)}` : ''}</span>
+                <span class="block text-xs text-gray-500">#${Number(e.id)} · ${escapeHtml(e.nome_cliente || 'Sem nome')}${e.codigo_fornecedor ? ` · cód. ${escapeHtml(e.codigo_fornecedor)}` : ''}${e.especificacoes ? ` · ${escapeHtml(e.especificacoes)}` : ''}</span>
+              </span>
+              <span class="text-right text-xs whitespace-nowrap"><span class="block font-medium text-gray-900">${escapeHtml(moedaOuTraco(e.custo))}</span><span class="block text-gray-400">${formatarData(e.created_at)}</span></span>
+            </label></li>`).join('')}
+          </ul>
+          <div class="mt-3 flex flex-wrap gap-2">
+            <button type="button" data-copiar-fila="${i}" ${m.itens.length ? '' : 'disabled'} class="px-3 py-1.5 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 text-sm font-medium disabled:opacity-50">Copiar lista do pedido</button>
+            <button type="button" data-pedir-fila="${i}" ${m.itens.length ? '' : 'disabled'} class="px-3 py-1.5 bg-orange-500 hover:bg-orange-600 text-white rounded-lg text-sm font-medium disabled:opacity-50">Marcar como pedido</button>
+          </div>
+        </div>`;
+    }
+
+    // Lista para montar o pedido no site do fornecedor
+    function textoPedidoFornecedor(g, itens) {
+      const custo = itens.reduce((t, e) => t + Math.round((Number(e.custo) || 0) * 100), 0) / 100;
+      let msg = `Pedido ${g.sem_fornecedor ? '' : `${g.fornecedor} `}- ${itens.length} peça${itens.length === 1 ? '' : 's'}\n\n`;
+      itens.forEach((e, i) => {
+        const nome = e.nome_fornecedor || e.modelo;
+        msg += `${i + 1}. ${nome}${e.codigo_fornecedor ? ` (cód. ${e.codigo_fornecedor})` : ''}${e.cor ? ` - cor ${e.cor}` : ''} - 1 un.${e.custo !== null && e.custo !== undefined ? ` - ${formatarMoeda(e.custo)}` : ''}\n`;
+        if (e.especificacoes) msg += `   ${e.especificacoes}\n`;
+        if (e.link_fornecedor) msg += `   ${e.link_fornecedor}\n`;
+      });
+      msg += `\nTotal de custo: ${formatarMoeda(custo)}\n`;
+      if (!g.sem_fornecedor) avisosPedidoMinimo(g.regra, custo).forEach(a => { msg += `${a.ok ? '✓' : '•'} ${a.texto}\n`; });
+      return msg;
+    }
+
+    function mostrarFilaEncomendas() {
+      const secao = document.getElementById('filaEncomendas');
+      secao.classList.toggle('hidden', !filaEncomendas.length);
+      document.getElementById('filaEncomendasGrupos').innerHTML = filaEncomendas.map(htmlGrupoFila).join('');
+    }
+
+    async function carregarFilaEncomendas() {
+      try {
+        const res = await fetchAdmin('/api/admin/encomendas/fila');
+        if (!res.ok) throw new Error('Erro ao carregar a fila');
+        filaEncomendas = (await res.json()).grupos || [];
+        const ids = new Set(filaEncomendas.flatMap(g => g.encomendas.map(e => Number(e.id))));
+        for (const id of [...desmarcadasFila]) if (!ids.has(id)) desmarcadasFila.delete(id);
+        mostrarFilaEncomendas();
+      } catch (err) {
+        console.error(err);
+      }
+    }
+
+    async function marcarPedidoFornecedor(ids, extra = {}) {
+      const res = await fetchAdmin('/api/admin/encomendas/pedido-fornecedor', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ids, ...extra }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || 'Erro ao marcar o pedido');
+      return data;
+    }
+
+    const gruposFila = document.getElementById('filaEncomendasGrupos');
+    gruposFila.addEventListener('change', (ev) => {
+      const item = ev.target.closest('[data-item-fila]');
+      const todas = ev.target.closest('[data-todas-fila]');
+      if (item) {
+        const id = Number(item.dataset.itemFila);
+        if (item.checked) desmarcadasFila.delete(id); else desmarcadasFila.add(id);
+      } else if (todas) {
+        for (const e of filaEncomendas[Number(todas.dataset.todasFila)].encomendas) {
+          if (todas.checked) desmarcadasFila.delete(Number(e.id)); else desmarcadasFila.add(Number(e.id));
+        }
+      } else return;
+      mostrarFilaEncomendas();
+    });
+    gruposFila.addEventListener('click', async (ev) => {
+      const regras = ev.target.closest('[data-regras-fila]');
+      if (regras) {
+        gruposFila.querySelector(`[data-form-regras="${Number(regras.dataset.regrasFila)}"]`).classList.toggle('hidden');
+        return;
+      }
+      const copiar = ev.target.closest('[data-copiar-fila]');
+      if (copiar) {
+        const g = filaEncomendas[Number(copiar.dataset.copiarFila)];
+        abrirResumoMaleta(`Pedido ao fornecedor: ${g.fornecedor}`, textoPedidoFornecedor(g, marcadasDoGrupo(g).itens), '');
+        return;
+      }
+      const pedir = ev.target.closest('[data-pedir-fila]');
+      if (!pedir || pedir.disabled) return;
+      const g = filaEncomendas[Number(pedir.dataset.pedirFila)];
+      const { itens, custo } = marcadasDoGrupo(g);
+      const pendente = !g.sem_fornecedor && avisosPedidoMinimo(g.regra, custo).find(a => !a.ok && /mínimo/.test(a.texto));
+      const referencia = prompt(`${pendente ? `Atenção: ${pendente.texto}.\n\n` : ''}Marcar ${itens.length} encomenda${itens.length === 1 ? '' : 's'} como pedida${itens.length === 1 ? '' : 's'} ao fornecedor.\nNúmero do pedido no site do fornecedor (opcional):`, '');
+      if (referencia === null) return;
+      pedir.disabled = true;
+      try {
+        const r = await marcarPedidoFornecedor(itens.map(e => Number(e.id)), { referencia });
+        mostrarToast(`${r.ids.length} encomenda${r.ids.length === 1 ? '' : 's'} marcada${r.ids.length === 1 ? '' : 's'} como pedida${r.ids.length === 1 ? '' : 's'}`);
+      } catch (err) {
+        mostrarToast(err.message, 'error');
+      }
+      await carregarEncomendas();
+    });
+    gruposFila.addEventListener('submit', async (ev) => {
+      const form = ev.target.closest('[data-form-regras]');
+      if (!form) return;
+      ev.preventDefault();
+      const g = filaEncomendas[Number(form.dataset.formRegras)];
+      const dados = Object.fromEntries(new FormData(form));
+      try {
+        const res = await fetchAdmin('/api/admin/encomendas/regras-fornecedor', {
+          method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ fornecedor: g.fornecedor, ...dados }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.error || 'Erro ao salvar');
+        mostrarToast(`Pedido mínimo de ${g.fornecedor} salvo`);
+        await carregarFilaEncomendas();
+      } catch (err) {
+        mostrarToast(err.message, 'error');
+      }
+    });
 
     // ---------- Perfil 360 da cliente ----------
     let perfilAtual = null;

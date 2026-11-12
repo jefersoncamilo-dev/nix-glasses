@@ -78,7 +78,7 @@ function semInjecao(html) {
 describe('vitrine (index.html) escapa dados de produto', () => {
   for (const disponibilidade of ['PRONTA_ENTREGA', 'SOB_ENCOMENDA']) it(`no catálogo (${disponibilidade})`, () => {
     const catalogoGrid = elemento();
-    const ctx = carregar('index.html', ['ordemTamanho', 'agruparCards', 'variaPorCor', 'coresCard', 'botoesCor', 'promocaoDoGrupo', 'htmlSeloPromocao', 'nomeModelo', 'tamanhosCard', 'botaoGrupoCard', 'escapeHtml', 'fotosDoProduto', 'fotoProvador', 'indiceCircular', 'ehSobEncomenda', 'calcularSinal', 'precoDe', 'precoAntes', 'passaFiltroStatus', 'etiquetaProduto', 'nomeCard', 'tagsCard', 'botaoMaletaCard', 'passaFiltroGenero', 'ordemDisponibilidade', 'ordenarCardsVitrine', 'renderizarCatalogo'], {
+    const ctx = carregar('index.html', ['ordemTamanho', 'agruparCards', 'variaPorCor', 'coresCard', 'botoesCor', 'promocaoDoGrupo', 'htmlSeloPromocao', 'nomeModelo', 'tamanhosCard', 'botaoGrupoCard', 'escapeHtml', 'fotosDoProduto', 'fotoProvador', 'indiceCircular', 'ehSobEncomenda', 'calcularSinal', 'linkWhatsappEncomenda', 'precoDe', 'precoAntes', 'passaFiltroStatus', 'etiquetaProduto', 'nomeCard', 'tagsCard', 'botaoMaletaCard', 'passaFiltroGenero', 'ordemDisponibilidade', 'ordenarCardsVitrine', 'renderizarCatalogo'], {
       NICHO: 'oculos', rotulos: { formato: 'Formato da lente', formatos: 'Todos os formatos', material: 'Material', tipo: 'Tipo' }, ORDEM_TAMANHOS: [], filtroTamanho: { value: '' },
       produtos: [produtoMalicioso({ disponibilidade })],
       maleta: { itens: [] },
@@ -97,7 +97,7 @@ describe('vitrine (index.html) escapa dados de produto', () => {
 
   it('nos detalhes do produto (carrossel e miniaturas)', () => {
     const detalhesConteudo = elemento();
-    const ctx = carregar('index.html', ['ordemTamanho', 'agruparCards', 'variaPorCor', 'coresCard', 'botoesCor', 'promocaoDoGrupo', 'htmlSeloPromocao', 'nomeModelo', 'grupoDoProduto', 'botoesTamanho', 'escapeHtml', 'fotosDoProduto', 'fotoProvador', 'indiceCircular', 'ehSobEncomenda', 'calcularSinal', 'precoDe', 'precoAntes', 'etiquetaProduto', 'especificacoesProduto', 'renderizarDetalhes'], {
+    const ctx = carregar('index.html', ['ordemTamanho', 'agruparCards', 'variaPorCor', 'coresCard', 'botoesCor', 'promocaoDoGrupo', 'htmlSeloPromocao', 'nomeModelo', 'grupoDoProduto', 'botoesTamanho', 'escapeHtml', 'fotosDoProduto', 'fotoProvador', 'indiceCircular', 'ehSobEncomenda', 'calcularSinal', 'linkWhatsappEncomenda', 'precoDe', 'precoAntes', 'etiquetaProduto', 'especificacoesProduto', 'renderizarDetalhes'], {
       NICHO: 'oculos', rotulos: { formato: 'Formato da lente', formatos: 'Todos os formatos', material: 'Material', tipo: 'Tipo' }, ORDEM_TAMANHOS: [], filtroTamanho: { value: '' },
       produtos: [produtoMalicioso()],
       maleta: { itens: [] },
@@ -113,7 +113,7 @@ describe('vitrine (index.html) escapa dados de produto', () => {
 
   it('na maleta guardada no navegador', () => {
     const maletaItens = elemento();
-    const ctx = carregar('index.html', ['escapeHtml', 'calcularSinal', 'precoDe', 'precoAntes', 'itemEhEncomenda', 'resumoMaleta', 'textoGuiaCatalogo', 'anuncioPorId', 'atualizarGuias', 'atualizarBarraMaleta', 'atualizarMaletaUI'], {
+    const ctx = carregar('index.html', ['escapeHtml', 'calcularSinal', 'linkWhatsappEncomenda', 'precoDe', 'precoAntes', 'itemEhEncomenda', 'resumoMaleta', 'textoGuiaCatalogo', 'anuncioPorId', 'atualizarGuias', 'atualizarBarraMaleta', 'atualizarMaletaUI'], {
       filtroStatus: elemento(),
       maleta: { itens: [
         { id: 7, nome: PAYLOAD, preco: 100, imagem: `x" onerror="alert(1)` },

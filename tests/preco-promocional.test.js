@@ -166,7 +166,7 @@ describe('vitrine: preço promocional', () => {
   const ctx = vm.createContext({
     formatarMoeda: (v) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v),
   });
-  vm.runInContext(['precoDe', 'precoAntes', 'calcularSinal', 'itemEhEncomenda', 'resumoMaleta', 'montarTextoWhatsapp'].map(extrairFuncao).join('\n')
+  vm.runInContext(['precoDe', 'precoAntes', 'calcularSinal', 'linkWhatsappEncomenda', 'itemEhEncomenda', 'resumoMaleta', 'montarTextoWhatsapp'].map(extrairFuncao).join('\n')
     + '\nthis.precoDe = precoDe; this.precoAntes = precoAntes; this.resumoMaleta = resumoMaleta; this.montarTextoWhatsapp = montarTextoWhatsapp;', ctx);
 
   it('precoDe é o promocional quando vale; precoAntes é o preço de venda para riscar', () => {

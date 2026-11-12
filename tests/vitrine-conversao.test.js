@@ -28,7 +28,7 @@ function carregar(funcoes, globais = {}) {
 const formatarMoeda = (v) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v).replace(/\u00a0/g, ' ');
 
 describe('vitrine: detalhes do produto', () => {
-  const FUNCOES = ['escapeHtml', 'fotosDoProduto', 'fotoProvador', 'provadorLigado', 'indiceCircular', 'ehSobEncomenda', 'calcularSinal', 'precoDe', 'precoAntes',
+  const FUNCOES = ['escapeHtml', 'fotosDoProduto', 'fotoProvador', 'provadorLigado', 'indiceCircular', 'ehSobEncomenda', 'calcularSinal', 'linkWhatsappEncomenda', 'precoDe', 'precoAntes',
     'etiquetaProduto', 'especificacoesProduto', 'renderizarDetalhes', 'ordemTamanho', 'agruparCards', 'variaPorCor', 'coresCard', 'botoesCor', 'promocaoDoGrupo', 'htmlSeloPromocao', 'nomeModelo', 'grupoDoProduto', 'botoesTamanho'];
 
   function detalhesDe(produto, detalhes = {}, itens = []) {
@@ -88,10 +88,10 @@ describe('vitrine: detalhes do produto', () => {
     assert.match(detalhesDe(oculos, {}, [{ id: 5 }]), /btn-na-maleta">✓ Na Maleta · Remover</);
   });
 
-  it('encomenda: selo "SOB ENCOMENDA" com o sinal de 50% e o que fica para a entrega', () => {
+  it('encomenda: selo "SOB ENCOMENDA", sem sinal nem prazo, e combina pelo WhatsApp', () => {
     const html = detalhesDe({ ...oculos, disponibilidade: 'SOB_ENCOMENDA', preco_venda: '299.99' });
-    assert.match(html, /data-aviso-encomenda[\s\S]*>SOB ENCOMENDA<\/span>Reserva com sinal de 50%/);
-    assert.match(html, /<strong>R\$ 150,00<\/strong> de sinal ao fechar pelo WhatsApp e <strong>R\$ 149,99<\/strong> na entrega/);
+    assert.match(html, /data-aviso-encomenda[\s\S]*>SOB ENCOMENDA<\/span>Prazo e condições pelo WhatsApp/);
+    assert.doesNotMatch(html, /sinal/i);
     assert.match(html, /btn-destaque">Encomendar \(adicionar à Maleta\)</);
     // A etiqueta pequena azul dá lugar ao aviso completo
     assert.doesNotMatch(html, /bg-blue-100 text-blue-700/);
@@ -119,7 +119,7 @@ describe('vitrine: maleta no topo e na gaveta lateral', () => {
     const el = () => ({ innerHTML: '', textContent: '', classList: { add() {}, remove() {} } });
     const porId = {};
     const btnMaleta = { atributos: {}, setAttribute(k, v) { this.atributos[k] = v; } };
-    const ctx = carregar(['escapeHtml', 'calcularSinal', 'precoDe', 'precoAntes', 'itemEhEncomenda', 'resumoMaleta', 'textoGuiaCatalogo', 'anuncioPorId', 'atualizarGuias', 'atualizarBarraMaleta', 'atualizarMaletaUI'], {
+    const ctx = carregar(['escapeHtml', 'calcularSinal', 'linkWhatsappEncomenda', 'precoDe', 'precoAntes', 'itemEhEncomenda', 'resumoMaleta', 'textoGuiaCatalogo', 'anuncioPorId', 'atualizarGuias', 'atualizarBarraMaleta', 'atualizarMaletaUI'], {
       maletaVazia: el(), maletaItens: el(), maletaFormulario: el(), maletaFooter: el(), maletaTotal: el(), maletaSinal: el(),
       maleta: { itens: [{ id: 1, nome: 'Aviador', preco: 100 }, { id: 2, nome: 'Cat Eye', preco: 200, encomenda: true }] },
       filtroStatus: { value: '' }, NICHO: 'oculos', formatarMoeda, btnMaleta,
