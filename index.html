@@ -632,7 +632,7 @@
           </span>
         </li>
       </ol>
-      <p data-como-funciona-encomenda class="mx-5 mb-4 px-3 py-2.5 rounded-xl text-xs leading-snug text-sky-200" style="background:rgba(37,99,235,0.14)">Sob encomenda: você reserva com sinal de 50% e paga o restante na entrega. <span data-loja="prazo_encomenda">Fazemos o pedido ao fornecedor junto com o próximo lote. Depois disso, o envio leva de 3 a 5 dias úteis.</span></p>
+      <p data-como-funciona-encomenda class="mx-5 mb-4 px-3 py-2.5 rounded-xl text-xs leading-snug text-sky-200" style="background:rgba(37,99,235,0.14)">Sob encomenda: o prazo e as condições você combina direto com a gente pelo WhatsApp.</p>
       <div class="px-5 pb-5">
         <button type="button" id="entendiComoFunciona" class="btn btn-primario w-full">Entendi, ver modelos</button>
       </div>
@@ -1160,10 +1160,14 @@
       return ((i % total) + total) % total;
     }
 
-    // Prazo das encomendas, de Configurações > Dados da loja ('' = não mostra)
-    function prazoEncomenda() {
-      const t = globalThis.LOJA?.prazo_encomenda;
-      return typeof t === 'string' ? t.trim() : '';
+    // Link do WhatsApp da loja para consultar prazo e negociar uma encomenda
+    // ('' quando a loja não tem número de WhatsApp: o botão não aparece)
+    function linkWhatsappEncomenda(produto, numero = typeof whatsappNumero === 'string' ? whatsappNumero : '') {
+      if (!numero) return '';
+      const nome = String(produto.nome || '');
+      const cor = produto.cor_armacao && !nome.toLowerCase().includes(String(produto.cor_armacao).toLowerCase()) ? ` - cor ${produto.cor_armacao}` : '';
+      const texto = `Olá! Tenho interesse no *${nome}*${cor}${produto.codigo_sku ? ` (Ref. ${produto.codigo_sku})` : ''}, que está sob encomenda. Pode me passar o prazo e as condições?`;
+      return `https://wa.me/${numero}?text=${encodeURIComponent(texto)}`;
     }
 
     function ehSobEncomenda(p) {
@@ -1195,7 +1199,7 @@
     // primeiro passo. Com modelos já escolhidos a barra "Ver maleta" mostra o próximo passo.
     function textoGuiaCatalogo(filtro, itensNaMaleta) {
       if (filtro === 'DISPONIVEL') return '<strong>Pronta entrega:</strong> vão na maleta e chegam para você provar em casa.';
-      if (filtro === 'SOB_ENCOMENDA') return '<strong>Sob encomenda:</strong> pedimos para você com sinal de 50%.';
+      if (filtro === 'SOB_ENCOMENDA') return '<strong>Sob encomenda:</strong> prazo e condições combinados com a gente pelo WhatsApp.';
       if (itensNaMaleta > 0) return '';
       return NICHO === 'roupas'
         ? 'Escolha o <strong>tamanho</strong> das peças que quer provar em casa e coloque na maleta.'
@@ -1399,7 +1403,7 @@
             <div class="absolute bottom-1.5 sm:bottom-2 left-0 right-0 flex justify-center gap-1 pointer-events-none">
               ${fotos.map((_, i) => `<span data-dot class="w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full ${i === indice ? 'bg-white' : 'bg-white/50'} shadow"></span>`).join('')}
             </div>` : ''}
-            ${encomenda ? `<span data-selo-encomenda class="selo-card absolute top-1.5 left-1.5 sm:top-2.5 sm:left-2.5 bg-blue-600/95 text-white pointer-events-none" title="Sob encomenda: 50% de sinal para reservar e 50% na entrega">Encomenda</span>` : ''}
+            ${encomenda ? `<span data-selo-encomenda class="selo-card absolute top-1.5 left-1.5 sm:top-2.5 sm:left-2.5 bg-blue-600/95 text-white pointer-events-none" title="Sob encomenda: prazo e condições pelo WhatsApp">Encomenda</span>` : ''}
             ${prontaEntrega ? `<span data-selo-pronta class="selo-card absolute top-1.5 left-1.5 sm:top-2.5 sm:left-2.5 text-white pointer-events-none" style="background:rgba(16,16,16,0.72)" title="Disponível: pronta entrega, vai na maleta para provar em casa"><span class="w-1.5 h-1.5 rounded-full bg-emerald-400" aria-hidden="true"></span>Disponível</span>` : ''}
             ${mostraEtiqueta ? `<div class="absolute top-1.5 right-1.5 sm:top-3 sm:right-3">
               <span class="px-1.5 sm:px-2 py-0.5 sm:py-1 text-[9px] sm:text-xs font-medium rounded-full ${etiqueta.classe}">${escapeHtml(etiqueta.texto)}</span>
@@ -1417,7 +1421,6 @@
               ${variaPreco ? '<span class="block text-[10px] sm:text-xs text-neutral-500">a partir de</span>' : ''}
               ${antesCard ? `<span data-preco-antes class="block text-[11px] sm:text-sm text-neutral-500 line-through leading-tight" aria-label="De ${formatarMoeda(antesCard)}">${formatarMoeda(antesCard)}</span>` : ''}
               <span ${antesCard ? 'data-preco-promocional ' : ''}class="block text-sm sm:text-xl font-bold ${antesCard ? 'text-pink-400' : 'text-white'} tracking-tight">${antesCard ? '<span class="sr-only">Por </span>' : ''}${formatarMoeda(Math.min(...precos))}</span>
-              ${encomenda ? `<span data-selo-sinal class="block text-[10px] sm:text-xs font-semibold text-sky-300 whitespace-nowrap" title="50% de sinal agora e 50% na entrega">Sinal 50%: ${formatarMoeda(calcularSinal(precoDe(produto)))}</span>` : ''}
             </div>
             <div data-acao-maleta>${grupo.length > 1 ? botaoGrupoCard(grupo) : botaoMaletaCard(produto, jaNaMaleta)}</div>
           </div>
@@ -1618,9 +1621,11 @@
             </div>` : `<p class="text-2xl sm:text-3xl font-bold text-gray-900 mb-4">${formatarMoeda(produto.preco_venda)}</p>`}
             ${encomenda ? `
             <div data-aviso-encomenda class="rounded-xl border border-blue-200 bg-blue-50 px-3 py-2.5 mb-4">
-              <p class="flex flex-wrap items-center gap-2 text-sm font-semibold text-blue-900"><span class="px-2 py-0.5 rounded-full bg-blue-600 text-white text-[11px] font-bold tracking-wide">SOB ENCOMENDA</span>Reserva com sinal de 50%</p>
-              <p class="mt-1.5 text-sm text-blue-900">Você paga <strong>${formatarMoeda(calcularSinal(precoDe(produto)))}</strong> de sinal ao fechar pelo WhatsApp e <strong>${formatarMoeda(Math.round(precoDe(produto) * 100 - calcularSinal(precoDe(produto)) * 100) / 100)}</strong> na entrega.</p>
-              ${prazoEncomenda() ? `<p data-prazo-encomenda class="mt-1.5 text-xs text-blue-800">⏱ ${escapeHtml(prazoEncomenda())}</p>` : ''}
+              <p class="flex flex-wrap items-center gap-2 text-sm font-semibold text-blue-900"><span class="px-2 py-0.5 rounded-full bg-blue-600 text-white text-[11px] font-bold tracking-wide">SOB ENCOMENDA</span>Prazo e condições pelo WhatsApp</p>
+              <p class="mt-1.5 text-sm text-blue-900">Fale com a gente para consultar o prazo e combinar o pagamento.</p>
+              ${linkWhatsappEncomenda(produto) ? `<a data-whatsapp-encomenda href="${escapeHtml(linkWhatsappEncomenda(produto))}" aria-label="Falar no WhatsApp sobre esta encomenda" target="_blank" rel="noopener" class="btn btn-whatsapp mt-2.5 w-full gap-2">
+                <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path d="M17.47 14.38c-.3-.15-1.76-.87-2.03-.97-.27-.1-.47-.15-.67.15-.2.3-.77.97-.94 1.17-.17.2-.35.22-.65.07-.3-.15-1.26-.46-2.4-1.48-.89-.79-1.49-1.77-1.66-2.07-.17-.3-.02-.46.13-.61.13-.13.3-.35.45-.52.15-.17.2-.3.3-.5.1-.2.05-.37-.02-.52-.08-.15-.67-1.62-.92-2.22-.24-.58-.49-.5-.67-.51h-.57c-.2 0-.52.07-.8.37-.27.3-1.04 1.02-1.04 2.48s1.07 2.88 1.21 3.08c.15.2 2.1 3.2 5.08 4.49.71.31 1.26.49 1.69.63.71.22 1.36.19 1.87.12.57-.09 1.76-.72 2.01-1.42.25-.7.25-1.3.17-1.42-.07-.13-.27-.2-.57-.35zM12.04 21.5h-.01a9.45 9.45 0 01-4.82-1.32l-.35-.21-3.58.94.96-3.49-.23-.36a9.43 9.43 0 01-1.45-5.03c0-5.22 4.25-9.47 9.48-9.47 2.53 0 4.91.99 6.7 2.78a9.41 9.41 0 012.77 6.7c0 5.22-4.25 9.46-9.47 9.46zM20.1 3.89A11.32 11.32 0 0012.04.55C5.76.55.65 5.66.65 11.94c0 2.01.52 3.97 1.52 5.7L.55 23.45l5.95-1.56a11.37 11.37 0 005.53 1.41h.01c6.28 0 11.39-5.11 11.39-11.39 0-3.04-1.19-5.9-3.33-8.05z"/></svg>
+                WhatsApp</a>` : ''}
             </div>` : ''}
             ${porCor ? `
             <h4 class="text-sm font-semibold text-gray-900 mb-2">Cor: <span class="font-normal">${escapeHtml(produto.cor_armacao || '')}</span> <span class="font-normal text-gray-500">· ${grupo.length} cores</span></h4>
@@ -2253,7 +2258,7 @@
               ${itemEhEncomenda(item) ? '<span class="inline-block mb-1 px-2 py-0.5 text-[10px] font-semibold rounded-full bg-blue-600 text-white">SOB ENCOMENDA</span>' : ''}
               <p class="font-medium text-gray-900 truncate">${escapeHtml(item.nome)}</p>
               <p class="text-sm text-gray-500">${item.precoNormal > item.preco ? `<span data-preco-antes class="line-through text-gray-400 mr-1">${formatarMoeda(item.precoNormal)}</span><span data-preco-promocional class="font-semibold text-pink-600">${formatarMoeda(item.preco)}</span>` : formatarMoeda(item.preco)}</p>
-              ${itemEhEncomenda(item) ? `<p class="text-xs font-medium text-blue-700">50% de sinal: ${formatarMoeda(calcularSinal(item.preco))}</p>`
+              ${itemEhEncomenda(item) ? '<p class="text-xs font-medium text-blue-700">Prazo e condições combinados pelo WhatsApp</p>'
                 : `<div class="mt-1 inline-flex rounded-lg bg-gray-200 p-0.5 text-xs" role="group" aria-label="Como você quer esta peça">${botaoIntencao(item, 'CONDICIONAL', 'Provar na maleta')}${botaoIntencao(item, 'COMPRA', 'Compra direta')}</div>`}
             </div>
             <button onclick="toggleMaleta(${Number(item.id)})" class="text-red-500 hover:text-red-700 p-1">
@@ -2268,7 +2273,8 @@
           economiaEl.textContent = resumo.economia > 0 ? `Você economiza ${formatarMoeda(resumo.economia)} com promoção` : '';
           economiaEl.classList[resumo.economia > 0 ? 'remove' : 'add']('hidden');
         }
-        maletaSinal.textContent = resumo.encomendas.length ? `Sinal das encomendas (50%): ${formatarMoeda(resumo.sinal)}` : '';
+        // Encomendas: prazo e pagamento são combinados com a loja pelo WhatsApp
+        maletaSinal.textContent = resumo.encomendas.length ? 'Encomendas: prazo e pagamento combinados pelo WhatsApp' : '';
         maletaSinal.classList[resumo.encomendas.length ? 'remove' : 'add']('hidden');
       }
     }
@@ -2508,8 +2514,8 @@
     }
 
     // Mensagem do WhatsApp para a atendente: cliente e endereço, depois a pronta entrega
-    // (para provar em casa e compra direta), as encomendas com o sinal de 50% de cada uma
-    // e um resumo com o que se paga agora e na entrega. Usa o negrito (*) e o itálico (_)
+    // (para provar em casa e compra direta), as encomendas (prazo e condições combinados
+    // com a loja na conversa) e um resumo. Usa o negrito (*) e o itálico (_)
     // do WhatsApp; sem emojis, que alguns aparelhos trocam por "?" ao abrir o link wa.me.
     function montarTextoWhatsapp(maleta, dados) {
       const linha = '━━━━━━━━━━━━━━';
@@ -2542,22 +2548,15 @@
         }
       }
       if (resumo.encomendas.length) {
-        msg += `\n${linha}\n*SOB ENCOMENDA* (sinal de 50%)\n`;
-        resumo.encomendas.forEach((item, i) => {
-          const sinal = calcularSinal(item.preco);
-          msg += `${i + 1}. ${item.nome}${ref(item)} - ${valor(item)}\n`;
-          msg += `    Sinal: ${formatarMoeda(sinal)} | Na entrega: ${formatarMoeda((centavos(item.preco) - centavos(sinal)) / 100)}\n`;
-        });
+        msg += `\n${linha}\n*SOB ENCOMENDA*\n${lista(resumo.encomendas)}`;
         msg += `Total das encomendas: ${formatarMoeda(resumo.totalEncomendas)}\n`;
-        if (prazoEncomenda()) msg += `_Prazo: ${prazoEncomenda()}_\n`;
+        msg += `_Gostaria de consultar o prazo e combinar o pagamento das encomendas._\n`;
       }
 
       msg += `\n${linha}\n*RESUMO*\n`;
       if (pronta) msg += `Pronta entrega: ${qtd(pronta)} - ${formatarMoeda(Math.round((centavos(resumo.totalProva) + centavos(resumo.totalCompra))) / 100)}\n`;
       if (resumo.encomendas.length) {
-        msg += `Sob encomenda: ${qtd(resumo.encomendas.length)} - ${formatarMoeda(resumo.totalEncomendas)}\n`;
-        msg += `*Sinal a pagar agora (50%):* ${formatarMoeda(resumo.sinal)}\n`;
-        msg += `*Restante das encomendas na entrega:* ${formatarMoeda((centavos(resumo.totalEncomendas) - centavos(resumo.sinal)) / 100)}\n`;
+        msg += `Sob encomenda: ${qtd(resumo.encomendas.length)} - ${formatarMoeda(resumo.totalEncomendas)} (prazo e pagamento a combinar)\n`;
       }
       msg += `*Total geral:* ${formatarMoeda(resumo.total)}\n`;
       if (resumo.economia > 0) msg += `_Economia com promoção: ${formatarMoeda(resumo.economia)}_\n`;

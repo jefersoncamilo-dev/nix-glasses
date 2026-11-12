@@ -344,7 +344,7 @@ describe('painel: cálculo e filtros dos pedidos', () => {
 });
 
 describe('vitrine: intenção de cada item no carrinho', () => {
-  const FUNCOES = ['escapeHtml', 'calcularSinal', 'prazoEncomenda', 'precoDe', 'precoAntes', 'itemEhEncomenda', 'resumoMaleta', 'definirIntencao', 'textoGuiaCatalogo', 'anuncioPorId', 'atualizarGuias', 'atualizarBarraMaleta', 'atualizarMaletaUI', 'montarTextoWhatsapp'];
+  const FUNCOES = ['escapeHtml', 'calcularSinal', 'linkWhatsappEncomenda', 'precoDe', 'precoAntes', 'itemEhEncomenda', 'resumoMaleta', 'definirIntencao', 'textoGuiaCatalogo', 'anuncioPorId', 'atualizarGuias', 'atualizarBarraMaleta', 'atualizarMaletaUI', 'montarTextoWhatsapp'];
   function vitrine(itens) {
     const el = () => ({ innerHTML: '', textContent: '', classList: { add() {}, remove() {} } });
     const els = { maletaVazia: el(), maletaItens: el(), maletaFormulario: el(), maletaFooter: el(), maletaTotal: el(), maletaSinal: el() };
@@ -378,7 +378,7 @@ describe('vitrine: intenção de cada item no carrinho', () => {
     const msg = v.ctx.montarTextoWhatsapp(v.ctx.maleta, dados);
     // Provar e compra direta ficam juntos em PRONTA ENTREGA; a encomenda vem à parte
     assert.match(msg, /\*PRONTA ENTREGA\*\n_Para provar em casa:_\n1\. Redondo - R\$ 50,00\nSubtotal para provar: R\$ 50,00\n\n_Compra direta:_\n1\. Aviador - R\$ 100,00\nSubtotal da compra direta: R\$ 100,00\n/);
-    assert.match(msg, /\*SOB ENCOMENDA\* \(sinal de 50%\)\n1\. Cat Eye - R\$ 200,00\n    Sinal: R\$ 100,00 \| Na entrega: R\$ 100,00\n/);
+    assert.match(msg, /\*SOB ENCOMENDA\*\n1\. Cat Eye - R\$ 200,00\n/);
     assert.match(msg, /Pronta entrega: 2 itens - R\$ 150,00\n/);
   });
 

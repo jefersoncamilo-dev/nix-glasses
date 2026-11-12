@@ -152,7 +152,7 @@ describe('renderizarPagina', () => {
     for (const p of paginas) {
       const html = ler(p);
       const out = renderizarPagina(html, PADRAO_NIX);
-      assert.match(out, /<script>window\.LOJA = \{"nome":"Nix Glasses","marca":"NIX","oculos":true,"nicho":"oculos","instagram":"","whatsapp":"","provador":true,"prazo_encomenda":"Fazemos o pedido ao fornecedor junto com o próximo lote\. Depois disso, o envio leva de 3 a 5 dias úteis\."\};<\/script>/, p);
+      assert.match(out, /<script>window\.LOJA = \{"nome":"Nix Glasses","marca":"NIX","oculos":true,"nicho":"oculos","instagram":"","whatsapp":"","provador":true\};<\/script>/, p);
       assert.equal(semScriptLoja(out), html, p);
     }
   });

@@ -1,6 +1,6 @@
 // Encomendas > Aguardando pedido ao fornecedor: fila por fornecedor com o pedido mínimo
 // (Tassia: R$99, personalização grátis a partir de R$350, taxa de R$70 abaixo disso),
-// marcar como pedido e o prazo das encomendas na vitrine.
+// e marcar como pedido.
 const { describe, it, before, after, beforeEach } = require('node:test');
 const assert = require('node:assert/strict');
 const h = require('./helpers');
@@ -52,7 +52,7 @@ describe('API da fila de encomendas', () => {
   });
   beforeEach(async () => {
     await h.limparBanco();
-    await h.pool.query(`DELETE FROM configuracoes WHERE chave IN ('fornecedor_regras', 'loja_prazo_encomenda')`);
+    await h.pool.query(`DELETE FROM configuracoes WHERE chave = 'fornecedor_regras'`);
   });
   after(async () => {
     await srv.parar();
@@ -129,14 +129,4 @@ describe('API da fila de encomendas', () => {
     assert.equal((await api('PUT', '/api/admin/encomendas/regras-fornecedor', { minimo: '5' })).status, 400);
   });
 
-  it('prazo das encomendas: padrão de 3 a 5 dias úteis, editável em Dados da loja e enviado à vitrine', async () => {
-    let pagina = await (await fetch(srv.url('/'))).text();
-    assert.match(pagina, /"prazo_encomenda":"Fazemos o pedido ao fornecedor junto com o próximo lote\. Depois disso, o envio leva de 3 a 5 dias úteis\."/);
-    const r = await api('PUT', '/api/admin/loja', { prazo_encomenda: 'Chega em até 10 dias úteis.' });
-    assert.equal(r.status, 200);
-    assert.equal(r.body.prazo_encomenda, 'Chega em até 10 dias úteis.');
-    pagina = await (await fetch(srv.url('/'))).text();
-    assert.match(pagina, /<span data-loja="prazo_encomenda">Chega em até 10 dias úteis\.<\/span>/);
-    assert.match(pagina, /"prazo_encomenda":"Chega em até 10 dias úteis\."/);
-  });
 });
