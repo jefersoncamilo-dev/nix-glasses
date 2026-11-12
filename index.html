@@ -7,6 +7,9 @@
   <meta name="theme-color" content="#161616">
   <link rel="icon" href="/favicon.ico" sizes="any">
   <link rel="apple-touch-icon" href="/apple-touch-icon.png">
+  <!-- Rastreamento: UTMs, dataLayer (GTM) e eventos da CAPI. Antes de tudo, para guardar a
+       origem da visita mesmo que a página demore a carregar. -->
+  <script src="/rastreamento-vitrine.js"></script>
   <script src="https://cdn.tailwindcss.com"></script>
   <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;600;700&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
   <style>
@@ -504,6 +507,10 @@
               <label for="telefoneCliente" class="block text-xs font-medium text-gray-600 mb-1">WhatsApp *</label>
               <input type="tel" id="telefoneCliente" autocomplete="tel" inputmode="tel" class="w-full px-3 py-2.5 text-base sm:text-sm text-gray-900 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gray-400" placeholder="(11) 98888-7777" required>
             </div>
+            <div class="col-span-2">
+              <label for="emailCliente" class="block text-xs font-medium text-gray-600 mb-1">E-mail <span class="font-normal text-gray-400">(opcional)</span></label>
+              <input type="email" id="emailCliente" autocomplete="email" inputmode="email" class="w-full px-3 py-2.5 text-base sm:text-sm text-gray-900 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gray-400" placeholder="voce@email.com">
+            </div>
             <div>
               <label for="cepCliente" class="block text-xs font-medium text-gray-600 mb-1">CEP *</label>
               <input type="text" id="cepCliente" autocomplete="postal-code" inputmode="numeric" class="w-full px-3 py-2.5 text-base sm:text-sm text-gray-900 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gray-400" placeholder="00000-000" maxlength="9" required>
@@ -532,6 +539,11 @@
               </div>
             </div>
           </div>
+          <!-- Lembrar os dados: ficam só neste aparelho (localStorage) para a próxima maleta -->
+          <label class="mt-3 flex items-center gap-2 text-xs text-gray-600 cursor-pointer">
+            <input type="checkbox" id="lembrarDados" checked class="h-4 w-4 accent-gray-900">
+            Lembrar meus dados neste aparelho
+          </label>
         </div>
       </div>
       <div id="maletaFooter" class="hidden px-5 py-4 border-t border-gray-200 bg-gray-50 flex flex-col gap-3" style="padding-bottom:max(1rem, env(safe-area-inset-bottom))">
@@ -1310,6 +1322,27 @@
       return `<div data-cores-card class="flex items-center gap-1 mb-1 sm:mb-2" title="${grupo.length} cores"><span class="sr-only">${grupo.length} cores: </span>${bolinhas}${mais}</div>`;
     }
 
+    // ---------- Rastreamento (rastreamento-vitrine.js) ----------
+    // Produto (do catálogo ou da maleta) no formato que o rastreamento espera: preço já com
+    // a promoção, SKU como id do item.
+    function produtoParaRastreio(p) {
+      if (!p) return null;
+      return { id: p.id, codigo_sku: p.codigo_sku || p.sku, nome: p.nome, preco: p.preco_venda !== undefined ? precoDe(p) : Number(p.preco),
+        tipo: p.tipo, cor: p.cor, marca: globalThis.LOJA?.nome };
+    }
+
+    // Dispara um evento (sem o script de rastreamento, por bloqueador, não faz nada)
+    function rastrear(nome, produtosEvento, opcoes) {
+      const r = globalThis.NixRastreamento;
+      if (!r) return null;
+      try {
+        return r.disparar(nome, produtosEvento.map(produtoParaRastreio), opcoes);
+      } catch (err) {
+        console.error('Erro no rastreamento:', err);
+        return null;
+      }
+    }
+
     // Itens da maleta marcados como encomenda (guardados assim ao adicionar)
     function itemEhEncomenda(item) {
       return item.encomenda === true;
@@ -1479,6 +1512,7 @@
       const grupo = grupoDoProduto(produto);
       const escolhido = grupo.length < 2 || variaPorCor(grupo) || maleta.itens.some(i => i.id === produtoId);
       detalhes = { id: produtoId, indice: fotoCard[produtoId] || 0, escolhido };
+      rastrear('view_item', [produto]);
       renderizarDetalhes();
       modalDetalhes.classList.remove('hidden');
       document.body.style.overflow = 'hidden';
@@ -2147,6 +2181,7 @@
       // Primeiro o botão muda (feedback imediato), depois o resto
       atualizarCardMaleta(produtoId);
       if (index < 0 && typeof navigator !== 'undefined' && navigator.vibrate) navigator.vibrate(12);
+      rastrear(index < 0 ? 'add_to_cart' : 'remove_from_cart', [produto]);
       salvarMaleta();
       atualizarMaletaUI();
       // Roupas: o nome completo leva o tamanho ("Vestido - M")
@@ -2272,6 +2307,10 @@
     function abrirModalMaleta() {
       atualizarMaletaUI();
       preencherDadosCliente();
+      // begin_checkout: a cliente abriu a maleta com peças para preencher a entrega
+      if (globalThis.NixRastreamento && maleta.itens.length) {
+        try { NixRastreamento.iniciarCheckout(maleta.itens.map(produtoParaRastreio)); } catch (err) { console.error(err); }
+      }
       clearTimeout(saidaGavetaMaleta);
       modalMaleta.classList.remove('hidden');
       // Força o navegador a desenhar a gaveta fora da tela antes de deslizar para dentro
@@ -2417,7 +2456,17 @@
     }
 
     // Preenche o nome da entrega com o do cliente, sem apagar o que já foi digitado
+    // Também volta com os dados da última maleta neste aparelho ("Lembrar meus dados")
+    const CAMPOS_ENTREGA = { nome: 'nomeCliente', telefone: 'telefoneCliente', email: 'emailCliente', cep: 'cepCliente', numero: 'numeroCliente',
+      rua: 'ruaCliente', bairro: 'bairroCliente', cidade: 'cidadeCliente', complemento: 'complementoCliente' };
     function preencherDadosCliente() {
+      const salvos = globalThis.NixRastreamento ? NixRastreamento.dadosSalvos(localStorage).contato : {};
+      for (const [campo, id] of Object.entries(CAMPOS_ENTREGA)) {
+        const el = document.getElementById(id);
+        if (el && !el.value.trim() && salvos[campo]) el.value = salvos[campo];
+      }
+      const campoEmail = document.getElementById('emailCliente');
+      if (cliente && cliente.email && !campoEmail.value.trim()) campoEmail.value = cliente.email;
       const campoNome = document.getElementById('nomeCliente');
       if (cliente && cliente.nome && !campoNome.value.trim()) campoNome.value = cliente.nome;
       if (document.getElementById('ruaCliente').value.trim()) mostrarEndereco();
@@ -2568,6 +2617,7 @@
       const bairro = document.getElementById('bairroCliente').value.trim();
       const cidade = document.getElementById('cidadeCliente').value.trim();
       const complemento = document.getElementById('complementoCliente').value.trim();
+      const emailDigitado = document.getElementById('emailCliente').value.trim();
 
       if (!nome || !telefone || !cep || !numero || !rua) {
         if (cep && !rua) mostrarEndereco();
@@ -2579,6 +2629,10 @@
         mostrarToast('WhatsApp não configurado. Contate o administrador.', 'error');
         return;
       }
+      if (emailDigitado && !validarEmail(emailDigitado)) {
+        mostrarToast('Confira o e-mail (ou deixe em branco)', 'error');
+        return;
+      }
 
       try {
         // 1. Registra o pedido no backend (ligado à conta quando o cliente está logado)
@@ -2586,21 +2640,42 @@
         const itensPedido = maleta.itens.map(item => ({ id: item.id, intencao: itemEhEncomenda(item) ? 'ENCOMENDA' : item.intencao === 'COMPRA' ? 'COMPRA' : 'CONDICIONAL' }));
         const headers = { 'Content-Type': 'application/json' };
         if (cliente) headers.Authorization = 'Bearer ' + cliente.token;
+        const email = cliente ? cliente.email : emailDigitado;
+        const contato = { nome, telefone, email, cep, numero, rua, bairro, cidade, complemento };
+        // Rastreamento do pedido: origem (UTMs), cookies da Meta e o event_id que o
+        // generate_lead/purchase do dataLayer e a CAPI do servidor vão usar juntos
+        const R = globalThis.NixRastreamento;
+        const eventIdPedido = R ? R.novoEventId() : undefined;
+        const rastro = R ? { ...R.rastroAtual(), event_id: eventIdPedido, url: location.origin + location.pathname } : undefined;
+        const visitante = R ? R.dadosSalvos(localStorage).visitante || undefined : undefined;
+        const itensRastreio = maleta.itens.map(produtoParaRastreio);
         const resCheckout = await fetch('/api/maleta/checkout', {
           method: 'POST',
           headers,
-          body: JSON.stringify({ produtoIds: idsProdutos, itens: itensPedido, contato: { nome, telefone, cep, numero, rua, bairro, cidade, complemento } })
+          body: JSON.stringify({ produtoIds: idsProdutos, itens: itensPedido, contato, rastreamento: rastro, visitante })
         });
 
         if (!resCheckout.ok) throw new Error('Erro ao registrar maleta');
+        const respostaCheckout = await resCheckout.json().catch(() => ({}));
 
-        // 2. Abre WhatsApp (número higienizado: só dígitos)
-        const email = cliente ? cliente.email : '';
+        // 2. Pedido já está no banco: eventos de conversão e "lembrar meus dados"
+        if (R) {
+          try {
+            R.salvarDados(localStorage, respostaCheckout.visitante, contato, document.getElementById('lembrarDados').checked);
+            // Sem esperar o hash do e-mail/telefone: o WhatsApp abre na hora
+            R.pedidoEnviado({ itens: itensRastreio, eventId: respostaCheckout.event_id || eventIdPedido,
+              pedidoId: respostaCheckout.pedido && respostaCheckout.pedido.id, contato }).catch(err => console.error(err));
+          } catch (err) {
+            console.error('Erro no rastreamento do pedido:', err);
+          }
+        }
+
+        // 3. Abre WhatsApp (número higienizado: só dígitos)
         const mensagem = montarTextoWhatsapp(maleta, { nome, telefone, email, cep, numero, rua, bairro, cidade, complemento });
         const numeroLimpo = sanitizeWhatsapp(whatsappNumero);
         const url = `https://wa.me/${numeroLimpo}?text=${encodeURIComponent(mensagem)}`;
         
-        // 3. Limpa maleta (contador e botões dos cards também) e abre WhatsApp
+        // 4. Limpa maleta (contador e botões dos cards também) e abre WhatsApp
         localStorage.removeItem('nix_maleta');
         maleta = { itens: [] };
         fecharModalMaleta();

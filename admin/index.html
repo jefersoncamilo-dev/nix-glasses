@@ -1038,6 +1038,37 @@
           <button id="btnSalvarLoja" class="mt-6 bg-orange-500 hover:bg-orange-600 text-white px-6 py-2 rounded-lg font-medium transition-colors">Salvar dados da loja</button>
         </div>
 
+        <!-- Rastreamento: GTM na vitrine e API de Conversões da Meta (servidor). O token
+             nunca volta para a tela: só aparece "Token salvo". -->
+        <div id="cardRastreamento" class="bg-white rounded-xl border border-gray-200 p-6 max-w-xl mt-6">
+          <h4 class="text-base font-semibold text-gray-900 mb-1">Rastreamento e anúncios</h4>
+          <p class="text-sm text-gray-500 mb-4">Google Tag Manager (GA4, Meta Pixel, Google Ads) e API de Conversões da Meta. Campo vazio desliga.</p>
+          <div class="space-y-4">
+            <div>
+              <label for="rast_gtm" class="block text-sm font-medium text-gray-700 mb-1">ID do Google Tag Manager</label>
+              <input type="text" id="rast_gtm" maxlength="20" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="GTM-XXXXXXX" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500">
+              <p class="text-xs text-gray-500 mt-1">Em tagmanager.google.com, no topo do contêiner. Com ele salvo, a vitrine carrega o GTM; o painel nunca.</p>
+            </div>
+            <div>
+              <label for="rast_pixel" class="block text-sm font-medium text-gray-700 mb-1">Meta Pixel ID (conjunto de dados)</label>
+              <input type="text" id="rast_pixel" maxlength="20" inputmode="numeric" autocomplete="off" placeholder="123456789012345" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500">
+            </div>
+            <div>
+              <label for="rast_token" class="block text-sm font-medium text-gray-700 mb-1">Token da API de Conversões</label>
+              <input type="password" id="rast_token" autocomplete="new-password" spellcheck="false" placeholder="Cole o token gerado no Gerenciador de Eventos" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500">
+              <p id="rastTokenSituacao" class="text-xs text-gray-500 mt-1">Gerenciador de Eventos &gt; seu Pixel &gt; Configurações &gt; API de Conversões &gt; Gerar token de acesso.</p>
+              <button type="button" id="btnRemoverTokenCapi" class="hidden mt-1 text-sm text-red-600 hover:underline">Remover token</button>
+            </div>
+            <div>
+              <label for="rast_teste" class="block text-sm font-medium text-gray-700 mb-1">Código de teste da Meta <span class="font-normal text-gray-400">(só para testar)</span></label>
+              <input type="text" id="rast_teste" maxlength="20" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="TEST12345" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500">
+              <p class="text-xs text-gray-500 mt-1">Da aba "Testar eventos". Enquanto estiver preenchido, os eventos do servidor aparecem só lá. Apague depois de testar.</p>
+            </div>
+            <p id="rastSituacao" class="text-sm"></p>
+          </div>
+          <button id="btnSalvarRastreamento" class="mt-6 bg-orange-500 hover:bg-orange-600 text-white px-6 py-2 rounded-lg font-medium transition-colors">Salvar rastreamento</button>
+        </div>
+
         <!-- Zerar um cadastro de cada vez (só o dono): cada linha mostra quantos existem
              hoje; o botão abre o que sai, o que fica e os avisos, e pede ZERAR. -->
         <div id="cardZerarCadastros" class="so-dono hidden bg-white rounded-xl border border-red-200 p-6 max-w-xl mt-6">
@@ -5498,6 +5529,16 @@
       return rotulos[status] || String(status || '');
     }
 
+    // Origem do pedido (UTMs da visita): "instagram / cpc · campanha", ou "anúncio Meta/Google" só com o clique
+    function origemPedido(p) {
+      const r = p && p.rastreamento && typeof p.rastreamento === 'object' ? p.rastreamento : {};
+      const fonte = [r.utm_source, r.utm_medium].filter(Boolean).join(' / ');
+      const partes = [fonte, r.utm_campaign].filter(Boolean);
+      if (!partes.length && r.fbclid) partes.push('anúncio Meta');
+      if (!partes.length && r.gclid) partes.push('anúncio Google');
+      return partes.join(' · ');
+    }
+
     function htmlPedido(p) {
       const itens = Array.isArray(p.itens) ? p.itens : [];
       const id = Number(p.id);
@@ -5542,7 +5583,8 @@
               : formatarMoeda(Number(p.total))}</p>
           </div>
           <p class="text-sm text-gray-700">${escapeHtml(p.nome || '-')} • ${escapeHtml(p.telefone || '-')}${p.email ? ' • ' + escapeHtml(p.email) : ''}</p>
-          ${p.endereco ? `<p class="text-sm text-gray-500 mb-3">${escapeHtml(p.endereco)}</p>` : '<div class="mb-3"></div>'}
+          ${p.endereco ? `<p class="text-sm text-gray-500 ${origemPedido(p) ? '' : 'mb-3'}">${escapeHtml(p.endereco)}</p>` : origemPedido(p) ? '' : '<div class="mb-3"></div>'}
+          ${origemPedido(p) ? `<p class="text-xs text-gray-500 mb-3">Origem: ${escapeHtml(origemPedido(p))}</p>` : ''}
           <ul class="divide-y divide-gray-100 border-t border-gray-100">
             ${itens.map(i => `
               <li class="py-2 flex justify-between gap-3 text-sm">
@@ -6525,6 +6567,69 @@
       } catch (err) {
         mostrarToast(err.message, 'error');
       }
+    });
+
+    // Rastreamento (GTM, Pixel, API de Conversões)
+    function preencherRastreamento(r) {
+      document.getElementById('rast_gtm').value = r.gtm_id || '';
+      document.getElementById('rast_pixel').value = r.meta_pixel_id || '';
+      document.getElementById('rast_teste').value = r.meta_test_code || '';
+      document.getElementById('rast_token').value = '';
+      document.getElementById('rast_token').placeholder = r.capi_token_configurado ? 'Token salvo (cole outro para trocar)' : 'Cole o token gerado no Gerenciador de Eventos';
+      document.getElementById('btnRemoverTokenCapi').classList.toggle('hidden', !r.capi_token_configurado);
+      const sit = document.getElementById('rastSituacao');
+      sit.textContent = textoSituacaoRastreamento(r);
+      sit.className = 'text-sm ' + (r.capi_ativo ? 'text-green-700' : 'text-gray-600');
+    }
+
+    function textoSituacaoRastreamento(r) {
+      const partes = [r.gtm_id ? `GTM ligado (${r.gtm_id})` : 'GTM desligado'];
+      if (r.capi_ativo) partes.push(`API de Conversões ligada${r.meta_test_code ? ' em modo de teste' : ''}`);
+      else if (r.meta_pixel_id && !r.capi_token_configurado) partes.push('API de Conversões desligada: falta o token');
+      else if (!r.meta_pixel_id && r.capi_token_configurado) partes.push('API de Conversões desligada: falta o Pixel ID');
+      else partes.push('API de Conversões desligada');
+      return partes.join(' · ');
+    }
+
+    async function carregarRastreamento() {
+      try {
+        const res = await fetchAdmin('/api/admin/rastreamento');
+        if (res.ok) preencherRastreamento(await res.json());
+      } catch (err) {
+        console.error(err);
+      }
+    }
+
+    async function salvarRastreamento(corpo, aviso) {
+      try {
+        const res = await fetchAdmin('/api/admin/rastreamento', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(corpo)
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.error || 'Erro ao salvar');
+        preencherRastreamento(data);
+        mostrarToast(aviso);
+      } catch (err) {
+        mostrarToast(err.message, 'error');
+      }
+    }
+
+    document.getElementById('btnSalvarRastreamento').addEventListener('click', () => {
+      const corpo = {
+        gtm_id: document.getElementById('rast_gtm').value,
+        meta_pixel_id: document.getElementById('rast_pixel').value,
+        meta_test_code: document.getElementById('rast_teste').value,
+      };
+      const token = document.getElementById('rast_token').value.trim();
+      if (token) corpo.capi_token = token;
+      salvarRastreamento(corpo, 'Rastreamento salvo!');
+    });
+
+    document.getElementById('btnRemoverTokenCapi').addEventListener('click', () => {
+      if (!confirm('Remover o token da API de Conversões? O servidor para de mandar eventos para a Meta.')) return;
+      salvarRastreamento({ remover_capi_token: true }, 'Token removido');
     });
 
     // Zerar dados de teste
@@ -7817,7 +7922,7 @@
 
     function abrirConfig() {
       // Dono sem a área config cadastrada não existe (dono pode tudo); usuário sem config não chega aqui
-      if (podeArea('config')) { carregarWhatsApp(); carregarLoja(); }
+      if (podeArea('config')) { carregarWhatsApp(); carregarLoja(); carregarRastreamento(); }
       if (acessoAdmin.dono) carregarContagemZerar();
       trocarAbaConfig('geral');
     }

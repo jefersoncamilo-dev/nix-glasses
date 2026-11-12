@@ -15,6 +15,7 @@ const usuariosAdmin = require('./usuarios-admin');
 const conferenciaEstoque = require('./conferencia-estoque');
 const vendas = require('./vendas');
 const anuncios = require('./anuncios');
+const rastreamento = require('./rastreamento');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -91,7 +92,7 @@ app.use(escolherEmpresa);
 const cacheLoja = new Map();
 async function lojaDaEmpresa(empresa) {
   if (!cacheLoja.has(empresa.slug)) {
-    const { rows } = await empresa.pool.query(`SELECT chave, valor FROM configuracoes WHERE chave LIKE 'loja\\_%' OR chave = 'whatsapp_number'`);
+    const { rows } = await empresa.pool.query(`SELECT chave, valor FROM configuracoes WHERE chave LIKE 'loja\\_%' OR chave IN ('whatsapp_number', 'meta_capi_token')`);
     cacheLoja.set(empresa.slug, montarLoja(empresa, rows));
   }
   return cacheLoja.get(empresa.slug);
@@ -136,7 +137,7 @@ async function servirLogo(req, res, next) {
   next();
 }
 app.get('/logo.png', servirLogo);
-const PUBLIC_ROOT_FILES = new Set(['logo.png', 'favicon.ico', 'apple-touch-icon.png', 'robots.txt']);
+const PUBLIC_ROOT_FILES = new Set(['logo.png', 'favicon.ico', 'apple-touch-icon.png', 'robots.txt', 'rastreamento-vitrine.js']);
 const SO_DA_PADRAO = new Set(['favicon.ico', 'apple-touch-icon.png']);
 app.get('/:file', (req, res, next) => {
   if (!PUBLIC_ROOT_FILES.has(req.params.file)) return next();
@@ -2409,8 +2410,18 @@ async function startServer() {
       .filter(i => i.intencao === 'COMPRA' || i.intencao === 'CONDICIONAL')
       .map(i => [Number(i.id), i.intencao]));
     const clienteId = clienteDoToken(req);
+    // Origem (UTMs, fbclid, gclid), ids da Meta e o event_id do dataLayer. O event_id
+    // sempre existe: sem o da vitrine, o servidor cria um (a CAPI usa o mesmo).
+    const rastro = rastreamento.lerRastreamento(req.body && req.body.rastreamento);
+    if (!rastro.event_id) rastro.event_id = crypto.randomUUID();
+    const urlPagina = typeof (req.body && req.body.rastreamento && req.body.rastreamento.url) === 'string' ? req.body.rastreamento.url : '';
+    // Token do navegador ("lembrar meus dados"): o mesmo das compras anteriores ou um novo
+    const visitante = rastreamento.lerTokenVisitante(req.body && req.body.visitante) || rastreamento.novoTokenVisitante();
+    const emailContato = contato && typeof contato.email === 'string' && /^[^\s@]+@[^\s@.]+(\.[^\s@.]+)+$/.test(contato.email.trim()) && contato.email.trim().length <= 254
+      ? contato.email.trim().toLowerCase() : '';
 
     let client;
+    let paraMeta = null;
     try {
       client = await req.db.connect();
       await client.query('BEGIN');
@@ -2432,12 +2443,14 @@ async function startServer() {
         const linhas = [...result.rows].sort((a, b) => ordem.get(a.id) - ordem.get(b.id));
         const p = montarPedido(linhas, contato, intencoes);
         const { rows } = await client.query(
-          `INSERT INTO pedidos (cliente_id, nome, telefone, email, endereco, itens, total_prova, total_compra, total_encomendas, sinal, total)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) RETURNING id, status`,
-          [dono[0] ? dono[0].id : null, p.nome, p.telefone, dono[0] ? dono[0].email : '', p.endereco,
-            JSON.stringify(p.itens), p.totalProva, p.totalCompra, p.totalEncomendas, p.sinal, p.total]
+          `INSERT INTO pedidos (cliente_id, nome, telefone, email, endereco, itens, total_prova, total_compra, total_encomendas, sinal, total, rastreamento, visitante_token)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13) RETURNING id, status, email`,
+          [dono[0] ? dono[0].id : null, p.nome, p.telefone, dono[0] ? dono[0].email : emailContato, p.endereco,
+            JSON.stringify(p.itens), p.totalProva, p.totalCompra, p.totalEncomendas, p.sinal, p.total,
+            JSON.stringify(rastro), visitante]
         );
         pedido = { id: rows[0].id, status: rows[0].status };
+        paraMeta = { pedido: { id: rows[0].id, email: rows[0].email }, p };
         // Itens sob encomenda já entram no painel de Encomendas
         for (const i of p.itens.filter(x => x.intencao === 'ENCOMENDA')) {
           await client.query(
@@ -2452,14 +2465,19 @@ async function startServer() {
       res.json({
         atualizados: result.rows.map(r => ({ id: r.id, nome: r.nome, vezes_em_maleta: r.vezes_em_maleta })),
         pedido,
+        // A vitrine usa o event_id no generate_lead/purchase e guarda o visitante
+        event_id: rastro.event_id,
+        visitante,
       });
     } catch (err) {
       if (client) await client.query('ROLLBACK').catch(() => {});
       console.error(err);
-      res.status(500).json({ error: 'Erro ao processar checkout da maleta' });
+      return res.status(500).json({ error: 'Erro ao processar checkout da maleta' });
     } finally {
       if (client) client.release();
     }
+    // Depois da resposta: a cliente já vai para o WhatsApp sem esperar a Meta
+    if (paraMeta) enviarPedidoParaMeta(req, paraMeta.pedido, paraMeta.p, contato, { ...rastro, url: urlPagina }, visitante);
   }
 
   // Admin: clientes com resumo dos pedidos (nunca devolve senha_hash)
@@ -2522,7 +2540,7 @@ async function startServer() {
     const { rows } = await db.query(
         `SELECT p.id, p.cliente_id, p.nome, p.telefone, p.email, p.endereco, p.itens, p.status,
                 p.total_prova, p.total_compra, p.total_encomendas, p.sinal, p.total, p.maleta_enviada_em, p.created_at,
-                p.itens_removidos, p.extras, p.desconto_tipo, p.desconto_valor, p.total_final, p.entregue_em, p.updated_at,
+                p.itens_removidos, p.extras, p.desconto_tipo, p.desconto_valor, p.total_final, p.entregue_em, p.updated_at, p.rastreamento,
                 COALESCE(ac.vendidos, '{}') AS vendidos_acerto, COALESCE(ac.devolvidos, '{}') AS devolvidos_acerto,
                 COALESCE((SELECT json_agg(json_build_object('id', e.id, 'produto_id', e.produto_id, 'status', e.status) ORDER BY e.id)
                           FROM encomendas e WHERE e.pedido_id = p.id), '[]') AS encomendas,
@@ -3380,6 +3398,179 @@ async function startServer() {
     } catch (err) {
       console.error(err);
       res.status(500).json({ error: 'Erro ao salvar dados da loja' });
+    }
+  }
+
+  // ---------- Rastreamento (GTM, Meta Pixel e Conversions API) ----------
+  // Configurações > Rastreamento. O token da CAPI fica cifrado (AES-GCM com chave tirada
+  // do JWT_SECRET) e nunca volta para o painel nem para a vitrine: só "configurado".
+  const SEGREDO_CAPI = () => `${process.env.JWT_SECRET}:meta-capi`;
+
+  async function respostaRastreamento(empresa) {
+    const loja = await lojaDaEmpresa(empresa);
+    const { rows } = await empresa.pool.query(`SELECT valor FROM configuracoes WHERE chave = 'meta_capi_teste'`);
+    return {
+      gtm_id: loja.gtm_id || '',
+      meta_pixel_id: loja.meta_pixel || '',
+      capi_token_configurado: loja.capi_ativo || (await tokenCapiSalvo(empresa)) !== '',
+      capi_ativo: !!loja.capi_ativo,
+      meta_test_code: rows[0] ? rows[0].valor : '',
+      graph_version: rastreamento.GRAPH_VERSION,
+    };
+  }
+
+  // Token decifrado ('' sem token; token que não abre, ex. JWT_SECRET trocado, conta como sem).
+  async function tokenCapiSalvo(empresa) {
+    const { rows } = await empresa.pool.query(`SELECT valor FROM configuracoes WHERE chave = 'meta_capi_token'`);
+    if (!rows[0] || !rows[0].valor || !process.env.JWT_SECRET) return '';
+    try {
+      return master.decifrar(rows[0].valor, SEGREDO_CAPI());
+    } catch {
+      console.warn(`[capi] token da loja "${empresa.slug}" não abre (JWT_SECRET mudou?): salve o token de novo`);
+      return '';
+    }
+  }
+
+  // Pixel + token + código de teste da loja, ou null (CAPI desligada).
+  async function configMeta(empresa) {
+    const loja = await lojaDaEmpresa(empresa);
+    if (!loja.capi_ativo) return null;
+    const token = await tokenCapiSalvo(empresa);
+    if (!token) return null;
+    const { rows } = await empresa.pool.query(`SELECT valor FROM configuracoes WHERE chave = 'meta_capi_teste'`);
+    return { pixel_id: loja.meta_pixel, token, test_code: rows[0] ? rows[0].valor : '' };
+  }
+
+  async function handleGetRastreamento(req, res) {
+    try {
+      res.json(await respostaRastreamento(req.empresa));
+    } catch (err) {
+      console.error(err);
+      res.status(500).json({ error: 'Erro ao buscar o rastreamento' });
+    }
+  }
+
+  // Só os campos enviados mudam. capi_token vazio não mexe; remover_capi_token apaga.
+  async function handleUpdateRastreamento(req, res) {
+    const b = req.body || {};
+    const pares = [];
+    const apagar = [];
+    if (b.gtm_id !== undefined) {
+      const v = rastreamento.lerIdGtm(b.gtm_id);
+      if (v === null) return res.status(400).json({ error: 'ID do Google Tag Manager inválido: use o formato GTM-XXXXXXX' });
+      pares.push(['loja_gtm_id', v]);
+    }
+    if (b.meta_pixel_id !== undefined) {
+      const v = rastreamento.lerPixelId(b.meta_pixel_id);
+      if (v === null) return res.status(400).json({ error: 'Pixel ID inválido: só os números do Gerenciador de Eventos' });
+      pares.push(['loja_meta_pixel', v]);
+    }
+    if (b.meta_test_code !== undefined) {
+      const v = rastreamento.lerCodigoTeste(b.meta_test_code);
+      if (v === null) return res.status(400).json({ error: 'Código de teste inválido (ex.: TEST12345)' });
+      pares.push(['meta_capi_teste', v]);
+    }
+    if (b.remover_capi_token === true) apagar.push('meta_capi_token');
+    else if (b.capi_token !== undefined && b.capi_token !== '') {
+      const v = rastreamento.lerTokenCapi(b.capi_token);
+      if (!v) return res.status(400).json({ error: 'Token da API de Conversões inválido: cole o token inteiro gerado no Gerenciador de Eventos' });
+      if (!process.env.JWT_SECRET) return res.status(503).json({ error: 'Defina JWT_SECRET no servidor antes de salvar o token' });
+      pares.push(['meta_capi_token', master.cifrar(v, SEGREDO_CAPI())]);
+    }
+    try {
+      await salvarConfiguracoes(req.db, pares);
+      if (apagar.length) await req.db.query('DELETE FROM configuracoes WHERE chave = ANY($1)', [apagar]);
+      cacheLoja.delete(req.empresa.slug);
+      res.json(await respostaRastreamento(req.empresa));
+    } catch (err) {
+      console.error(err);
+      res.status(500).json({ error: 'Erro ao salvar o rastreamento' });
+    }
+  }
+
+  // Freio simples para o endpoint público de eventos: 120 por minuto por IP.
+  const eventosPorIp = new Map();
+  function muitosEventos(ip) {
+    const agora = Date.now();
+    const r = eventosPorIp.get(ip);
+    if (!r || agora - r.inicio > 60000) {
+      if (eventosPorIp.size > 5000) eventosPorIp.clear();
+      eventosPorIp.set(ip, { inicio: agora, n: 1 });
+      return false;
+    }
+    r.n += 1;
+    return r.n > 120;
+  }
+
+  // Vitrine -> servidor -> Meta: view_item, add_to_cart e begin_checkout com o mesmo
+  // event_id do dataLayer. Preço e SKU saem do banco (o navegador só manda os ids).
+  // Responde na hora (202); a ida para a Meta não segura a vitrine.
+  async function handleEventoRastreamento(req, res) {
+    const b = req.body || {};
+    const nome = rastreamento.EVENTOS_VITRINE[b.evento];
+    const eventId = rastreamento.lerEventId(b.event_id);
+    if (!nome || !eventId) return res.status(400).json({ error: 'Evento inválido' });
+    const ids = (Array.isArray(b.produto_ids) ? b.produto_ids : [])
+      .map(Number).filter((n) => Number.isInteger(n) && n > 0 && n < 2 ** 31).slice(0, MAX_ITENS_PEDIDO);
+    const ip = rastreamento.ipDoCliente(req);
+    if (muitosEventos(ip || 'sem-ip')) return res.status(429).json({ error: 'Muitos eventos' });
+    let config;
+    try {
+      config = await configMeta(req.empresa);
+    } catch (err) {
+      console.error(err);
+      return res.status(500).json({ error: 'Erro ao registrar evento' });
+    }
+    if (!config) return res.status(204).end();
+    res.status(202).json({ ok: true });
+    try {
+      const { rows } = ids.length ? await req.db.query(
+        `SELECT p.id, p.codigo_sku, p.preco_venda, ${anuncios.sqlPrecoPromocional('p')} AS preco_promocional, p.disponibilidade
+         FROM produtos p WHERE p.id = ANY($1)`, [ids]) : { rows: [] };
+      const itens = montarPedido(rows, {}).itens;
+      const r = rastreamento.lerRastreamento(b);
+      const evento = rastreamento.montarEvento({
+        nome,
+        eventId,
+        url: b.url,
+        userData: rastreamento.montarUserData({
+          externalId: rastreamento.lerTokenVisitante(b.visitante),
+          ip, userAgent: req.headers['user-agent'], fbp: r.fbp, fbc: r.fbc,
+        }),
+        customData: rastreamento.montarCustomData(itens),
+      });
+      await rastreamento.enviarEventosMeta(config, [evento]);
+    } catch (err) {
+      console.warn('[capi] evento da vitrine não enviado:', err.message);
+    }
+  }
+
+  // Pedido gravado -> Lead e Purchase na CAPI, com o event_id que a vitrine usou no
+  // generate_lead/purchase do dataLayer. Roda depois da resposta; nunca lança.
+  async function enviarPedidoParaMeta(req, pedido, p, contato, r, visitante) {
+    try {
+      const config = await configMeta(req.empresa);
+      if (!config) return;
+      const c = contato && typeof contato === 'object' ? contato : {};
+      const userData = rastreamento.montarUserData({
+        email: pedido.email, telefone: p.telefone, nome: p.nome,
+        cidade: typeof c.cidade === 'string' ? c.cidade : '', cep: typeof c.cep === 'string' ? c.cep : '',
+        externalId: visitante, ip: rastreamento.ipDoCliente(req), userAgent: req.headers['user-agent'],
+        fbp: r.fbp, fbc: r.fbc,
+      });
+      const customData = { ...rastreamento.montarCustomData(p.itens, p.total), order_id: String(pedido.id) };
+      const base = { eventId: r.event_id, url: r.url || r.landing_page, userData, customData };
+      const out = await rastreamento.enviarEventosMeta(config, [
+        rastreamento.montarEvento({ ...base, nome: 'Lead' }),
+        rastreamento.montarEvento({ ...base, nome: 'Purchase' }),
+      ]);
+      if (out.enviado) {
+        await req.db.query(
+          `UPDATE pedidos SET rastreamento = rastreamento || jsonb_build_object('capi_enviado_em', to_char(now() AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"')) WHERE id = $1`,
+          [pedido.id]);
+      }
+    } catch (err) {
+      console.warn('[capi] pedido não enviado para a Meta:', err.message);
     }
   }
 
@@ -4536,6 +4727,9 @@ async function startServer() {
   app.get('/api/admin/metrics', exigirArea('metricas'), handleMetrics);
   // Vendas do período (pedidos entregues, maletas acertadas, encomendas e Conferência de estoque)
   app.get('/api/admin/vendas', exigirArea('metricas'), vendas.criarHandler({ lerMetricasDesde }).handleVendas);
+  app.get('/api/admin/rastreamento', exigirArea('config'), handleGetRastreamento);
+  app.put('/api/admin/rastreamento', exigirArea('config'), handleUpdateRastreamento);
+  app.post('/api/rastreamento/evento', handleEventoRastreamento);
   app.get('/api/admin/loja', exigirArea('config'), handleGetLoja);
   app.put('/api/admin/loja', exigirArea('config'), handleUpdateLoja);
   app.post('/api/admin/loja/logo', exigirArea('config'), uploadImagem, handleUpdateLogo);

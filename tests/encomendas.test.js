@@ -196,7 +196,7 @@ describe('painel de encomendas', () => {
 
   it('item aberto do pedido tem botão Encomendar; item encomendado mostra o status da encomenda', () => {
     const lista = { innerHTML: '' };
-    const ctx = carregar(['escapeHtml', 'intencaoItemPedido', 'precoNormalDoItem', 'etiquetaIntencao', 'badgeStatusPedido', 'rotuloStatusEncomenda', 'htmlPedido', 'renderizarPedidos'], {
+    const ctx = carregar(['escapeHtml', 'intencaoItemPedido', 'precoNormalDoItem', 'etiquetaIntencao', 'badgeStatusPedido', 'rotuloStatusEncomenda', 'origemPedido', 'htmlPedido', 'renderizarPedidos'], {
       document: { getElementById: () => lista }, formatarMoeda, formatarData: String, STATUS_PEDIDO: [], Array,
     });
     ctx.renderizarPedidos([{ id: 5, status: 'NOVO', total: 2, encomendas: [{ id: 9, produto_id: 2, status: 'EM_TRANSITO' }],

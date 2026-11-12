@@ -275,6 +275,16 @@ async function initTables(pool) {
     }
     await client.query('CREATE INDEX IF NOT EXISTS pedidos_status_idx ON pedidos (status, created_at DESC)');
 
+    // Rastreamento do pedido (ver rastreamento.js): origem (utm_*, fbclid, gclid, página de
+    // entrada), event_id do dataLayer/CAPI, cookies _fbp/_fbc e quando foi para a Meta.
+    // visitante_token: id aleatório do navegador da cliente (sem dado pessoal), para a
+    // vitrine lembrar os dados e a Meta ligar as visitas (external_id, em hash).
+    await client.query(`
+      ALTER TABLE pedidos
+      ADD COLUMN IF NOT EXISTS rastreamento JSONB NOT NULL DEFAULT '{}',
+      ADD COLUMN IF NOT EXISTS visitante_token VARCHAR(64) NOT NULL DEFAULT ''
+    `);
+
     // Estoque de acessórios (flanelas, estojos, líquidos), contado em unidades.
     // Entram no fechamento do pedido e dão baixa aqui.
     await client.query(`
