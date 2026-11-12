@@ -145,7 +145,7 @@ function vitrine(produtos, extra = {}) {
 
 const hexagonal = {
   id: 5, nome: 'Óculos de Sol Blogueira Hexagonal Dubai Premium Proteção UV400', nome_curto: 'Hexagonal Dubai', codigo_sku: 'HX-01',
-  preco_venda: '135.00', status: 'DISPONIVEL', disponibilidade: 'SOB_ENCOMENDA', material: 'Metal', formato: 'Hexagonal', cor_armacao: 'Dourado',
+  preco_venda: '135.00', status: 'DISPONIVEL', disponibilidade: 'SOB_ENCOMENDA', material: 'Metal', formato: 'Hexagonal', cor_armacao: 'Dourado', tipo: 'Polarizado',
 };
 
 describe('vitrine: card limpo', () => {
@@ -160,11 +160,11 @@ describe('vitrine: card limpo', () => {
     assert.equal(ctx.nomeCard({ nome: 'Aviador' }), 'Aviador');
   });
 
-  it('material, formato e cor viram uma linha discreta, só os preenchidos, sem o SKU', () => {
+  it('só material e tipo viram uma linha discreta, sem formato da lente, cor e SKU', () => {
     const { ctx, cards } = vitrine([hexagonal]);
-    assert.match(cards[0].innerHTML, /data-tags-card[^>]*>Metal · Hexagonal · Dourado<\/p>/);
-    assert.doesNotMatch(cards[0].innerHTML, /HX-01/);
-    assert.deepEqual([...ctx.tagsCard({ material: '', formato: 'Redondo', cor_armacao: null })], ['Redondo']);
+    assert.match(cards[0].innerHTML, /data-tags-card[^>]*>Metal · Polarizado<\/p>/);
+    assert.doesNotMatch(cards[0].innerHTML, /HX-01|Hexagonal ·|· Dourado/);
+    assert.deepEqual([...ctx.tagsCard({ material: '', tipo: 'Proteção UV400', formato: 'Redondo', cor_armacao: 'G15' })], ['Proteção UV400']);
   });
 
   it('encomenda mostra o preço total e um selo só com o sinal', () => {
