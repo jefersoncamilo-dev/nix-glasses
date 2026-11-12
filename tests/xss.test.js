@@ -138,7 +138,7 @@ describe('painel (admin/index.html) escapa dados de produto', () => {
 
   it('na tabela de produtos', () => {
     const tabelaProdutos = elemento();
-    const ctx = carregar('admin/index.html', ['escapeHtml', 'linkSeguro', 'botaoLinkFornecedor', 'variacaoCusto', 'htmlVariacao', 'htmlUltimaCompra', 'contarFotos', 'atualizarBarraAcertoEstoque', 'anuncioPorId', 'temPrecoPromocional', 'htmlPromocaoProduto', 'renderizarTabela', 'agruparCoresPorModelo', 'nomeDoModelo', 'htmlLinhaModeloCores', 'htmlLinhaProduto', 'htmlEmConferencia', 'htmlArquivado', 'botaoArquivar'], {
+    const ctx = carregar('admin/index.html', ['escapeHtml', 'linkSeguro', 'botaoLinkFornecedor', 'variacaoCusto', 'htmlVariacao', 'htmlUltimaCompra', 'contarFotos', 'atualizarBarraAcertoEstoque', 'anuncioPorId', 'temPrecoPromocional', 'htmlPromocaoProduto', 'renderizarTabela', 'agruparCoresPorModelo', 'nomeDoModelo', 'htmlLinhaModeloCores', 'htmlLinhaProduto', 'htmlEmConferencia', 'htmlArquivado', 'botaoArquivar', 'ehSobEncomendaAdmin', 'seloSobEncomenda', 'ajudaSobEncomenda', 'textoEstoqueAdmin'], {
       URL,
       // Acerto de estoque ligado: a caixinha de marcar leva o nome do produto
       modoAcertoEstoque: true,
@@ -172,7 +172,7 @@ describe('painel (admin/index.html) escapa dados de produto', () => {
 
   it('na linha do modelo com as cores juntas', () => {
     const tabelaProdutos = elemento();
-    const ctx = carregar('admin/index.html', ['escapeHtml', 'linkSeguro', 'botaoLinkFornecedor', 'variacaoCusto', 'htmlVariacao', 'htmlUltimaCompra', 'contarFotos', 'atualizarBarraAcertoEstoque', 'anuncioPorId', 'temPrecoPromocional', 'htmlPromocaoProduto', 'renderizarTabela', 'agruparCoresPorModelo', 'nomeDoModelo', 'htmlLinhaModeloCores', 'htmlLinhaProduto', 'htmlEmConferencia', 'htmlArquivado', 'botaoArquivar'], {
+    const ctx = carregar('admin/index.html', ['escapeHtml', 'linkSeguro', 'botaoLinkFornecedor', 'variacaoCusto', 'htmlVariacao', 'htmlUltimaCompra', 'contarFotos', 'atualizarBarraAcertoEstoque', 'anuncioPorId', 'temPrecoPromocional', 'htmlPromocaoProduto', 'renderizarTabela', 'agruparCoresPorModelo', 'nomeDoModelo', 'htmlLinhaModeloCores', 'htmlLinhaProduto', 'htmlEmConferencia', 'htmlArquivado', 'botaoArquivar', 'ehSobEncomendaAdmin', 'seloSobEncomenda', 'ajudaSobEncomenda', 'textoEstoqueAdmin'], {
       URL,
       modoAcertoEstoque: false,
       marcadosAcerto: new Set(),
