@@ -19,7 +19,7 @@ function extrairFuncao(nome) {
 }
 
 const funcoes = ['escapeHtml', 'linkSeguro', 'botaoLinkFornecedor', 'variacaoCusto', 'htmlVariacao', 'htmlUltimaCompra',
-  'formatarMedida', 'nomeArquivoSku', 'precoVendaPadrao', 'proximoSku', 'nomeCurtoDino', 'nomeTematico', 'produtoJaCadastrado', 'camposDaImportacao', 'aplicarImportacao', 'associarFotosPorSku', 'montarResumoMaleta', 'calcularAcerto'];
+  'formatarMedida', 'nomeArquivoSku', 'precoVendaPadrao', 'ehPolarizado', 'proximoSku', 'nomeCurtoDino', 'nomeTematico', 'produtoJaCadastrado', 'camposDaImportacao', 'aplicarImportacao', 'associarFotosPorSku', 'montarResumoMaleta', 'calcularAcerto'];
 const ctx = vm.createContext({ Number, String, Math, Map, Set, Object, URL, Intl });
 vm.runInContext(`
   const MAX_FOTOS = 4;
@@ -72,7 +72,7 @@ describe('painel: importação pelo link', () => {
   it('converte os dados importados para os campos do formulário', () => {
     const c = ctx.camposDaImportacao({ nome: 'Aviador', preco_custo: 79.9, codigo_fornecedor: 'CL-1', fornecedor: 'Clush', link_fornecedor: 'https://clush.com.br/p' });
     assert.deepEqual({ ...c }, {
-      nome: 'Aviador', nome_fornecedor: 'Aviador', preco_custo: '79.90', preco_venda: '179.90', imagem_fornecedor: '', codigo_fornecedor: 'CL-1', fornecedor: 'Clush', link_fornecedor: 'https://clush.com.br/p',
+      nome: 'Aviador', nome_fornecedor: 'Aviador', preco_custo: '79.90', preco_venda: '149.90', imagem_fornecedor: '', codigo_fornecedor: 'CL-1', fornecedor: 'Clush', link_fornecedor: 'https://clush.com.br/p',
       formato: '', estilo: '', cor_armacao: '', material: '', tipo: '', genero: '', diametro_cm: '', ponte_cm: '', largura_total_cm: '',
     });
     // Especificações da descrição: medidas com vírgula, gênero só se for um código válido
@@ -122,13 +122,28 @@ describe('painel: SKU, reposição e venda sugerida na importação', () => {
     assert.equal(ctx.camposDaImportacao({ nome: 'X', imagens: ['javascript:alert(1)'] }).imagem_fornecedor, '');
   });
 
-  it('preço de venda: custo + R$ 100,00', () => {
-    assert.equal(ctx.precoVendaPadrao(39.9), '139.90');
-    assert.equal(ctx.precoVendaPadrao('16.90'), '116.90');
+  it('preço de venda na loja de óculos: polarizado 169,90, os outros 149,90', () => {
+    assert.equal(ctx.precoVendaPadrao(39.9), '149.90');
+    assert.equal(ctx.precoVendaPadrao('16.90', true), '169.90');
     assert.equal(ctx.precoVendaPadrao(''), '');
-    assert.equal(ctx.precoVendaPadrao('abc'), '');
-    assert.equal(ctx.camposDaImportacao({ nome: 'X', preco_custo: 39.9, preco_venda_sugerido: { min: 59.9, max: 199.9 } }).preco_venda, '139.90');
+    assert.equal(ctx.precoVendaPadrao('abc', true), '');
+    assert.equal(ctx.ehPolarizado('', 'Óculos de Sol Aviador Polarizado'), true);
+    assert.equal(ctx.ehPolarizado('POLARIZADA UV400'), true);
+    assert.equal(ctx.ehPolarizado('UV400', 'Óculos Gatinho', undefined), false);
+    assert.equal(ctx.camposDaImportacao({ nome: 'X', preco_custo: 39.9, preco_venda_sugerido: { min: 59.9, max: 199.9 } }).preco_venda, '149.90');
+    assert.equal(ctx.camposDaImportacao({ nome: 'X', preco_custo: 39.9, tipo: 'Polarizado UV400' }).preco_venda, '169.90');
     assert.equal(ctx.camposDaImportacao({ nome: 'X', preco_custo: null }).preco_venda, '');
+  });
+
+  it('preço de venda nas outras lojas: custo + R$ 100,00', () => {
+    ctx.nichoPainel = () => 'roupas';
+    try {
+      assert.equal(ctx.precoVendaPadrao(39.9), '139.90');
+      assert.equal(ctx.precoVendaPadrao('16.90', true), '116.90');
+      assert.equal(ctx.precoVendaPadrao(''), '');
+    } finally {
+      delete ctx.nichoPainel;
+    }
   });
 
   it('próximo SKU segue a sequência mais usada, contando as linhas do lote', () => {

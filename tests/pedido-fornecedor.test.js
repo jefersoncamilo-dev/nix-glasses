@@ -301,7 +301,7 @@ function extrairFuncao(nome) {
     else if (html[i] === '}' && --nivel === 0) return html.slice(inicio, i + 1);
   }
 }
-const funcoes = ['lerTotaisDigitados', 'totalPagoPedidoForn', 'somarPedidosForn', 'lerPreco', 'lerDataCompra', 'precoVendaPadrao', 'proximoSku', 'nomeCurtoDino', 'nomeTematico', 'semAcentoPf', 'normalizarCodigoForn',
+const funcoes = ['lerTotaisDigitados', 'totalPagoPedidoForn', 'somarPedidosForn', 'lerPreco', 'lerDataCompra', 'precoVendaPadrao', 'ehPolarizado', 'proximoSku', 'nomeCurtoDino', 'nomeTematico', 'semAcentoPf', 'normalizarCodigoForn',
   'candidatosDoItem', 'itemPedidoForn', 'recalcularItensPedidoForn', 'montarLancamentoPedidoForn'];
 const ctx = vm.createContext({ Number, String, Math, Map, Set, Object, Date });
 const j = (v) => JSON.parse(JSON.stringify(v));
@@ -378,7 +378,11 @@ describe('painel: pedido do fornecedor', () => {
     ctx.recalcularItensPedidoForn(itens, produtos, 'Tassia');
     assert.equal(itens[0].nome, 'Nix Bronto Vogue - Royal Gold / Green');
     assert.equal(itens[0].sku, 'NIX-VOG-BRO-GLD-GRN');
-    assert.equal(itens[0].venda, '129,90');
+    assert.equal(itens[0].venda, '149,90');
+    const polarizado = ctx.itemPedidoForn(lido({ descricao: 'Óculos de Sol Vogue • XFG976 • Metal • Polarizado', tipo: 'Polarizado' }), [], produtos, [], 'Tassia');
+    polarizado.destino = 'novo';
+    ctx.recalcularItensPedidoForn([polarizado], produtos, 'Tassia');
+    assert.equal(polarizado.venda, '169,90');
     assert.equal(itens[0].codigoNovo, 'XFG976-GLD-GRN');
     assert.equal(itens[1].sku, itens[0].sku);
     assert.equal(itens[2].codigoNovo, 'NV 560');
