@@ -135,11 +135,14 @@ describe('vitrine (index.html) escapa dados de produto', () => {
 
 describe('painel (admin/index.html) escapa dados de produto', () => {
   const formatarMoeda = v => `R$ ${v}`;
+  // Selo "Ajustar: ..." dos produtos em conferência (tem teste próprio em pendencias-conferencia.test.js)
+  const PENDENCIAS_CTX = { NOMES_CURTOS_PADRAO: ['Deinony'], PRECO_PADRAO_OCULOS: { polarizado: 169.9, comum: 149.9 }, nichoPainel: () => 'oculos', rotulosPainel: () => ({}) };
 
   it('na tabela de produtos', () => {
     const tabelaProdutos = elemento();
-    const ctx = carregar('admin/index.html', ['escapeHtml', 'linkSeguro', 'botaoLinkFornecedor', 'variacaoCusto', 'htmlVariacao', 'htmlUltimaCompra', 'contarFotos', 'atualizarBarraAcertoEstoque', 'anuncioPorId', 'temPrecoPromocional', 'htmlPromocaoProduto', 'renderizarTabela', 'agruparCoresPorModelo', 'nomeDoModelo', 'htmlLinhaModeloCores', 'htmlLinhaProduto', 'htmlEmConferencia', 'htmlArquivado', 'botaoArquivar', 'ehSobEncomendaAdmin', 'seloSobEncomenda', 'ajudaSobEncomenda', 'textoEstoqueAdmin'], {
+    const ctx = carregar('admin/index.html', ['escapeHtml', 'linkSeguro', 'botaoLinkFornecedor', 'variacaoCusto', 'htmlVariacao', 'htmlUltimaCompra', 'contarFotos', 'atualizarBarraAcertoEstoque', 'anuncioPorId', 'temPrecoPromocional', 'htmlPromocaoProduto', 'renderizarTabela', 'agruparCoresPorModelo', 'nomeDoModelo', 'htmlLinhaModeloCores', 'htmlLinhaProduto', 'htmlEmConferencia', 'htmlArquivado', 'botaoArquivar', 'ehSobEncomendaAdmin', 'seloSobEncomenda', 'ajudaSobEncomenda', 'textoEstoqueAdmin', 'atualizarAvisoPendencias', 'itensComPendencias', 'htmlPendencias', 'pendenciasConferencia', 'pendenciasProduto', 'pendenciasDasCores'], {
       URL,
+      ...PENDENCIAS_CTX,
       // Acerto de estoque ligado: a caixinha de marcar leva o nome do produto
       modoAcertoEstoque: true,
       marcadosAcerto: new Set([7]),
@@ -172,8 +175,9 @@ describe('painel (admin/index.html) escapa dados de produto', () => {
 
   it('na linha do modelo com as cores juntas', () => {
     const tabelaProdutos = elemento();
-    const ctx = carregar('admin/index.html', ['escapeHtml', 'linkSeguro', 'botaoLinkFornecedor', 'variacaoCusto', 'htmlVariacao', 'htmlUltimaCompra', 'contarFotos', 'atualizarBarraAcertoEstoque', 'anuncioPorId', 'temPrecoPromocional', 'htmlPromocaoProduto', 'renderizarTabela', 'agruparCoresPorModelo', 'nomeDoModelo', 'htmlLinhaModeloCores', 'htmlLinhaProduto', 'htmlEmConferencia', 'htmlArquivado', 'botaoArquivar', 'ehSobEncomendaAdmin', 'seloSobEncomenda', 'ajudaSobEncomenda', 'textoEstoqueAdmin'], {
+    const ctx = carregar('admin/index.html', ['escapeHtml', 'linkSeguro', 'botaoLinkFornecedor', 'variacaoCusto', 'htmlVariacao', 'htmlUltimaCompra', 'contarFotos', 'atualizarBarraAcertoEstoque', 'anuncioPorId', 'temPrecoPromocional', 'htmlPromocaoProduto', 'renderizarTabela', 'agruparCoresPorModelo', 'nomeDoModelo', 'htmlLinhaModeloCores', 'htmlLinhaProduto', 'htmlEmConferencia', 'htmlArquivado', 'botaoArquivar', 'ehSobEncomendaAdmin', 'seloSobEncomenda', 'ajudaSobEncomenda', 'textoEstoqueAdmin', 'atualizarAvisoPendencias', 'itensComPendencias', 'htmlPendencias', 'pendenciasConferencia', 'pendenciasProduto', 'pendenciasDasCores'], {
       URL,
+      ...PENDENCIAS_CTX,
       modoAcertoEstoque: false,
       marcadosAcerto: new Set(),
       btnExcluirMarcados: elemento(),

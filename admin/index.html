@@ -147,6 +147,7 @@
             <option value="CONDICIONAL">Condicional</option>
             <option value="ESGOTADO">Esgotado</option>
             <option value="EM_CONFERENCIA">Em conferência (fora da vitrine)</option>
+            <option value="PENDENCIAS">Em conferência com campos a ajustar</option>
             <option value="ARQUIVADO">Arquivados</option>
           </select>
           <select id="filtroDisponibilidadeAdmin" class="w-full sm:w-auto px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500">
@@ -179,6 +180,15 @@
               <button id="btnSairAcertoEstoque" type="button" class="text-sm text-gray-600 hover:text-gray-900 px-2 py-2 font-medium">Sair</button>
             </div>
           </div>
+        </div>
+
+        <!-- Em conferência: quantos produtos ainda têm campos a ajustar antes de ir para a vitrine -->
+        <div id="avisoPendenciasConferencia" class="hidden bg-amber-50 border border-amber-200 rounded-xl p-4 mb-4 flex flex-col sm:flex-row sm:items-center gap-3">
+          <div class="flex-1 min-w-0">
+            <p id="avisoPendenciasTitulo" class="font-semibold text-amber-900"></p>
+            <p id="avisoPendenciasTexto" class="text-sm text-amber-800"></p>
+          </div>
+          <button id="btnVerPendencias" type="button" class="shrink-0 bg-amber-600 hover:bg-amber-700 text-white px-4 py-2 rounded-lg text-sm font-medium">Ver os que precisam de ajuste</button>
         </div>
 
         <!-- Botão que acompanha a rolagem enquanto há produtos marcados -->
@@ -1499,6 +1509,11 @@
       </div>
       <form id="formProduto" class="p-6 overflow-y-auto flex-1 space-y-4">
         <input type="hidden" id="produtoId">
+        <!-- Em conferência: o que falta ajustar antes de liberar na vitrine (atualiza enquanto você edita) -->
+        <div id="pendenciasForm" class="hidden rounded-lg border p-3" role="status" aria-live="polite">
+          <p id="pendenciasFormTitulo" class="text-sm font-semibold"></p>
+          <ul id="pendenciasFormLista" class="mt-1 text-sm list-disc pl-5 space-y-0.5"></ul>
+        </div>
         <div class="bg-orange-50 border border-orange-200 rounded-lg p-3">
           <label for="importarUrl" class="block text-sm font-medium text-gray-800 mb-1">Importar do link do fornecedor</label>
           <div class="flex flex-col sm:flex-row gap-2">
@@ -1678,6 +1693,24 @@
           <button type="submit" class="w-full sm:w-auto bg-orange-500 hover:bg-orange-600 text-white px-6 py-2 rounded-lg font-medium transition-colors">Salvar</button>
         </div>
       </form>
+    </div>
+  </div>
+
+  <!-- Liberar na vitrine com campos a ajustar: mostra o que falta e deixa liberar mesmo assim -->
+  <div id="modalLiberarPendencias" class="fixed inset-0 modal-overlay bg-black/50 hidden z-50 flex items-center justify-center p-4">
+    <div class="bg-white rounded-2xl max-w-lg w-full max-h-[90vh] overflow-hidden flex flex-col">
+      <div class="flex items-center justify-between p-6 border-b border-gray-200">
+        <div class="min-w-0">
+          <h3 class="text-xl font-bold text-gray-900">Ainda tem campos a ajustar</h3>
+          <p id="liberarPendenciasResumo" class="text-sm text-gray-500"></p>
+        </div>
+        <button type="button" data-fechar-modal="modalLiberarPendencias" class="p-2 text-gray-500 hover:text-gray-700 rounded-lg hover:bg-gray-100" aria-label="Fechar"><svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg></button>
+      </div>
+      <div id="liberarPendenciasLista" class="p-6 overflow-y-auto flex-1 space-y-3"></div>
+      <div class="p-4 border-t border-gray-200 flex flex-col-reverse sm:flex-row sm:justify-end gap-2">
+        <button type="button" id="btnAjustarPendencias" class="w-full sm:w-auto px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50">Ajustar agora</button>
+        <button type="button" id="btnLiberarMesmoAssim" class="w-full sm:w-auto bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg font-medium">Liberar mesmo assim</button>
+      </div>
     </div>
   </div>
 
@@ -3504,11 +3537,15 @@
       const fornecedorFiltro = filtroFornecedorAdmin.value;
       const busca = buscaAdmin.value.toLowerCase();
 
+      // Em conferência com campos a ajustar (o modelo com cores entra inteiro)
+      const comPendencia = new Set(statusFiltro === 'PENDENCIAS' ? itensComPendencias(todosProdutos).flat().map(p => Number(p.id)) : []);
+      atualizarAvisoPendencias();
       const filtrados = todosProdutos.filter(p => {
         if (fornecedorFiltro && p.fornecedor !== fornecedorFiltro) return false;
         // Arquivados só aparecem no filtro Arquivados
         if (statusFiltro === 'ARQUIVADO') { if (!p.arquivado) return false; }
         else if (p.arquivado) return false;
+        else if (statusFiltro === 'PENDENCIAS') { if (!comPendencia.has(Number(p.id))) return false; }
         else if (statusFiltro === 'EM_CONFERENCIA' ? !p.em_conferencia : statusFiltro && p.status !== statusFiltro) return false;
         if (disponibilidadeFiltro && (p.disponibilidade || 'PRONTA_ENTREGA') !== disponibilidadeFiltro) return false;
         if (formatoFiltro && p.formato !== formatoFiltro) return false;
@@ -3571,15 +3608,121 @@
       return ehSobEncomendaAdmin(p) ? 'sob encomenda, sem estoque físico' : `${Number(p.estoque) || 0} em estoque`;
     }
 
+    // ---------- Em conferência: campos a ajustar antes de liberar na vitrine ----------
+    // Nome curto no padrão Nix: um dinossauro raro da linha do formato (tabela do Jefe em
+    // nomes-modelos/tabela-nomes.md), com ou sem número no fim ("Deinony 2").
+    const NOMES_CURTOS_PADRAO = [
+      'Deinony', 'Troodon', 'Cerato', 'Utah', 'Triássico', 'Megaptor', 'Concaven', 'Pyroraptor', 'Dakotaraptor',
+      'Velocis', 'Austro', 'Buitre', 'Microraptor', 'Linheraptor',
+      'Dimorph', 'Quetzal', 'Rhampho', 'Zhenyue', 'Tapejara', 'Alanqa', 'Haopterus', 'Nycto', 'Tupan', 'Anhanga',
+      'Thalasso', 'Caiuajara', 'Pterodaustro', 'Hatzeg',
+      'Styraco', 'Carnot', 'Bary', 'Pachy', 'Giga', 'Ankylos', 'Carnotaur', 'Shantung', 'Torvos', 'Zuul', 'Nodo',
+      'Sauropel', 'Edmonto', 'Kentro', 'Gastonia',
+      'Amargas', 'Patago', 'Mosas', 'Fossil', 'Nautilus', 'Diplodoc', 'Brontops', 'Ovirapt', 'Amber',
+      'Ammonite', 'Trilobit', 'Saltasaur', 'Argento', 'Dreadnou',
+    ];
+    // Preço de venda padrão dos óculos (Jefe, 2026-11-12): polarizado 169,90, os outros 149,90
+    const PRECO_PADRAO_OCULOS = { polarizado: 169.90, comum: 149.90 };
+
+    // Produto (ou os valores do formulário) -> lista do que ajustar:
+    // [{ campo, rotulo, motivo, grave }]. `grave`: falta algo que a vitrine usa (selo vermelho);
+    // os outros são avisos (amarelo). Nome curto e preço padrão só valem na loja de óculos.
+    function pendenciasProduto(p, nicho = nichoPainel()) {
+      const lista = [];
+      const txt = v => String(v ?? '').trim();
+      const semAcento = t => txt(t).normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+      const add = (campo, rotulo, motivo, grave = false) => lista.push({ campo, rotulo, motivo, grave });
+      const oculos = nicho === 'oculos';
+      const curto = txt(p.nome_curto);
+      if (!curto) add('nome_curto', 'nome curto', 'Nome curto vazio: o card da vitrine mostra o nome completo', oculos);
+      else if (oculos) {
+        const base = semAcento(curto).replace(/\s+\d+$/, '');
+        if (!NOMES_CURTOS_PADRAO.some(n => semAcento(n) === base)) add('nome_curto', 'nome curto', `Nome curto "${curto}" fora do padrão dos dinossauros`);
+      }
+      const venda = Number(p.preco_venda);
+      if (!(venda > 0)) add('preco_venda', 'preço', 'Sem preço de venda', true);
+      else if (oculos) {
+        const polarizado = [p.tipo, p.nome_fornecedor, p.nome].some(t => /polariz/i.test(String(t || '')));
+        const padrao = polarizado ? PRECO_PADRAO_OCULOS.polarizado : PRECO_PADRAO_OCULOS.comum;
+        if (Math.abs(venda - padrao) > 0.004) {
+          add('preco_venda', 'preço', `Preço ${formatarMoeda(venda)} diferente do padrão ${formatarMoeda(padrao)} (${polarizado ? 'polarizado' : 'não polarizado'})`);
+        }
+      }
+      if (!(Number(p.preco_custo) > 0)) add('preco_custo', 'custo', 'Sem preço de custo (o lucro nas Métricas fica errado)');
+      if (!txt(p.genero)) add('genero', 'gênero', 'Sem gênero: só aparece em Todos, não em Feminino nem Masculino', true);
+      const r = typeof rotulosPainel === 'function' ? rotulosPainel() : {};
+      if (!txt(p.formato)) add('formato', String(r.formato || 'formato').toLowerCase(), `Sem ${String(r.formato || 'formato').toLowerCase()}: fica fora dos filtros da vitrine`, true);
+      if (!txt(p.tipo)) add('tipo', String(r.tipo || 'tipo').toLowerCase(), `${r.tipo || 'Tipo'} vazio (aparece no card)`);
+      if (!txt(p.material)) add('material', String(r.material || 'material').toLowerCase(), `${r.material || 'Material'} vazio (aparece no card)`);
+      if (!txt(p.codigo_fornecedor)) add('codigo_fornecedor', 'código fornec.', 'Sem código do fornecedor (para repor e conferir pedido)');
+      return lista;
+    }
+
+    // Foto e quantidade são de cada cor: "foto (Preto)", "quantidade (Preto, Azul)"
+    function pendenciasDasCores(produtos) {
+      const lista = [];
+      const nomeCor = c => String(c.cor_armacao || c.codigo_sku || '').trim();
+      const semFoto = produtos.filter(c => !c.imagem_url);
+      const semQtd = produtos.filter(c => !ehSobEncomendaAdmin(c) && !(Number(c.estoque) > 0) && !(Number(c.em_maleta) > 0));
+      const varias = produtos.length > 1;
+      if (semFoto.length) lista.push({ campo: 'foto', rotulo: 'foto', grave: true, motivo: varias ? `Sem foto: ${semFoto.map(nomeCor).join(', ')}` : 'Sem foto' });
+      if (semQtd.length) lista.push({ campo: 'estoque', rotulo: 'quantidade', grave: true, motivo: varias ? `Sem quantidade (0 peças): ${semQtd.map(nomeCor).join(', ')}` : 'Sem quantidade (0 peças): entra na vitrine como esgotado' });
+      return lista;
+    }
+
+    // Tudo o que ajustar num produto ou num modelo com cores (campos do cadastro + cada cor)
+    function pendenciasConferencia(produtos) {
+      if (!produtos.length) return [];
+      return [...pendenciasProduto(produtos[0]), ...pendenciasDasCores(produtos)];
+    }
+
+    // Selo "AJUSTAR: nome curto, preço, gênero" (vermelho com falta grave, amarelo só avisos).
+    // Toque abre a edição, que destaca os campos.
+    function htmlPendencias(produtos) {
+      const emConf = produtos.filter(p => p.em_conferencia);
+      if (!emConf.length) return '';
+      const pend = pendenciasConferencia(emConf);
+      if (!pend.length) return `<span class="block w-max mt-1 px-2 py-1 text-xs font-medium rounded-full bg-green-100 text-green-800" data-pendencias="0" title="Todos os campos conferidos">✓ Pronto para liberar</span>`;
+      const grave = pend.some(x => x.grave);
+      const rotulos = [...new Set(pend.map(x => x.rotulo))];
+      return `<button type="button" onclick="editarProduto(${Number(emConf[0].id)})" data-pendencias="${pend.length}" class="block text-left max-w-[16rem] mt-1 px-2 py-1 text-xs font-semibold rounded-lg border ${grave ? 'bg-red-50 text-red-800 border-red-200 hover:bg-red-100' : 'bg-amber-50 text-amber-900 border-amber-200 hover:bg-amber-100'}" title="${escapeHtml(pend.map(x => '• ' + x.motivo).join('\n'))}">Ajustar: ${escapeHtml(rotulos.join(', '))}</button>`;
+    }
+
+    // Itens em conferência da lista (um por modelo com cores) que ainda têm o que ajustar
+    function itensComPendencias(produtos) {
+      const emConf = produtos.filter(p => p.em_conferencia && !p.arquivado);
+      return agruparCoresPorModelo(emConf).map(item => item.cores || [item.produto]).filter(g => pendenciasConferencia(g).length);
+    }
+
+    function atualizarAvisoPendencias() {
+      const caixa = document.getElementById('avisoPendenciasConferencia');
+      if (!caixa) return;
+      const grupos = itensComPendencias(todosProdutos);
+      const noFiltro = filtroStatusAdmin.value === 'PENDENCIAS';
+      caixa.classList.toggle('hidden', !grupos.length || modoAcertoEstoque);
+      if (!grupos.length) return;
+      const contagem = new Map();
+      grupos.forEach(g => new Set(pendenciasConferencia(g).map(x => x.rotulo)).forEach(r => contagem.set(r, (contagem.get(r) || 0) + 1)));
+      document.getElementById('avisoPendenciasTitulo').textContent = `${grupos.length} ${grupos.length === 1 ? 'produto em conferência precisa' : 'produtos em conferência precisam'} de ajuste antes de ir para a vitrine`;
+      document.getElementById('avisoPendenciasTexto').textContent = [...contagem].sort((a, b) => b[1] - a[1]).map(([r, n]) => `${r} (${n})`).join(' • ');
+      const btn = document.getElementById('btnVerPendencias');
+      btn.textContent = noFiltro ? 'Ver todos os produtos' : 'Ver os que precisam de ajuste';
+    }
+    document.getElementById('btnVerPendencias').addEventListener('click', () => {
+      filtroStatusAdmin.value = filtroStatusAdmin.value === 'PENDENCIAS' ? '' : 'PENDENCIAS';
+      renderizarTabela();
+    });
+
     // Selo "Em conferência" (importado pelo link, fora da vitrine) com o botão para liberar
     function htmlEmConferencia(produtos) {
       const ids = produtos.filter(p => p.em_conferencia).map(p => Number(p.id));
       if (!ids.length) return '';
       return `<span class="block w-max mt-1 px-2 py-1 text-xs font-medium rounded-full bg-amber-100 text-amber-800" data-em-conferencia title="Importado pelo link: não aparece na vitrine até liberar">EM CONFERÊNCIA${produtos.length > 1 ? ` (${ids.length})` : ''}</span>
+            ${htmlPendencias(produtos)}
             <button type="button" onclick="liberarConferencia([${ids.join(',')}])" class="block mt-1 px-2 py-1 text-xs font-medium rounded-lg bg-green-600 text-white hover:bg-green-700" title="Conferido: mostrar na vitrine">Liberar na vitrine</button>`;
     }
 
-    window.liberarConferencia = async (ids) => {
+    async function enviarLiberacao(ids) {
       try {
         const res = await fetchAdmin('/api/admin/produtos/conferencia', {
           method: 'POST',
@@ -3592,7 +3735,68 @@
       } catch (err) {
         mostrarToast(err.message, 'error');
       }
+    }
+
+    // Liberar: sem pendências vai direto; com pendências mostra o que falta e deixa
+    // ajustar agora ou liberar mesmo assim
+    let liberacaoPendente = null;
+    window.liberarConferencia = (ids) => {
+      const produtos = ids.map(id => todosProdutos.find(p => Number(p.id) === Number(id))).filter(Boolean);
+      const pend = pendenciasConferencia(produtos);
+      if (!pend.length) return enviarLiberacao(ids);
+      liberacaoPendente = { ids, primeiro: produtos[0] };
+      const nome = produtos.length > 1 ? nomeDoModelo(produtos[0]) : produtos[0].nome;
+      document.getElementById('liberarPendenciasResumo').textContent = `${nome}${produtos.length > 1 ? ` • ${produtos.length} cores` : ''}`;
+      document.getElementById('liberarPendenciasLista').innerHTML = `
+        <ul class="space-y-2">${pend.map(x => `
+          <li class="flex gap-2 items-start text-sm ${x.grave ? 'text-red-800' : 'text-amber-900'}" data-pendencia="${escapeHtml(x.campo)}">
+            <span class="mt-0.5 shrink-0 w-2.5 h-2.5 rounded-full ${x.grave ? 'bg-red-500' : 'bg-amber-400'}"></span>${escapeHtml(x.motivo)}
+          </li>`).join('')}
+        </ul>
+        <p class="text-xs text-gray-500">Vermelho: falta algo que a vitrine usa. Amarelo: fora do padrão. Você pode liberar mesmo assim e ajustar depois.</p>`;
+      abrirModalSimples('modalLiberarPendencias');
     };
+    document.getElementById('btnLiberarMesmoAssim').addEventListener('click', () => {
+      fecharModalSimples('modalLiberarPendencias');
+      if (liberacaoPendente) enviarLiberacao(liberacaoPendente.ids);
+      liberacaoPendente = null;
+    });
+    document.getElementById('btnAjustarPendencias').addEventListener('click', () => {
+      fecharModalSimples('modalLiberarPendencias');
+      if (liberacaoPendente) window.editarProduto(liberacaoPendente.primeiro.id);
+      liberacaoPendente = null;
+    });
+
+    // No Editar produto de um item em conferência: caixa com o que falta e os campos marcados,
+    // atualizando enquanto você digita. Foto e quantidade vêm do cadastro salvo (de cada cor).
+    const CAMPOS_PENDENCIA_FORM = ['nome_curto', 'preco_venda', 'preco_custo', 'genero', 'formato', 'tipo', 'material', 'codigo_fornecedor'];
+    function atualizarPendenciasForm() {
+      const caixa = document.getElementById('pendenciasForm');
+      const ativo = !!(produtoEditando && produtoEditando.em_conferencia);
+      CAMPOS_PENDENCIA_FORM.forEach(c => {
+        const el = document.getElementById(c);
+        el.classList.remove('border-red-400', 'bg-red-50', 'border-amber-400', 'bg-amber-50');
+        el.removeAttribute('data-pendente');
+      });
+      caixa.classList.toggle('hidden', !ativo);
+      if (!ativo) return;
+      const valores = Object.fromEntries([...CAMPOS_PENDENCIA_FORM, 'nome', 'nome_fornecedor'].map(c => [c, document.getElementById(c).value]));
+      const cores = coresModelo.length ? coresModelo.map(c => c.produto) : [produtoEditando];
+      const pend = [...pendenciasProduto(valores), ...pendenciasDasCores(cores)];
+      pend.forEach(x => {
+        const el = document.getElementById(x.campo);
+        if (!el || !CAMPOS_PENDENCIA_FORM.includes(x.campo)) return;
+        el.classList.add(x.grave ? 'border-red-400' : 'border-amber-400', x.grave ? 'bg-red-50' : 'bg-amber-50');
+        el.setAttribute('data-pendente', x.grave ? 'grave' : 'aviso');
+      });
+      const grave = pend.some(x => x.grave);
+      caixa.className = `rounded-lg border p-3 ${!pend.length ? 'bg-green-50 border-green-200 text-green-800' : grave ? 'bg-red-50 border-red-200 text-red-800' : 'bg-amber-50 border-amber-200 text-amber-900'}`;
+      document.getElementById('pendenciasFormTitulo').textContent = pend.length
+        ? `Em conferência: ajuste ${pend.length === 1 ? 'este campo' : `estes ${pend.length} campos`} antes de liberar na vitrine`
+        : 'Em conferência: tudo conferido. Salve e toque em Liberar na vitrine.';
+      document.getElementById('pendenciasFormLista').innerHTML = pend.map(x => `<li data-pendencia="${escapeHtml(x.campo)}">${escapeHtml(x.motivo)}</li>`).join('');
+    }
+    CAMPOS_PENDENCIA_FORM.forEach(c => document.getElementById(c).addEventListener(document.getElementById(c).tagName === 'SELECT' ? 'change' : 'input', atualizarPendenciasForm));
 
     // Selo "Arquivado" (fora da lista, da vitrine e das Métricas; volta com Desarquivar)
     function htmlArquivado(produtos) {
@@ -4343,6 +4547,7 @@
       atualizarAvisoSinal();
       atualizarAbrirLink();
       preencherPromocaoProduto(produto);
+      atualizarPendenciasForm();
       document.getElementById('importarStatus').textContent = 'Preenche nome fornec., custo, código, link e as especificações da descrição (medidas, material, formato...). Confira antes de salvar.';
       modalProduto.classList.remove('hidden');
       document.body.style.overflow = 'hidden';
@@ -5024,7 +5229,7 @@
       document.body.style.overflow = '';
     }
     document.querySelectorAll('[data-fechar-modal]').forEach(btn => btn.addEventListener('click', () => fecharModalSimples(btn.dataset.fecharModal)));
-    ['modalReposicao', 'modalFotosSku', 'modalResumoMaleta', 'modalFechamento', 'modalEncomenda'].forEach(id => {
+    ['modalReposicao', 'modalFotosSku', 'modalResumoMaleta', 'modalFechamento', 'modalEncomenda', 'modalLiberarPendencias'].forEach(id => {
       const el = document.getElementById(id);
       el.addEventListener('click', (e) => { if (e.target === el) fecharModalSimples(id); });
     });
