@@ -586,6 +586,12 @@
             <button id="btnNovaEncomenda" class="bg-orange-500 hover:bg-orange-600 text-white px-4 py-2 rounded-lg font-medium transition-colors">Nova encomenda</button>
           </div>
         </div>
+        <!-- Aguardando pedido: encomendas ainda não pedidas, por fornecedor, com o pedido mínimo -->
+        <section id="filaEncomendas" class="mb-6 hidden" aria-labelledby="filaEncomendasTitulo">
+          <h4 id="filaEncomendasTitulo" class="text-base font-semibold text-gray-900">Aguardando pedido ao fornecedor</h4>
+          <p class="text-sm text-gray-500 mb-3">Encomendas que você ainda não pediu, somadas pelo <strong>preço de custo</strong>. Quando fechar o mínimo, marque as que vão no pedido, copie a lista e marque como pedido.</p>
+          <div id="filaEncomendasGrupos" class="grid lg:grid-cols-2 gap-4"></div>
+        </section>
         <div id="filtrosStatusEncomenda" class="flex flex-wrap gap-2 mb-4"></div>
         <div id="listaEncomendas" class="grid lg:grid-cols-2 gap-4"></div>
       </div>
@@ -1621,16 +1627,20 @@
           </fieldset>
           <div id="campoEstoqueProduto">
             <label for="estoque" class="block text-sm font-medium text-gray-700 mb-1">Estoque (peças na loja) *</label>
-            <input type="number" id="estoque" name="estoque" min="0" step="1" value="1" required class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500">
-            <p id="estoqueMaleta" class="text-xs text-gray-500 mt-1">O status sai do estoque: com peça na loja fica Disponível; zerado, Esgotado.</p>
+            <div id="estoqueCaixa">
+              <input type="number" id="estoque" name="estoque" min="0" step="1" value="1" required class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500">
+              <p id="estoqueMaleta" class="text-xs text-gray-500 mt-1">O status sai do estoque: com peça na loja fica Disponível; zerado, Esgotado.</p>
+            </div>
+            <!-- Sob Encomenda: não tem peça para contar (o cadastro guarda 1 só para aparecer na vitrine) -->
+            <p id="estoqueEncomenda" class="hidden px-4 py-2 rounded-lg border border-blue-200 bg-blue-50 text-sm font-medium text-blue-800">Sem estoque físico</p>
           </div>
           <div id="campoDisponibilidadeProduto">
             <label class="block text-sm font-medium text-gray-700 mb-1">Disponibilidade *</label>
             <select id="disponibilidade" name="disponibilidade" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500" required>
               <option value="PRONTA_ENTREGA">Pronta Entrega</option>
-              <option value="SOB_ENCOMENDA">Sob Encomenda (50% de sinal)</option>
+              <option value="SOB_ENCOMENDA">Sob Encomenda (sem estoque físico)</option>
             </select>
-            <p id="avisoSinal" class="text-xs text-blue-700 mt-1 hidden"></p>
+            <p id="avisoSinal" class="text-xs text-blue-800 mt-1 hidden"></p>
           </div>
           <!-- Promoção: o selo do anúncio escolhido vai no canto da foto na vitrine, e o
                produto entra no botão da promoção da tela inicial (Configurações > POP Anúncio) -->
@@ -2962,14 +2972,27 @@
       return l;
     }
 
+    // Sob Encomenda guarda 1 no estoque (só para aparecer na vitrine). Voltando para Pronta
+    // Entrega, o estoque volta ao que era (ou 0, se já era Sob Encomenda: não tinha peça)
+    function ajustarEstoqueEdicao(l) {
+      const original = originaisEdicao.get(l.id);
+      if (l.disponibilidade === 'SOB_ENCOMENDA') l.estoque = '1';
+      else l.estoque = !original || original.disponibilidade === 'SOB_ENCOMENDA' ? '0' : original.estoque;
+    }
+
     function linhaEdicaoAlterada(l, original) {
       return !!original && COLUNAS_EDICAO.some(c => String(l[c.campo] ?? '').trim() !== String(original[c.campo] ?? '').trim());
     }
 
     // Erros de uma linha da edição: as regras do cadastro em lote + estoque
-    function validarLinhaEdicao(l) {
+    // original = a linha como veio do banco (para não virar Sob Encomenda com peça na loja)
+    function validarLinhaEdicao(l, original) {
       const erros = { ...validarLote([{ ...l, quantidade: '', data_compra: '' }])[0] };
       if (!/^\d{1,6}$/.test(String(l.estoque ?? '').trim())) erros.estoque = 'Estoque inválido (número inteiro a partir de 0)';
+      const pecasAntes = original && original.disponibilidade !== 'SOB_ENCOMENDA' ? Number(original.estoque) || 0 : 0;
+      if (l.disponibilidade === 'SOB_ENCOMENDA' && pecasAntes > 0) {
+        erros.disponibilidade = `Ainda tem ${pecasAntes} peça(s) na loja: venda ou dê baixa antes (Produtos > Conferência de estoque). Sob Encomenda é sem estoque físico.`;
+      }
       const promo = String(l.preco_promocional ?? '').trim();
       if (promo) {
         const n = lerPreco(promo);
@@ -3016,6 +3039,8 @@
     function valorOrdenacaoEdicao(l, campo) {
       const v = String(l[campo] ?? '').trim();
       if (!v) return null;
+      // Sob Encomenda não tem peça: no fim, como estoque vazio
+      if (campo === 'estoque' && l.disponibilidade === 'SOB_ENCOMENDA') return null;
       if (CAMPOS_NUMERO_EDICAO.includes(campo)) {
         const n = CAMPOS_MEDIDA.includes(campo) ? lerMedida(v) : campo === 'estoque' ? Number(v) : lerPreco(v);
         return Number.isFinite(n) ? n : null;
@@ -3057,6 +3082,7 @@
         const antes = JSON.stringify([l[campo], l.preco_promocional]);
         l[campo] = valor;
         if (campo === 'anuncio_id' && !valor) l.preco_promocional = '';
+        if (campo === 'disponibilidade' && typeof ajustarEstoqueEdicao === 'function') ajustarEstoqueEdicao(l);
         if (JSON.stringify([l[campo], l.preco_promocional]) !== antes) mudou++;
       });
       return mudou;
@@ -3101,6 +3127,10 @@
         const erro = erros[col.campo];
         const borda = erro ? 'border-red-500 bg-red-50' : 'border-gray-300';
         const attrs = `data-id="${l.id}" data-campo="${col.campo}" class="edicao-campo ${col.largura} px-2 py-1.5 border ${borda} rounded focus:outline-none focus:ring-2 focus:ring-orange-500" title="${escapeHtml(erro || '')}"`;
+        // Sob Encomenda: não tem peça para digitar
+        if (col.campo === 'estoque' && l.disponibilidade === 'SOB_ENCOMENDA') {
+          return `<td class="px-2 py-2 align-top"><span data-estoque-encomenda class="inline-block ${col.largura} px-2 py-1 rounded border border-blue-200 bg-blue-50 text-[11px] leading-tight text-blue-800" title="${ajudaSobEncomenda()}">sem estoque físico</span></td>`;
+        }
         return `<td class="px-2 py-2 align-top">${htmlCampoEdicao(col, String(l[col.campo] ?? ''), attrs)}</td>`;
       }).join('');
       const mensagens = Object.values(erros);
@@ -3173,14 +3203,15 @@
       } else {
         tabelaEdicao.innerHTML = agruparLinhasEdicao(linhas, grupoEdicao, v => rotuloGrupoEdicao(grupoEdicao, v)).map(g => {
           const fechado = gruposFechadosEdicao.has(g.chave);
-          const estoque = g.linhas.reduce((s, l) => s + (Number(l.estoque) || 0), 0);
+          const estoque = g.linhas.reduce((s, l) => s + (l.disponibilidade === 'SOB_ENCOMENDA' ? 0 : Number(l.estoque) || 0), 0);
+          const nEnc = g.linhas.filter(l => l.disponibilidade === 'SOB_ENCOMENDA').length;
           const alteradas = g.linhas.filter(l => linhaEdicaoAlterada(l, originaisEdicao.get(l.id))).length;
           return `
         <tr class="edicao-grupo bg-gray-100 border-t-2 border-gray-300">
           <td colspan="${total}" class="px-3 py-2">
             <div class="sticky left-3 inline-flex flex-wrap items-center gap-3">
               <button type="button" data-grupo-edicao="${escapeHtml(g.chave)}" class="font-semibold text-gray-900 hover:text-orange-700" aria-expanded="${!fechado}">${fechado ? '▸' : '▾'} ${escapeHtml(g.titulo)}</button>
-              <span class="text-xs text-gray-600">${g.linhas.length} produto(s) • ${estoque} peça(s) na loja${alteradas ? ` • <span class="text-amber-700 font-medium">${alteradas} alterado(s)</span>` : ''}</span>
+              <span class="text-xs text-gray-600">${g.linhas.length} produto(s) • ${estoque} peça(s) na loja${nEnc ? ` • ${nEnc} sob encomenda (sem estoque físico)` : ''}${alteradas ? ` • <span class="text-amber-700 font-medium">${alteradas} alterado(s)</span>` : ''}</span>
               ${massaCampo ? `<button type="button" data-massa-grupo="${escapeHtml(g.chave)}" class="px-2 py-1 text-xs border border-gray-400 rounded-md bg-white hover:bg-gray-50">Aplicar neste grupo</button>` : ''}
             </div>
           </td>
@@ -3243,6 +3274,17 @@
       const l = linhasEdicao.find(x => x.id === Number(el.dataset.id));
       if (!l) return;
       l[el.dataset.campo] = el.value;
+      // Trocou a disponibilidade: o Estoque vira "sem estoque físico" (ou volta a ser número)
+      if (el.dataset.campo === 'disponibilidade') {
+        ajustarEstoqueEdicao(l);
+        const td = el.closest('tr').querySelector('[data-campo="estoque"], [data-estoque-encomenda]')?.closest('td');
+        if (td) {
+          const tmp = document.createElement('tbody');
+          tmp.innerHTML = htmlLinhaEdicao(l);
+          const novo = tmp.querySelector('tr').children[td.cellIndex];
+          if (novo) td.replaceWith(novo);
+        }
+      }
       // Sem promoção não tem preço promocional
       if (el.dataset.campo === 'anuncio_id' && !el.value && l.preco_promocional) {
         l.preco_promocional = '';
@@ -3315,7 +3357,7 @@
       if (alteradas.length > MAX_LOTE) return mostrarToast(`Máximo de ${MAX_LOTE} produtos alterados por vez`, 'error');
       errosEdicao = {};
       alteradas.forEach(l => {
-        const erros = validarLinhaEdicao(l);
+        const erros = validarLinhaEdicao(l, originaisEdicao.get(l.id));
         if (Object.keys(erros).length) errosEdicao[l.id] = erros;
       });
       if (Object.keys(errosEdicao).length) {
@@ -3511,6 +3553,24 @@
       return itens;
     }
 
+    // ---------- Sob Encomenda no painel ----------
+    // Sob Encomenda não tem peça de verdade: a cliente paga parte do sinal (50%) e só
+    // então o pedido vai para o fornecedor. O estoque do cadastro dele (1) só deixa o
+    // produto aparecer na vitrine: não é peça, e não conta no estoque, no relatório nem nas Métricas.
+    function ajudaSobEncomenda() {
+      return 'Sem estoque físico. Você recebe parte do sinal e só então faz o pedido ao fornecedor.';
+    }
+    function ehSobEncomendaAdmin(p) {
+      return !!p && p.disponibilidade === 'SOB_ENCOMENDA';
+    }
+    function seloSobEncomenda(extra = '') {
+      return `<span data-selo-encomenda class="inline-block w-max px-2 py-1 text-xs font-medium rounded-full bg-blue-100 text-blue-800 border border-blue-200${extra ? ' ' + extra : ''}" title="${ajudaSobEncomenda()}">SOB ENCOMENDA · sem estoque físico</span>`;
+    }
+    // "3 em estoque" ou, no Sob Encomenda, "sem estoque físico"
+    function textoEstoqueAdmin(p) {
+      return ehSobEncomendaAdmin(p) ? 'sob encomenda, sem estoque físico' : `${Number(p.estoque) || 0} em estoque`;
+    }
+
     // Selo "Em conferência" (importado pelo link, fora da vitrine) com o botão para liberar
     function htmlEmConferencia(produtos) {
       const ids = produtos.filter(p => p.em_conferencia).map(p => Number(p.id));
@@ -3561,16 +3621,21 @@
     // Linha de um modelo com cores: estoque por cor (cada cor abre a edição dela) e total
     function htmlLinhaModeloCores(item) {
       const p = item.cores[0];
-      const estoque = item.cores.reduce((t, c) => t + (Number(c.estoque) || 0), 0);
+      // Cor Sob Encomenda não tem peça: fica fora da soma do estoque
+      const estoque = item.cores.reduce((t, c) => t + (ehSobEncomendaAdmin(c) ? 0 : Number(c.estoque) || 0), 0);
+      const nEncomenda = item.cores.filter(ehSobEncomendaAdmin).length;
       const emMaleta = item.cores.reduce((t, c) => t + (Number(c.em_maleta) || 0), 0);
       const status = item.cores.some(c => c.status === 'DISPONIVEL') ? 'DISPONIVEL' : item.cores.some(c => c.status === 'CONDICIONAL') ? 'CONDICIONAL' : 'ESGOTADO';
       const comFoto = item.cores.find(c => c.imagem_url) || p;
       const precos = [...new Set(item.cores.map(c => Number(c.preco_venda) || 0))];
-      const chips = item.cores.map(c => `
-              <button type="button" onclick="editarProduto(${Number(c.id)})" data-cor-produto="${Number(c.id)}" class="inline-flex items-center gap-1 pl-0.5 pr-2 py-0.5 border ${Number(c.estoque) > 0 ? 'border-gray-300' : 'border-red-200 bg-red-50'} rounded-full text-xs text-gray-700 hover:border-orange-400" title="Editar a cor ${escapeHtml(c.cor_armacao || c.codigo_sku)} (${escapeHtml(c.codigo_sku)})">
+      const chips = item.cores.map(c => {
+        const enc = ehSobEncomendaAdmin(c);
+        return `
+              <button type="button" onclick="editarProduto(${Number(c.id)})" data-cor-produto="${Number(c.id)}" class="inline-flex items-center gap-1 pl-0.5 pr-2 py-0.5 border ${enc ? 'border-blue-200 bg-blue-50' : Number(c.estoque) > 0 ? 'border-gray-300' : 'border-red-200 bg-red-50'} rounded-full text-xs text-gray-700 hover:border-orange-400" title="Editar a cor ${escapeHtml(c.cor_armacao || c.codigo_sku)} (${escapeHtml(c.codigo_sku)})${enc ? ' · Sob Encomenda: sem estoque físico' : ''}">
                 ${c.imagem_url ? `<img src="${escapeHtml(c.imagem_url)}" alt="" class="w-5 h-5 rounded-full object-cover" onerror="imgFallback(this)">` : '<span class="w-5 h-5 rounded-full bg-gray-200"></span>'}
-                ${escapeHtml(c.cor_armacao || c.codigo_sku)} <strong class="${Number(c.estoque) > 0 ? 'text-gray-900' : 'text-red-600'}">${Number(c.estoque) || 0}</strong>
-              </button>`).join('');
+                ${escapeHtml(c.cor_armacao || c.codigo_sku)} ${enc ? '<strong class="text-blue-700">encomenda</strong>' : `<strong class="${Number(c.estoque) > 0 ? 'text-gray-900' : 'text-red-600'}">${Number(c.estoque) || 0}</strong>`}
+              </button>`;
+      }).join('');
       return `
         <tr class="hover:bg-gray-50" data-modelo-cores="${escapeHtml(item.grade)}">
           <td class="px-4 sm:px-6 py-4 relative">
@@ -3594,8 +3659,8 @@
             <span class="px-2 py-1 text-xs font-medium rounded-full ${statusClass(status)}">${escapeHtml(status)}</span>
             ${htmlEmConferencia(item.cores)}
             ${htmlArquivado(item.cores)}
-            <span class="block mt-1 text-xs text-gray-500">${estoque} em estoque (todas as cores)${emMaleta ? ` • ${emMaleta} em maleta` : ''}</span>
-            ${p.disponibilidade === 'SOB_ENCOMENDA' ? '<span class="block w-max mt-1 px-2 py-1 text-xs font-medium rounded-full bg-blue-100 text-blue-700">SOB ENCOMENDA</span>' : ''}
+            <span class="block mt-1 text-xs text-gray-500">${nEncomenda === item.cores.length ? 'Sob encomenda, sem estoque físico' : `${estoque} em estoque (${nEncomenda ? 'cores pronta entrega' : 'todas as cores'})`}${nEncomenda && nEncomenda < item.cores.length ? ` • ${nEncomenda} ${nEncomenda === 1 ? 'cor' : 'cores'} sob encomenda` : ''}${emMaleta ? ` • ${emMaleta} em maleta` : ''}</span>
+            ${nEncomenda ? seloSobEncomenda('block mt-1') : ''}
             ${htmlPromocaoProduto(p)}
           </td>
           <td class="hidden sm:table-cell px-4 sm:px-6 py-4 text-gray-900 font-medium">${item.cores.reduce((t, c) => t + (Number(c.vezes_em_maleta) || 0), 0)}</td>
@@ -3634,11 +3699,11 @@
             ${htmlUltimaCompra(p)}
           </td>
           <td class="px-4 sm:px-6 py-4">
-            <span class="px-2 py-1 text-xs font-medium rounded-full ${statusClass(p.status)}">${escapeHtml(p.status)}</span>
+            ${ehSobEncomendaAdmin(p) && p.status === 'DISPONIVEL' ? seloSobEncomenda() : `<span class="px-2 py-1 text-xs font-medium rounded-full ${statusClass(p.status)}">${escapeHtml(p.status)}</span>`}
             ${htmlEmConferencia([p])}
             ${htmlArquivado([p])}
-            <span class="block mt-1 text-xs text-gray-500">${Number(p.estoque) || 0} em estoque${Number(p.em_maleta) ? ` • ${Number(p.em_maleta)} em maleta` : ''}</span>
-            ${p.disponibilidade === 'SOB_ENCOMENDA' ? '<span class="block w-max mt-1 px-2 py-1 text-xs font-medium rounded-full bg-blue-100 text-blue-700">SOB ENCOMENDA</span>' : ''}
+            <span class="block mt-1 text-xs ${ehSobEncomendaAdmin(p) ? 'text-blue-700' : 'text-gray-500'}">${ehSobEncomendaAdmin(p) ? 'Sem estoque físico: pede ao fornecedor depois do sinal' : textoEstoqueAdmin(p)}${Number(p.em_maleta) ? ` • ${Number(p.em_maleta)} em maleta` : ''}</span>
+            ${ehSobEncomendaAdmin(p) && p.status !== 'DISPONIVEL' ? seloSobEncomenda('block mt-1') : ''}
             ${htmlPromocaoProduto(p)}
           </td>
           <td class="hidden sm:table-cell px-4 sm:px-6 py-4 text-gray-900 font-medium">${Number(p.vezes_em_maleta) || 0}</td>
@@ -3715,7 +3780,7 @@
     }
 
     const ROTULO_STATUS_RELATORIO = { DISPONIVEL: 'Disponível', CONDICIONAL: 'Condicional', ESGOTADO: 'Esgotado' };
-    const rotuloDisponibilidade = (d) => d === 'SOB_ENCOMENDA' ? 'Sob Encomenda' : 'Pronta Entrega';
+    const rotuloDisponibilidade = (d) => d === 'SOB_ENCOMENDA' ? 'Sob Encomenda (sem estoque físico)' : 'Pronta Entrega';
 
     // Planilha (CSV com ; e vírgula decimal, como o Excel em português abre)
     function csvRelatorioEstoque(lista, rotuloFormato = 'Formato') {
@@ -3742,7 +3807,7 @@
     }
 
     function notaEncomendasRelatorio(n) {
-      return n ? `${n} ${n === 1 ? 'produto Sob Encomenda não entra' : 'produtos Sob Encomenda não entram'} em peças, valor investido, venda nem lucro: ainda não ${n === 1 ? 'foi comprado' : 'foram comprados'} (só conta peça dele que estiver em maleta).` : '';
+      return n ? `${n} ${n === 1 ? 'produto Sob Encomenda não entra' : 'produtos Sob Encomenda não entram'} em peças, valor investido, venda nem lucro: não ${n === 1 ? 'tem' : 'têm'} estoque físico (o pedido ao fornecedor só sai depois do sinal da cliente; só conta peça que estiver em maleta).` : '';
     }
 
     function atualizarRelatorioEstoque(lista) {
@@ -4029,14 +4094,26 @@
         </div>`).join('');
       coresForm.forEach((c, i) => {
         lista.querySelector(`[data-cor-nome="${i}"]`).value = c.cor;
-        lista.querySelector(`[data-cor-estoque="${i}"]`).value = c.estoque;
+        const qtd = lista.querySelector(`[data-cor-estoque="${i}"]`);
         lista.querySelector(`[data-cor-disp="${i}"]`).value = c.disponibilidade || 'PRONTA_ENTREGA';
-        lista.querySelector(`[data-cor-estoque="${i}"]`).disabled = c.disponibilidade === 'ESGOTADO';
+        marcarQtdCor(qtd, c.disponibilidade, c.estoque);
         const img = lista.querySelector(`[data-cor-linha="${i}"] [data-cor-foto]`);
         if (img) img.src = URL.createObjectURL(c.file);
       });
       document.getElementById('btnAdicionarCor').classList.toggle('hidden', coresForm.length >= MAX_CORES);
       atualizarResumoCores();
+    }
+
+    // Campo Qtd de uma cor: Esgotado fica 0 e travado; Sob Encomenda fica vazio e travado
+    // (sem estoque físico: vai gravado com 1 só para aparecer na vitrine)
+    function marcarQtdCor(qtd, disponibilidade, estoque) {
+      const enc = disponibilidade === 'SOB_ENCOMENDA';
+      qtd.value = enc ? '' : disponibilidade === 'ESGOTADO' ? '0' : estoque;
+      qtd.disabled = enc || disponibilidade === 'ESGOTADO';
+      qtd.placeholder = enc ? 'sem estoque' : 'Qtd';
+      qtd.title = enc ? 'Sob Encomenda: sem estoque físico. Você recebe parte do sinal e só então faz o pedido ao fornecedor.' : '';
+      qtd.classList.toggle('bg-blue-50', enc);
+      qtd.classList.toggle('text-[11px]', enc);
     }
 
     // ---------- Cores de um modelo já cadastrado (edição): [{ produto, cor, estoque, disponibilidade }] ----------
@@ -4070,9 +4147,7 @@
         </div>`).join('');
       coresModelo.forEach((c, i) => {
         caixa.querySelector(`[data-modelo-cor="${i}"]`).value = c.cor;
-        const qtd = caixa.querySelector(`[data-modelo-estoque="${i}"]`);
-        qtd.value = c.disponibilidade === 'ESGOTADO' ? '0' : c.estoque;
-        qtd.disabled = c.disponibilidade === 'ESGOTADO';
+        marcarQtdCor(caixa.querySelector(`[data-modelo-estoque="${i}"]`), c.disponibilidade, c.estoque);
         caixa.querySelector(`[data-modelo-disp="${i}"]`).value = c.disponibilidade;
       });
     }
@@ -4084,7 +4159,8 @@
       const saida = [];
       for (const c of cores) {
         const cor = String(c.cor || '').trim();
-        const estoque = c.disponibilidade === 'ESGOTADO' ? 0 : Number(String(c.estoque ?? '').trim() || 0);
+        // Sob Encomenda: sem estoque físico, grava 1 só para aparecer na vitrine
+        const estoque = c.disponibilidade === 'ESGOTADO' ? 0 : c.disponibilidade === 'SOB_ENCOMENDA' ? 1 : Number(String(c.estoque ?? '').trim() || 0);
         if (!cor || vistos.has(cor.toLowerCase()) || !Number.isInteger(estoque) || estoque < 0) return null;
         vistos.add(cor.toLowerCase());
         saida.push({ produto: c.produto, cor, estoque, disponibilidade: c.disponibilidade === 'SOB_ENCOMENDA' ? 'SOB_ENCOMENDA' : 'PRONTA_ENTREGA' });
@@ -4128,7 +4204,7 @@
         const qtd = String(c.estoque ?? '').trim();
         if (!cor && !qtd && !c.file) continue;
         const disponibilidade = c.disponibilidade || 'PRONTA_ENTREGA';
-        const estoque = qtd === '' || disponibilidade === 'ESGOTADO' ? 0 : Number(qtd);
+        const estoque = disponibilidade === 'SOB_ENCOMENDA' ? 1 : qtd === '' || disponibilidade === 'ESGOTADO' ? 0 : Number(qtd);
         if (!cor || !Number.isInteger(estoque) || estoque < 0 || vistos.has(cor.toLowerCase())) return null;
         vistos.add(cor.toLowerCase());
         cores.push({ cor, estoque, disponibilidade, file: c.file || null });
@@ -4145,7 +4221,8 @@
       else if (!cores.length) resumo.textContent = '';
       else {
         const semFoto = cores.filter(c => !c.file).length;
-        resumo.textContent = `Vai cadastrar ${cores.length} cor(es), ${cores.reduce((t, c) => t + c.estoque, 0)} peça(s): ${cores.map(c => `${sku}-${skuCor(c.cor)} (${c.estoque})`).join(', ')}. ${produtoEditando ? ' Elas são incluídas ao salvar.' : ' O estoque e a cor lá de cima não valem: cada cor usa os seus.'}${semFoto ? ` ${semFoto} cor(es) sem foto usam a foto 1.` : ''}`;
+        const enc = (c) => c.disponibilidade === 'SOB_ENCOMENDA';
+        resumo.textContent = `Vai cadastrar ${cores.length} cor(es), ${cores.reduce((t, c) => t + (enc(c) ? 0 : c.estoque), 0)} peça(s): ${cores.map(c => `${sku}-${skuCor(c.cor)} (${enc(c) ? 'sob encomenda, sem estoque físico' : c.estoque})`).join(', ')}. ${produtoEditando ? ' Elas são incluídas ao salvar.' : ' O estoque e a cor lá de cima não valem: cada cor usa os seus.'}${semFoto ? ` ${semFoto} cor(es) sem foto usam a foto 1.` : ''}`;
       }
     }
 
@@ -4246,7 +4323,7 @@
       if (produto) {
         const grade = String(produto.grade || '').trim();
         const doModelo = grade ? todosProdutos.filter(p => String(p.grade || '').trim() === grade) : [produto];
-        const lista = doModelo.map(p => `${p.cor_armacao || 'sem cor'} (${Number(p.estoque) || 0})`).join(', ');
+        const lista = doModelo.map(p => `${p.cor_armacao || 'sem cor'} (${ehSobEncomendaAdmin(p) ? 'sob encomenda' : Number(p.estoque) || 0})`).join(', ');
         document.getElementById('coresExistentes').textContent = `Cores que o modelo já tem: ${lista}.`;
       }
       // Modelo com cores: um cadastro só (preços e especificações valem para todas as cores)
@@ -4271,13 +4348,27 @@
       document.body.style.overflow = 'hidden';
     }
 
-    // Mostra no formulário quanto fica o sinal (50%, arredondado para centavos)
+    // Sob Encomenda no formulário: explica que não tem estoque físico, mostra quanto fica
+    // o sinal (50%, arredondado para centavos) e troca o campo Estoque por "Sem estoque físico"
+    function textoAvisoSinal(preco) {
+      return `${ajudaSobEncomenda()} Sinal de ${formatarMoeda(Math.round((Number(preco) || 0) * 50) / 100)} (50%) + restante na entrega. Não conta como peça no estoque, no relatório nem nas Métricas.`;
+    }
     function atualizarAvisoSinal() {
       const aviso = document.getElementById('avisoSinal');
       const encomenda = document.getElementById('disponibilidade').value === 'SOB_ENCOMENDA';
-      const preco = Number(document.getElementById('preco_venda').value) || 0;
-      aviso.textContent = `Sinal de ${formatarMoeda(Math.round(preco * 50) / 100)} + restante na entrega.`;
+      aviso.textContent = textoAvisoSinal(document.getElementById('preco_venda').value);
       aviso.classList.toggle('hidden', !encomenda);
+      document.getElementById('estoqueCaixa').classList.toggle('hidden', encomenda);
+      document.getElementById('estoqueEncomenda').classList.toggle('hidden', !encomenda);
+      document.getElementById('estoque').required = !encomenda;
+    }
+
+    // Produto com peça de verdade na loja não vira Sob Encomenda direto: as peças sumiriam
+    // do estoque. Mesma regra da Conferência de estoque. Devolve a mensagem ou ''.
+    function erroVirarEncomenda(original, disponibilidade) {
+      if (!original || disponibilidade !== 'SOB_ENCOMENDA' || ehSobEncomendaAdmin(original)) return '';
+      const n = Number(original.estoque) || 0;
+      return n > 0 ? `${original.cor_armacao ? original.cor_armacao + ': a' : 'A'}inda tem ${n} peça(s) na loja. Venda ou dê baixa antes (Produtos > Conferência de estoque) ou deixe Pronta Entrega: Sob Encomenda é sem estoque físico.` : '';
     }
     // Botão "Abrir ↗" ao lado do link do fornecedor no formulário
     function atualizarAbrirLink() {
@@ -4764,6 +4855,12 @@
         const val = document.getElementById(field).value;
         if (val) formData.append(field, val);
       });
+      // Sob Encomenda não tem peça: o cadastro guarda 1 só para o produto aparecer na vitrine
+      if (document.getElementById('disponibilidade').value === 'SOB_ENCOMENDA' && !(id && coresModelo.length)) {
+        const erro = erroVirarEncomenda(id ? produtoEditando : null, 'SOB_ENCOMENDA');
+        if (erro) return mostrarToast(erro, 'error');
+        formData.set('estoque', '1');
+      }
       // Sempre enviados, para que apagar o fornecedor ou uma especificação na edição também valha
       ['nome_curto', 'fornecedor', 'codigo_fornecedor', 'nome_fornecedor', 'link_fornecedor', ...CAMPOS_MEDIDA, 'material', 'tipo', 'genero', 'tamanho', 'grade'].forEach(field => formData.append(field, document.getElementById(field).value.trim()));
       // Promoção: marcada pede qual; desmarcada tira a promoção
@@ -4821,6 +4918,10 @@
       // cores; cada cor guarda a sua quantidade e disponibilidade (e o seu SKU por dentro)
       const modelo = id && coresModelo.length ? lerCoresModelo(coresModelo, coresNovas) : null;
       if (id && coresModelo.length && !modelo) return mostrarToast('Confira as cores do modelo: cada cor com nome, uma vez só, e a quantidade em número', 'error');
+      for (const c of (modelo || [])) {
+        const erro = erroVirarEncomenda(c.produto, c.disponibilidade);
+        if (erro) return mostrarToast(erro, 'error');
+      }
       const nomeModelo = document.getElementById('nome').value.trim();
       if (modelo) {
         formData.set('nome', `${nomeModelo} - ${modelo[0].cor}`);
@@ -5578,7 +5679,7 @@
         // Sob Encomenda ainda não foi comprado: fica fora de estoque, investido e lucro
         const nEnc = Number(m.modelosSobEncomenda) || 0;
         const nota = document.getElementById('notaMetricasEncomenda');
-        nota.textContent = nEnc ? `${nEnc} ${nEnc === 1 ? 'produto Sob Encomenda não entra' : 'produtos Sob Encomenda não entram'} em estoque, valor investido nem lucro: ainda não foram comprados.` : '';
+        nota.textContent = nEnc ? `${nEnc} ${nEnc === 1 ? 'produto Sob Encomenda não entra' : 'produtos Sob Encomenda não entram'} em estoque, valor investido nem lucro: não ${nEnc === 1 ? 'tem' : 'têm'} estoque físico (o pedido ao fornecedor só sai depois do sinal da cliente).` : '';
         nota.classList.toggle('hidden', !nEnc);
         const desde = document.getElementById('metricasDesde');
         desde.textContent = m.metricasDesde ? 'Contando desde ' + formatarDataHora(m.metricasDesde) + ' (testes limpos)' : '';
@@ -6243,6 +6344,7 @@
           <p class="text-sm text-gray-700">${escapeHtml(e.nome_cliente || 'Sem nome')}${e.telefone ? ' • ' + escapeHtml(e.telefone) : ''}</p>
           ${e.especificacoes ? `<p class="text-sm text-gray-600 mt-1 whitespace-pre-line">${escapeHtml(e.especificacoes)}</p>` : ''}
           ${e.observacoes ? `<p class="text-xs text-gray-500 mt-1 whitespace-pre-line">Obs.: ${escapeHtml(e.observacoes)}</p>` : ''}
+          ${e.pedido_fornecedor_em ? `<p data-pedida-fornecedor class="text-xs text-indigo-700 mt-1">Pedida ao fornecedor em ${escapeHtml(formatarData(e.pedido_fornecedor_em))}${e.pedido_fornecedor_ref ? ` · pedido ${escapeHtml(e.pedido_fornecedor_ref)}` : ''}</p>` : ''}
           <div class="mt-3 grid grid-cols-3 gap-2 text-sm">
             <div><p class="text-xs text-gray-500">Valor</p><p class="font-medium text-gray-900">${formatarMoeda(valor)}</p></div>
             <div><p class="text-xs text-gray-500">Sinal pago</p><p class="font-medium text-gray-900">${formatarMoeda(sinal)}</p></div>
@@ -6251,6 +6353,7 @@
           <div class="mt-3 flex flex-wrap gap-2">
             ${proximo ? `<button type="button" data-status-encomenda="${id}" data-novo-status="${proximo[0]}" class="px-3 py-1.5 bg-orange-500 hover:bg-orange-600 text-white rounded-lg text-sm font-medium">${proximo[1]}</button>` : ''}
             ${e.status === 'PRONTO_ENTREGA' && e.telefone ? `<button type="button" data-avisar-encomenda="${id}" class="px-3 py-1.5 bg-green-500 hover:bg-green-600 text-white rounded-lg text-sm font-medium">Avisar no WhatsApp</button>` : ''}
+            ${e.pedido_fornecedor_em && e.status === 'AGUARDANDO_FABRICANTE' ? `<button type="button" data-desfazer-pedido="${id}" class="px-3 py-1.5 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 text-sm font-medium" title="Volta para Aguardando pedido">Desfazer pedido</button>` : ''}
             <button type="button" data-editar-encomenda="${id}" class="px-3 py-1.5 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 text-sm font-medium">Editar</button>
             <button type="button" data-excluir-encomenda="${id}" class="ml-auto px-3 py-1.5 border border-red-200 text-red-600 rounded-lg hover:bg-red-50 text-sm font-medium" title="Excluir definitivamente">Excluir</button>
           </div>
@@ -6301,6 +6404,7 @@
         if (!res.ok) throw new Error('Erro ao carregar encomendas');
         todasEncomendas = await res.json();
         mostrarEncomendas();
+        await carregarFilaEncomendas();
       } catch (err) {
         console.error(err);
         mostrarToast('Erro ao carregar encomendas', 'error');
@@ -6379,6 +6483,18 @@
         if (e) abrirResumoMaleta(`Aviso da encomenda #${Number(e.id)}`, textoAvisoEncomenda(e), e.telefone);
         return;
       }
+      const desfazer = ev.target.closest('[data-desfazer-pedido]');
+      if (desfazer) {
+        try {
+          await marcarPedidoFornecedor([Number(desfazer.dataset.desfazerPedido)], { desfazer: true });
+          mostrarToast('A encomenda voltou para Aguardando pedido');
+        } catch (err) {
+          mostrarToast(err.message, 'error');
+        }
+        await carregarEncomendas();
+        if (perfilAtual) await carregarPerfil(perfilAtual.cliente.id, false);
+        return;
+      }
       const passo = ev.target.closest('[data-status-encomenda]');
       if (!passo || passo.disabled) return;
       passo.disabled = true;
@@ -6393,6 +6509,208 @@
       if (perfilAtual) await carregarPerfil(perfilAtual.cliente.id, false);
     }
     document.getElementById('listaEncomendas').addEventListener('click', aoClicarEncomenda);
+
+    // ---------- Encomendas: aguardando pedido ao fornecedor (pedido mínimo) ----------
+    // A fila vem pronta do servidor (fila-encomendas.js): por fornecedor, custo somado,
+    // quanto falta para o mínimo e para a personalização grátis. Aqui só se escolhe
+    // quais vão no pedido (todas marcadas de início), copia a lista e marca como pedido.
+    let filaEncomendas = [];
+    const desmarcadasFila = new Set();
+
+    // Cor só quando o nome ainda não diz ("Nix Rex Aviador - Preto" já tem a cor)
+    const corForaDoNome = (e) => e.cor && !String(e.modelo || '').toLowerCase().includes(String(e.cor).toLowerCase());
+    const moedaOuTraco = (v) => (v === null || v === undefined ? 'sem custo' : formatarMoeda(v));
+
+    // Marcadas de um grupo e a soma do custo delas
+    function marcadasDoGrupo(g) {
+      const itens = g.encomendas.filter(e => !desmarcadasFila.has(Number(e.id)));
+      return { itens, custo: Math.round(itens.reduce((t, e) => t + Math.round((Number(e.custo) || 0) * 100), 0)) / 100 };
+    }
+
+    // Avisos do pedido mínimo e da personalização, a partir de um custo em R$
+    function avisosPedidoMinimo(regra, custo) {
+      const c = Math.round((Number(custo) || 0) * 100);
+      const minimo = Math.round((Number(regra.minimo) || 0) * 100);
+      const gratis = Math.round((Number(regra.personalizacao_gratis) || 0) * 100);
+      const taxa = Number(regra.taxa_personalizacao) || 0;
+      const avisos = [];
+      if (minimo) {
+        avisos.push(c >= minimo
+          ? { ok: true, texto: `Pedido mínimo de ${formatarMoeda(minimo / 100)} atingido` }
+          : { ok: false, texto: `Faltam ${formatarMoeda((minimo - c) / 100)} para o pedido mínimo de ${formatarMoeda(minimo / 100)}` });
+      }
+      if (gratis) {
+        avisos.push(c >= gratis
+          ? { ok: true, texto: `Personalização grátis (a partir de ${formatarMoeda(gratis / 100)})` }
+          : { ok: false, texto: `Faltam ${formatarMoeda((gratis - c) / 100)} para a personalização grátis (${formatarMoeda(gratis / 100)})${taxa ? `. Abaixo disso, taxa de ${formatarMoeda(taxa)} paga à parte` : ''}` });
+      }
+      return avisos;
+    }
+
+    // Barra até o maior alvo (personalização grátis ou mínimo), com a marca do mínimo
+    function barraPedidoMinimo(regra, custo) {
+      const minimo = Number(regra.minimo) || 0;
+      const alvo = Math.max(minimo, Number(regra.personalizacao_gratis) || 0);
+      if (!alvo) return '';
+      const pct = Math.min(100, Math.round((Number(custo) || 0) / alvo * 100));
+      const marca = minimo && minimo < alvo ? Math.round(minimo / alvo * 100) : null;
+      const cor = (Number(custo) || 0) >= alvo ? 'bg-green-500' : (Number(custo) || 0) >= minimo ? 'bg-blue-500' : 'bg-orange-400';
+      return `
+        <div class="relative h-2.5 rounded-full bg-gray-100 mt-3" role="progressbar" aria-valuemin="0" aria-valuemax="${alvo}" aria-valuenow="${Number(custo) || 0}" aria-label="Custo das encomendas até ${formatarMoeda(alvo)}">
+          <div class="h-2.5 rounded-full ${cor}" style="width:${pct}%"></div>
+          ${marca !== null ? `<span class="absolute -top-1 w-0.5 bg-gray-500" style="left:${marca}%;height:18px" title="Pedido mínimo ${formatarMoeda(minimo)}"></span>` : ''}
+        </div>
+        <div class="flex justify-between text-[11px] text-gray-400 mt-1"><span>R$ 0</span>${marca !== null ? `<span>mínimo ${formatarMoeda(minimo)}</span>` : ''}<span>${formatarMoeda(alvo)}</span></div>`;
+    }
+
+    function htmlGrupoFila(g, i) {
+      const m = marcadasDoGrupo(g);
+      const avisos = g.sem_fornecedor ? [] : avisosPedidoMinimo(g.regra, m.custo);
+      const todas = m.itens.length === g.encomendas.length;
+      const regra = g.regra || {};
+      const v = (n) => (Number(n) ? String(Number(n)).replace('.', ',') : '');
+      return `
+        <div data-grupo-fila="${i}" class="bg-white rounded-xl border ${!g.sem_fornecedor && avisos.length && avisos[0].ok ? 'border-green-300' : 'border-gray-200'} p-4 sm:p-5">
+          <div class="flex justify-between gap-3">
+            <div class="min-w-0">
+              <p class="font-semibold text-gray-900">${escapeHtml(g.fornecedor)}</p>
+              <p class="text-xs text-gray-500">${g.pecas} encomenda${g.pecas === 1 ? '' : 's'} · custo ${formatarMoeda(g.custo_total)} · clientes pagam ${formatarMoeda(g.valor_clientes)}</p>
+            </div>
+            ${g.sem_fornecedor ? '' : `<button type="button" data-regras-fila="${i}" class="self-start text-xs text-orange-600 hover:underline whitespace-nowrap">Pedido mínimo</button>`}
+          </div>
+          ${g.sem_fornecedor ? '<p class="text-xs text-gray-500 mt-2">Encomendas lançadas à mão ou de produto sem fornecedor no cadastro: ligue o fornecedor no produto para entrarem na conta.</p>' : ''}
+          ${g.sem_fornecedor ? '' : barraPedidoMinimo(regra, m.custo)}
+          ${avisos.length ? `<ul class="mt-2 space-y-1 text-sm">${avisos.map(a => `<li data-aviso-minimo class="${a.ok ? 'text-green-700' : 'text-orange-700'}">${a.ok ? '✓' : '•'} ${escapeHtml(a.texto)}</li>`).join('')}</ul>` : ''}
+          ${!g.sem_fornecedor && !avisos.length ? '<p class="text-xs text-gray-500 mt-2">Sem pedido mínimo cadastrado para este fornecedor.</p>' : ''}
+          ${g.sem_custo ? `<p class="text-xs text-gray-500 mt-1">${g.sem_custo} encomenda${g.sem_custo === 1 ? '' : 's'} sem preço de custo (não entra${g.sem_custo === 1 ? '' : 'm'} na soma).</p>` : ''}
+          <form data-form-regras="${i}" class="hidden mt-3 p-3 rounded-lg bg-gray-50 grid grid-cols-3 gap-2 items-end">
+            <label class="text-xs text-gray-600">Pedido mínimo (R$)<input name="minimo" inputmode="decimal" value="${v(regra.minimo)}" class="mt-1 w-full px-2 py-1.5 border border-gray-300 rounded-lg text-sm"></label>
+            <label class="text-xs text-gray-600">Personaliz. grátis a partir de (R$)<input name="personalizacao_gratis" inputmode="decimal" value="${v(regra.personalizacao_gratis)}" class="mt-1 w-full px-2 py-1.5 border border-gray-300 rounded-lg text-sm"></label>
+            <label class="text-xs text-gray-600">Taxa abaixo disso (R$)<input name="taxa_personalizacao" inputmode="decimal" value="${v(regra.taxa_personalizacao)}" class="mt-1 w-full px-2 py-1.5 border border-gray-300 rounded-lg text-sm"></label>
+            <button type="submit" class="col-span-3 sm:col-span-1 px-3 py-1.5 bg-orange-500 hover:bg-orange-600 text-white rounded-lg text-sm font-medium">Salvar</button>
+          </form>
+          <label class="mt-3 flex items-center gap-2 text-xs text-gray-600 border-b border-gray-100 pb-2"><input type="checkbox" data-todas-fila="${i}" ${todas ? 'checked' : ''} class="h-4 w-4 accent-orange-500"> Marcar todas · ${m.itens.length} marcada${m.itens.length === 1 ? '' : 's'} · custo ${formatarMoeda(m.custo)}</label>
+          <ul class="divide-y divide-gray-100">
+            ${g.encomendas.map(e => `
+            <li><label class="flex gap-2 py-2 text-sm cursor-pointer">
+              <input type="checkbox" data-item-fila="${Number(e.id)}" ${desmarcadasFila.has(Number(e.id)) ? '' : 'checked'} class="mt-0.5 h-4 w-4 accent-orange-500 shrink-0">
+              <span class="min-w-0 flex-1">
+                <span class="block text-gray-900">${escapeHtml(e.modelo)}${corForaDoNome(e) ? ` · ${escapeHtml(e.cor)}` : ''}</span>
+                <span class="block text-xs text-gray-500">#${Number(e.id)} · ${escapeHtml(e.nome_cliente || 'Sem nome')}${e.codigo_fornecedor ? ` · cód. ${escapeHtml(e.codigo_fornecedor)}` : ''}${e.especificacoes ? ` · ${escapeHtml(e.especificacoes)}` : ''}</span>
+              </span>
+              <span class="text-right text-xs whitespace-nowrap"><span class="block font-medium text-gray-900">${escapeHtml(moedaOuTraco(e.custo))}</span><span class="block text-gray-400">${formatarData(e.created_at)}</span></span>
+            </label></li>`).join('')}
+          </ul>
+          <div class="mt-3 flex flex-wrap gap-2">
+            <button type="button" data-copiar-fila="${i}" ${m.itens.length ? '' : 'disabled'} class="px-3 py-1.5 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 text-sm font-medium disabled:opacity-50">Copiar lista do pedido</button>
+            <button type="button" data-pedir-fila="${i}" ${m.itens.length ? '' : 'disabled'} class="px-3 py-1.5 bg-orange-500 hover:bg-orange-600 text-white rounded-lg text-sm font-medium disabled:opacity-50">Marcar como pedido</button>
+          </div>
+        </div>`;
+    }
+
+    // Lista para montar o pedido no site do fornecedor
+    function textoPedidoFornecedor(g, itens) {
+      const custo = itens.reduce((t, e) => t + Math.round((Number(e.custo) || 0) * 100), 0) / 100;
+      let msg = `Pedido ${g.sem_fornecedor ? '' : `${g.fornecedor} `}- ${itens.length} peça${itens.length === 1 ? '' : 's'}\n\n`;
+      itens.forEach((e, i) => {
+        const nome = e.nome_fornecedor || e.modelo;
+        msg += `${i + 1}. ${nome}${e.codigo_fornecedor ? ` (cód. ${e.codigo_fornecedor})` : ''}${e.cor ? ` - cor ${e.cor}` : ''} - 1 un.${e.custo !== null && e.custo !== undefined ? ` - ${formatarMoeda(e.custo)}` : ''}\n`;
+        if (e.especificacoes) msg += `   ${e.especificacoes}\n`;
+        if (e.link_fornecedor) msg += `   ${e.link_fornecedor}\n`;
+      });
+      msg += `\nTotal de custo: ${formatarMoeda(custo)}\n`;
+      if (!g.sem_fornecedor) avisosPedidoMinimo(g.regra, custo).forEach(a => { msg += `${a.ok ? '✓' : '•'} ${a.texto}\n`; });
+      return msg;
+    }
+
+    function mostrarFilaEncomendas() {
+      const secao = document.getElementById('filaEncomendas');
+      secao.classList.toggle('hidden', !filaEncomendas.length);
+      document.getElementById('filaEncomendasGrupos').innerHTML = filaEncomendas.map(htmlGrupoFila).join('');
+    }
+
+    async function carregarFilaEncomendas() {
+      try {
+        const res = await fetchAdmin('/api/admin/encomendas/fila');
+        if (!res.ok) throw new Error('Erro ao carregar a fila');
+        filaEncomendas = (await res.json()).grupos || [];
+        const ids = new Set(filaEncomendas.flatMap(g => g.encomendas.map(e => Number(e.id))));
+        for (const id of [...desmarcadasFila]) if (!ids.has(id)) desmarcadasFila.delete(id);
+        mostrarFilaEncomendas();
+      } catch (err) {
+        console.error(err);
+      }
+    }
+
+    async function marcarPedidoFornecedor(ids, extra = {}) {
+      const res = await fetchAdmin('/api/admin/encomendas/pedido-fornecedor', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ids, ...extra }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || 'Erro ao marcar o pedido');
+      return data;
+    }
+
+    const gruposFila = document.getElementById('filaEncomendasGrupos');
+    gruposFila.addEventListener('change', (ev) => {
+      const item = ev.target.closest('[data-item-fila]');
+      const todas = ev.target.closest('[data-todas-fila]');
+      if (item) {
+        const id = Number(item.dataset.itemFila);
+        if (item.checked) desmarcadasFila.delete(id); else desmarcadasFila.add(id);
+      } else if (todas) {
+        for (const e of filaEncomendas[Number(todas.dataset.todasFila)].encomendas) {
+          if (todas.checked) desmarcadasFila.delete(Number(e.id)); else desmarcadasFila.add(Number(e.id));
+        }
+      } else return;
+      mostrarFilaEncomendas();
+    });
+    gruposFila.addEventListener('click', async (ev) => {
+      const regras = ev.target.closest('[data-regras-fila]');
+      if (regras) {
+        gruposFila.querySelector(`[data-form-regras="${Number(regras.dataset.regrasFila)}"]`).classList.toggle('hidden');
+        return;
+      }
+      const copiar = ev.target.closest('[data-copiar-fila]');
+      if (copiar) {
+        const g = filaEncomendas[Number(copiar.dataset.copiarFila)];
+        abrirResumoMaleta(`Pedido ao fornecedor: ${g.fornecedor}`, textoPedidoFornecedor(g, marcadasDoGrupo(g).itens), '');
+        return;
+      }
+      const pedir = ev.target.closest('[data-pedir-fila]');
+      if (!pedir || pedir.disabled) return;
+      const g = filaEncomendas[Number(pedir.dataset.pedirFila)];
+      const { itens, custo } = marcadasDoGrupo(g);
+      const pendente = !g.sem_fornecedor && avisosPedidoMinimo(g.regra, custo).find(a => !a.ok && /mínimo/.test(a.texto));
+      const referencia = prompt(`${pendente ? `Atenção: ${pendente.texto}.\n\n` : ''}Marcar ${itens.length} encomenda${itens.length === 1 ? '' : 's'} como pedida${itens.length === 1 ? '' : 's'} ao fornecedor.\nNúmero do pedido no site do fornecedor (opcional):`, '');
+      if (referencia === null) return;
+      pedir.disabled = true;
+      try {
+        const r = await marcarPedidoFornecedor(itens.map(e => Number(e.id)), { referencia });
+        mostrarToast(`${r.ids.length} encomenda${r.ids.length === 1 ? '' : 's'} marcada${r.ids.length === 1 ? '' : 's'} como pedida${r.ids.length === 1 ? '' : 's'}`);
+      } catch (err) {
+        mostrarToast(err.message, 'error');
+      }
+      await carregarEncomendas();
+    });
+    gruposFila.addEventListener('submit', async (ev) => {
+      const form = ev.target.closest('[data-form-regras]');
+      if (!form) return;
+      ev.preventDefault();
+      const g = filaEncomendas[Number(form.dataset.formRegras)];
+      const dados = Object.fromEntries(new FormData(form));
+      try {
+        const res = await fetchAdmin('/api/admin/encomendas/regras-fornecedor', {
+          method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ fornecedor: g.fornecedor, ...dados }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.error || 'Erro ao salvar');
+        mostrarToast(`Pedido mínimo de ${g.fornecedor} salvo`);
+        await carregarFilaEncomendas();
+      } catch (err) {
+        mostrarToast(err.message, 'error');
+      }
+    });
 
     // ---------- Perfil 360 da cliente ----------
     let perfilAtual = null;
@@ -8373,7 +8691,7 @@
       const liberados = conferidos.length - bloqueados.length;
       document.getElementById('listaArquivar').innerHTML = conferidos.map(p => `
         <li class="px-3 py-2 text-sm ${p.bloqueios.length ? 'bg-red-50' : ''}">
-          <p class="font-medium text-gray-900">${escapeHtml(nomeProdutoExclusao(p))} <span class="text-gray-500 font-normal">• ${escapeHtml(p.codigo_sku)} • ${Number(p.estoque) || 0} em estoque</span></p>
+          <p class="font-medium text-gray-900">${escapeHtml(nomeProdutoExclusao(p))} <span class="text-gray-500 font-normal">• ${escapeHtml(p.codigo_sku)} • ${escapeHtml(textoEstoqueAdmin(p))}</span></p>
           ${p.bloqueios.map(b => `<p class="text-red-700">Não pode arquivar: ${escapeHtml(b)}</p>`).join('')}
           ${p.avisos.map(a => `<p class="text-amber-700">Atenção: ${escapeHtml(a)}</p>`).join('')}
         </li>`).join('');
@@ -8499,7 +8817,7 @@
       produtos: {
         rota: 'produtos', um: 'produto', varios: 'produtos', fem: false,
         efeito: 'Some do painel e da vitrine, junto com as fotos e o histórico de compras. Pedidos e acertos antigos continuam.',
-        linha: p => ({ titulo: nomeProdutoExclusao(p), detalhe: `${p.codigo_sku} • ${Number(p.estoque) || 0} em estoque` }),
+        linha: p => ({ titulo: nomeProdutoExclusao(p), detalhe: `${p.codigo_sku} • ${textoEstoqueAdmin(p)}` }),
         marcados: () => marcadosAcerto,
         depois: () => carregarProdutos(),
       },
@@ -8779,7 +9097,7 @@
     }
 
     function situacaoConf(p) {
-      if (p.disponibilidade === 'SOB_ENCOMENDA') return '<span class="px-2 py-0.5 text-xs font-medium rounded-full bg-blue-100 text-blue-700">SOB ENCOMENDA</span>';
+      if (p.disponibilidade === 'SOB_ENCOMENDA') return seloSobEncomenda();
       return `<span class="px-2 py-0.5 text-xs font-medium rounded-full ${statusClass(p.status)}">${escapeHtml(ROTULO_STATUS_RELATORIO[p.status] || p.status)}</span>`;
     }
 
@@ -8819,7 +9137,7 @@
             ${p.fornecedor || p.codigo_fornecedor ? `<p class="text-xs text-gray-400">${escapeHtml(p.fornecedor || '-')}${p.codigo_fornecedor ? ' • Cód. ' + escapeHtml(p.codigo_fornecedor) : ''}</p>` : ''}
             <div class="flex flex-wrap items-center gap-x-2 gap-y-1 mt-1 text-xs">
               ${situacaoConf(p)}
-              <span class="text-gray-700"><strong>${loja}</strong> na loja</span>
+              ${enc ? '<span class="text-blue-700">não tem peça na loja</span>' : `<span class="text-gray-700"><strong>${loja}</strong> na loja</span>`}
               ${maleta ? `<span class="text-yellow-700">${maleta} em maleta</span>` : ''}
               ${veio ? `<span class="text-gray-500">veio ${veio} no pedido</span>` : ''}
               <span class="text-gray-500">${formatarMoeda(p.preco_venda)}</span>

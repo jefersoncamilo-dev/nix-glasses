@@ -110,12 +110,12 @@ describe('pedido no WhatsApp', () => {
   const maleta = { itens: [{ id: 1, nome: 'Aviador', preco: 100 }] };
 
   it('inclui o e-mail do cliente identificado', () => {
-    const { montarTextoWhatsapp } = carregar(['calcularSinal', 'precoDe', 'precoAntes', 'itemEhEncomenda', 'resumoMaleta', 'montarTextoWhatsapp'], { formatarMoeda });
+    const { montarTextoWhatsapp } = carregar(['calcularSinal', 'linkWhatsappEncomenda', 'precoDe', 'precoAntes', 'itemEhEncomenda', 'resumoMaleta', 'montarTextoWhatsapp'], { formatarMoeda });
     assert.match(montarTextoWhatsapp(maleta, { ...dados, email: 'bia@nix.com' }), /\*E-mail:\* bia@nix\.com\n/);
   });
 
   it('sem cliente identificado não tem linha de e-mail', () => {
-    const { montarTextoWhatsapp } = carregar(['calcularSinal', 'precoDe', 'precoAntes', 'itemEhEncomenda', 'resumoMaleta', 'montarTextoWhatsapp'], { formatarMoeda });
+    const { montarTextoWhatsapp } = carregar(['calcularSinal', 'linkWhatsappEncomenda', 'precoDe', 'precoAntes', 'itemEhEncomenda', 'resumoMaleta', 'montarTextoWhatsapp'], { formatarMoeda });
     assert.doesNotMatch(montarTextoWhatsapp(maleta, { ...dados, email: '' }), /E-mail/);
   });
 

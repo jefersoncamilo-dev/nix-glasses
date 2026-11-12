@@ -1,5 +1,6 @@
 // Produtos "Sob Encomenda": campo disponibilidade na API, migração dos produtos
-// antigos e a vitrine (etiqueta, filtro, mensagem do WhatsApp com sinal de 50%).
+// antigos e a vitrine (etiqueta, filtro, mensagem do WhatsApp; prazo e pagamento das
+// encomendas são combinados com a loja pelo WhatsApp, sem sinal nem prazo na vitrine).
 const { describe, it, before, after, beforeEach } = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
@@ -99,7 +100,7 @@ function extrairFuncao(html, nome) {
   }
 }
 
-const FUNCOES = ['ordemTamanho', 'agruparCards', 'grupoDoProduto', 'variaPorCor', 'coresCard', 'botoesCor', 'promocaoDoGrupo', 'htmlSeloPromocao', 'nomeModelo', 'tamanhosCard', 'botaoGrupoCard', 'escapeHtml', 'fotosDoProduto', 'fotoProvador', 'indiceCircular', 'ehSobEncomenda', 'calcularSinal', 'precoDe', 'precoAntes', 'passaFiltroStatus', 'etiquetaProduto',
+const FUNCOES = ['ordemTamanho', 'agruparCards', 'grupoDoProduto', 'variaPorCor', 'coresCard', 'botoesCor', 'promocaoDoGrupo', 'htmlSeloPromocao', 'nomeModelo', 'tamanhosCard', 'botaoGrupoCard', 'escapeHtml', 'fotosDoProduto', 'fotoProvador', 'indiceCircular', 'ehSobEncomenda', 'calcularSinal', 'linkWhatsappEncomenda', 'precoDe', 'precoAntes', 'passaFiltroStatus', 'etiquetaProduto',
   'nomeCard', 'tagsCard', 'botaoMaletaCard', 'atualizarCardMaleta', 'itemEhEncomenda', 'resumoMaleta', 'passaFiltroGenero', 'ordemDisponibilidade', 'ordenarCardsVitrine', 'renderizarCatalogo', 'produtoParaRastreio', 'rastrear', 'toggleMaleta', 'salvarMaleta', 'textoGuiaCatalogo', 'anuncioPorId', 'atualizarGuias', 'atualizarBarraMaleta', 'atualizarMaletaUI', 'montarTextoWhatsapp'];
 
 function elemento() {
@@ -173,10 +174,10 @@ describe('vitrine: produtos Sob Encomenda', () => {
     assert.doesNotMatch(cards[0], /50% sinal/);
     assert.match(cards[0], /toggleMaleta\(1\)/);
 
-    // Encomenda: selo azul pequeno no canto da foto e o sinal de 50%
+    // Encomenda: selo azul pequeno no canto da foto, sem sinal nem prazo
     assert.match(cards[1], /data-selo-encomenda class="selo-card [^"]*bg-blue-600[^>]*>Encomenda</);
     assert.doesNotMatch(cards[1], /data-selo-pronta/);
-    assert.match(cards[1], /data-selo-sinal[^>]*>Sinal 50%: R\$ 175,13</);
+    assert.doesNotMatch(cards[1], /data-selo-sinal|Sinal/);
     assert.doesNotMatch(cards[1], /50% sinal \+ 50% na entrega/);
     assert.match(cards[1], /toggleMaleta\(3\)/);
     assert.match(cards[1], /btn-encomenda/);
@@ -208,16 +209,17 @@ describe('maleta com itens Sob Encomenda', () => {
     assert.match(v.toasts[0], /Cat Eye removido da maleta/);
   });
 
-  it('destaca a encomenda na lista com a etiqueta e o sinal de 50%', () => {
+  it('destaca a encomenda na lista com a etiqueta e o aviso para finalizar e consultar os prazos', () => {
     const v = vitrine([pronta, encomenda]);
     v.ctx.toggleMaleta(1);
     v.ctx.toggleMaleta(3);
     const lista = v.els.maletaItens.innerHTML;
     assert.equal((lista.match(/SOB ENCOMENDA/g) || []).length, 1);
-    assert.match(lista, /50% de sinal: R\$ 175,13/);
+    assert.match(lista, /Finalize o pedido e consulte os prazos/);
+    assert.doesNotMatch(lista, /sinal/i);
     assert.equal(v.els.maletaTotal.textContent, 'R$ 550,24');
-    assert.equal(v.els.maletaSinal.textContent, 'Sinal das encomendas (50%): R$ 175,13');
-    assert.equal(v.els.maletaSinal.escondido, false);
+    assert.equal(v.els.maletaSinal.textContent, '');
+    assert.equal(v.els.maletaSinal.escondido, true);
   });
 
   it('esconde o sinal quando só há itens para prova e soma preços que vêm como texto', () => {
@@ -249,19 +251,16 @@ describe('maleta com itens Sob Encomenda', () => {
       'Subtotal para provar: R$ 399,98',
       '',
       '━━━━━━━━━━━━━━',
-      '*SOB ENCOMENDA* (sinal de 50%)',
+      '*SOB ENCOMENDA*',
       '1. Cat Eye (Ref. CE-09) - R$ 350,25',
-      '    Sinal: R$ 175,13 | Na entrega: R$ 175,12',
       '2. Redondo (Ref. RD-01) - R$ 99,99',
-      '    Sinal: R$ 50,00 | Na entrega: R$ 49,99',
       'Total das encomendas: R$ 450,24',
+      '_Gostaria de consultar o prazo e combinar o pagamento das encomendas._',
       '',
       '━━━━━━━━━━━━━━',
       '*RESUMO*',
       'Pronta entrega: 2 itens - R$ 399,98',
-      'Sob encomenda: 2 itens - R$ 450,24',
-      '*Sinal a pagar agora (50%):* R$ 225,13',
-      '*Restante das encomendas na entrega:* R$ 225,11',
+      'Sob encomenda: 2 itens - R$ 450,24 (prazo e pagamento a combinar)',
       '*Total geral:* R$ 850,22',
       '',
       'Aguardo a confirmação. Obrigado(a)!',
@@ -273,7 +272,8 @@ describe('maleta com itens Sob Encomenda', () => {
     v.ctx.toggleMaleta(3);
     const soEncomenda = v.ctx.montarTextoWhatsapp(v.ctx.maleta, cliente);
     assert.doesNotMatch(soEncomenda, /PRONTA ENTREGA|Para provar/);
-    assert.match(soEncomenda, /\*Sinal a pagar agora \(50%\):\* R\$ 175,13/);
+    assert.match(soEncomenda, /Sob encomenda: 1 item - R\$ 350,25 \(prazo e pagamento a combinar\)/);
+    assert.doesNotMatch(soEncomenda, /Sinal/);
 
     v.ctx.toggleMaleta(3);
     v.ctx.toggleMaleta(1);
@@ -295,5 +295,26 @@ describe('checkout da maleta com encomendas', () => {
       { codigo_sku: 'CK-1', status: 'DISPONIVEL', disponibilidade: 'PRONTA_ENTREGA', vezes_em_maleta: 1 },
       { codigo_sku: 'CK-2', status: 'DISPONIVEL', disponibilidade: 'SOB_ENCOMENDA', vezes_em_maleta: 1 },
     ]);
+  });
+});
+
+describe('botão de WhatsApp da encomenda', () => {
+  const src = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
+  const inicio = src.indexOf('function linkWhatsappEncomenda(');
+  let fim = src.indexOf('\n    }\n', inicio) + 6;
+  const ctx = vm.createContext({});
+  vm.runInContext(src.slice(inicio, fim), ctx);
+
+  it('abre a conversa da loja citando o modelo, a cor e a referência', () => {
+    const link = ctx.linkWhatsappEncomenda({ nome: 'Nix Rex Aviador', cor_armacao: 'Preto', codigo_sku: 'REX-PT' }, '5511999990000');
+    assert.ok(link.startsWith('https://wa.me/5511999990000?text='));
+    assert.equal(decodeURIComponent(link.split('text=')[1]),
+      'Olá! Tenho interesse no *Nix Rex Aviador* - cor Preto (Ref. REX-PT), que está sob encomenda. Pode me passar o prazo e as condições?');
+    // cor que já está no nome não se repete
+    assert.doesNotMatch(decodeURIComponent(ctx.linkWhatsappEncomenda({ nome: 'Nix Rex - Preto', cor_armacao: 'Preto' }, '55')), /cor Preto/);
+  });
+
+  it('sem número de WhatsApp da loja, não há botão', () => {
+    assert.equal(ctx.linkWhatsappEncomenda({ nome: 'X' }, ''), '');
   });
 });

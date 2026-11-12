@@ -344,6 +344,14 @@ async function initTables(pool) {
       `);
     }
 
+    // Encomenda pedida ao fornecedor (aba Encomendas > Aguardando pedido): quando e com
+    // qual referência (nº do pedido no site do fornecedor). Ver fila-encomendas.js.
+    await client.query(`
+      ALTER TABLE encomendas
+      ADD COLUMN IF NOT EXISTS pedido_fornecedor_em TIMESTAMP,
+      ADD COLUMN IF NOT EXISTS pedido_fornecedor_ref VARCHAR(60) NOT NULL DEFAULT ''
+    `);
+
     // Estoque em unidades: produtos.estoque conta as peças na loja e maleta_pecas
     // as que estão com clientes (uma linha por peça, ligada ao pedido da maleta).
     // O status do produto sai dessas contas. Na criação, cada produto de antes

@@ -85,10 +85,10 @@ describe('vitrine: atalhos e pílulas de filtro', () => {
   it('a orientação é uma linha: o primeiro passo na Coleção ou o que o filtro mostra', () => {
     assert.match(ctx.textoGuiaCatalogo('', 0), /\+ Maleta.*provar em casa/);
     assert.match(ctx.textoGuiaCatalogo('DISPONIVEL', 0), /Pronta entrega/);
-    assert.match(ctx.textoGuiaCatalogo('SOB_ENCOMENDA', 0), /sinal de 50%/);
+    assert.match(ctx.textoGuiaCatalogo('SOB_ENCOMENDA', 0), /prazo e condições.*WhatsApp/);
     // com modelos escolhidos a barra "Ver maleta" já mostra o próximo passo
     assert.equal(ctx.textoGuiaCatalogo('', 2), '');
-    assert.match(ctx.textoGuiaCatalogo('SOB_ENCOMENDA', 2), /sinal de 50%/);
+    assert.match(ctx.textoGuiaCatalogo('SOB_ENCOMENDA', 2), /prazo e condições.*WhatsApp/);
     assert.doesNotMatch(html, /id="guiaCatalogo"[^>]*bg-orange-50/);
   });
 

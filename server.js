@@ -17,6 +17,7 @@ const vendas = require('./vendas');
 const anuncios = require('./anuncios');
 const rastreamento = require('./rastreamento');
 const origens = require('./origens');
+const filaEncomendas = require('./fila-encomendas');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -2945,7 +2946,7 @@ async function startServer() {
   }
 
   // ---------- Encomendas ----------
-  const CAMPOS_ENCOMENDA = 'id, pedido_id, cliente_id, produto_id, origem, nome_cliente, telefone, modelo, codigo_sku, especificacoes, valor, sinal_pago, status, observacoes, entregue_em, created_at, updated_at';
+  const CAMPOS_ENCOMENDA = 'id, pedido_id, cliente_id, produto_id, origem, nome_cliente, telefone, modelo, codigo_sku, especificacoes, valor, sinal_pago, status, observacoes, entregue_em, pedido_fornecedor_em, pedido_fornecedor_ref, created_at, updated_at';
 
   function lerValorEncomenda(v) {
     if (v === undefined || v === null || v === '') return 0;
@@ -4748,6 +4749,10 @@ async function startServer() {
   app.patch('/api/admin/pedidos/:id/status', exigirArea('pedidos'), handleStatusPedido);
   app.put('/api/admin/pedidos/:id/fechamento', exigirArea('pedidos'), handleFechamentoPedido);
   app.post('/api/admin/pedidos/:id/encomendar', exigirArea('pedidos'), handleEncomendarItem);
+  const fila = filaEncomendas.criarHandlers();
+  app.get('/api/admin/encomendas/fila', exigirArea('encomendas'), fila.handleFila);
+  app.put('/api/admin/encomendas/regras-fornecedor', exigirArea('encomendas'), fila.handleSalvarRegra);
+  app.post('/api/admin/encomendas/pedido-fornecedor', exigirArea('encomendas'), fila.handlePedirFornecedor);
   app.get('/api/admin/encomendas', exigirArea('encomendas', 'pedidos'), handleListEncomendas);
   app.post('/api/admin/encomendas', exigirArea('encomendas'), handleCreateEncomenda);
   app.put('/api/admin/encomendas/:id', exigirArea('encomendas'), handleUpdateEncomenda);
