@@ -1529,12 +1529,12 @@
             <input type="text" id="nome" name="nome" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500" required>
           </div>
           <div>
-            <label class="flex justify-between text-sm font-medium text-gray-700 mb-1">Código SKU * <button type="button" id="btnGerarNomeSku" class="text-xs font-normal underline text-orange-600 hover:text-orange-700" title="Monta nome e SKU no padrão Nix a partir do Nome Fornec., formato e cor">Gerar nome e SKU</button></label>
+            <label class="flex justify-between text-sm font-medium text-gray-700 mb-1">Código SKU * <button type="button" id="btnGerarNomeSku" class="text-xs font-normal underline text-orange-600 hover:text-orange-700" title="Monta nome, SKU e nome curto (dinossauro da linha do formato) no padrão Nix a partir do Nome Fornec., formato e cor">Gerar nome e SKU</button></label>
             <input type="text" id="codigo_sku" name="codigo_sku" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500" required>
           </div>
           <div class="md:col-span-2">
             <label for="nome_curto" class="block text-sm font-medium text-gray-700 mb-1">Nome curto na vitrine</label>
-            <input type="text" id="nome_curto" name="nome_curto" maxlength="80" placeholder="Ex: Hexagonal Dubai" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500">
+            <input type="text" id="nome_curto" name="nome_curto" maxlength="80" placeholder="Ex: Quetzal (preenchido pelo formato ao importar)" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500">
             <p class="text-xs text-gray-500 mt-1">Opcional. Aparece no card do catálogo no lugar do nome completo, que continua nos detalhes e no pedido.</p>
           </div>
           <div>
@@ -2531,7 +2531,7 @@
       // Importado pelo link: o cadastro vai "em conferência" (fora da vitrine até liberar)
       const linha = { ...linhaLoteVazia(), ...c, fornecedor: fornecedorTodos || c.fornecedor, preco_custo: c.preco_custo.replace('.', ','), preco_venda: c.preco_venda.replace('.', ','), em_conferencia: true };
       if (Array.isArray(dados.cores) && dados.cores.length) {
-        const r = linhaDoModeloComCores(linha, dados, todosProdutos, linhasLote.map(l => l.codigo_sku));
+        const r = linhaDoModeloComCores(linha, dados, todosProdutos, linhasLote.map(l => l.codigo_sku), linhasLote.map(l => l.nome_curto));
         adicionarLinhasLote([r.linha]);
         const plano = planoCoresLote(r.linha, todosProdutos);
         const nome = linha.codigo_fornecedor || linha.nome_fornecedor;
@@ -2545,7 +2545,7 @@
       if (existente) {
         Object.assign(linha, { nome: existente.nome, codigo_sku: existente.codigo_sku, quantidade: '1' });
       } else {
-        const tema = nomeTematico(linha, todosProdutos, linhasLote.map(l => l.codigo_sku));
+        const tema = nomeTematico(linha, todosProdutos, linhasLote.map(l => l.codigo_sku), linhasLote.map(l => l.nome_curto));
         if (tema) Object.assign(linha, tema);
         else linha.codigo_sku = proximoSku(todosProdutos, linhasLote.map(l => l.codigo_sku));
       }
@@ -2593,7 +2593,7 @@
     // no site ficam de fora (a não ser que todas estejam). Nome e SKU Nix do modelo, sem cor.
     // Modelo já cadastrado (mesmo cód. do fornecedor ou link): a linha usa o nome e o código dele.
     // `base`: linha montada da importação. -> { linha, esgotadas: [nomes] }
-    function linhaDoModeloComCores(base, dados, produtos = [], usados = []) {
+    function linhaDoModeloComCores(base, dados, produtos = [], usados = [], curtosUsados = []) {
       const norm = v => String(v ?? '').normalize('NFD').replace(/[̀-ͯ]/g, '').trim().toLowerCase();
       const todas = (Array.isArray(dados.cores) ? dados.cores : []).filter(c => c && String(c.cor ?? '').trim())
         .filter((c, i, lista) => lista.findIndex(x => norm(x.cor) === norm(c.cor)) === i).slice(0, 20);
@@ -2623,7 +2623,7 @@
         const modelo = String(existente.grade || '').trim() || existente.codigo_sku;
         Object.assign(linha, { nome: nomeDoModelo(existente), codigo_sku: modelo });
       } else {
-        const tema = nomeTematico({ ...linha, cor_armacao: '' }, produtos, usados);
+        const tema = nomeTematico({ ...linha, cor_armacao: '' }, produtos, usados, curtosUsados);
         if (tema) Object.assign(linha, tema);
         else linha.codigo_sku = proximoSku(produtos, usados);
       }
@@ -4746,7 +4746,37 @@
     // O dinossauro sai do formato/estilo (Raptor nos esportivos); um modelo já cadastrado
     // com nome Nix mantém o dinossauro dele. `usados`: SKUs ainda não salvos (linhas do lote).
     // -> { nome, codigo_sku } ou null (sem nome do fornecedor para montar)
-    function nomeTematico(c, produtos = [], usados = []) {
+    // Nome curto na vitrine (o card mostra ele): um dinossauro raro por modelo, da linha
+    // do formato da armação, sem repetir nome já usado. Linhas e nomes escolhidos pelo Jefe
+    // (tabela em nomes-modelos/tabela-nomes.md); os do fim de cada lista são reservas.
+    // -> nome curto livre da linha do formato, ou '' (formato que não cai em nenhuma linha).
+    // `usados`: nomes curtos já usados (cadastros e linhas ainda não salvas).
+    function nomeCurtoDino(textoFormato, usados = []) {
+      const LINHAS_NOME_CURTO = [
+        ['Esportiva', /esport|m[aá]scara|shield/,
+          ['Deinony', 'Troodon', 'Cerato', 'Utah', 'Triássico', 'Megaptor', 'Concaven', 'Pyroraptor', 'Dakotaraptor',
+            'Velocis', 'Austro', 'Buitre', 'Microraptor', 'Linheraptor']],
+        ['Aviador', /aviador|piloto/,
+          ['Dimorph', 'Quetzal', 'Rhampho', 'Zhenyue', 'Tapejara', 'Alanqa', 'Haopterus', 'Nycto', 'Tupan', 'Anhanga',
+            'Thalasso', 'Caiuajara', 'Pterodaustro', 'Hatzeg']],
+        ['Quadrada', /quadrad|retangul|hexagon|geom[eé]tric|octogon/,
+          ['Styraco', 'Carnot', 'Bary', 'Pachy', 'Giga', 'Ankylos', 'Carnotaur', 'Shantung', 'Torvos', 'Zuul', 'Nodo',
+            'Sauropel', 'Edmonto', 'Kentro', 'Gastonia']],
+        ['Redonda', /redond|oval|arredondad|gatinh|gato|cat ?eye|borboleta/,
+          ['Amargas', 'Patago', 'Mosas', 'Fossil', 'Nautilus', 'Diplodoc', 'Brontops', 'Ovirapt', 'Amber',
+            'Ammonite', 'Trilobit', 'Saltasaur', 'Argento', 'Dreadnou']],
+      ];
+      const semAcento = t => String(t || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim();
+      const linha = LINHAS_NOME_CURTO.find(([, re]) => re.test(semAcento(textoFormato)));
+      if (!linha) return '';
+      const ocupados = new Set(usados.map(semAcento).filter(Boolean));
+      const livre = linha[2].find(n => !ocupados.has(semAcento(n)));
+      if (livre) return livre;
+      // Acabaram os nomes da linha: repete o primeiro com número (Deinony 2, Deinony 3...)
+      for (let n = 2; ; n++) if (!ocupados.has(semAcento(`${linha[2][0]} ${n}`))) return `${linha[2][0]} ${n}`;
+    }
+
+    function nomeTematico(c, produtos = [], usados = [], curtosUsados = []) {
       const DINOS = [
         [/esport|m[aá]scara|shield/, 'Raptor', 'RAP'],
         [/gatinh|gato|cat ?eye|borboleta/, 'Dilo', 'DIL'],
@@ -4815,6 +4845,17 @@
         nomeCor = modificadores.join(' ');
       }
       const nome = `Nix ${dino[0]}${modelo ? ` ${modelo}` : ''}${nomeCor ? ` - ${nomeCor}` : ''}`;
+      // Nome curto: o que a pessoa já digitou fica; um modelo já cadastrado (outra cor) usa o
+      // mesmo nome curto dele; senão o próximo dinossauro livre da linha do formato
+      let nomeCurto = String(c.nome_curto || '').trim();
+      if (!nomeCurto && modelo) {
+        const irmao = produtos.find(p => {
+          const m = /^Nix \w+ (.+?)\s*(-|$)/.exec(String(p.nome || ''));
+          return m && String(p.nome_curto || '').trim() && semAcento(limparModelo(m[1])) === semAcento(modelo);
+        });
+        if (irmao) nomeCurto = String(irmao.nome_curto).trim();
+      }
+      if (!nomeCurto) nomeCurto = nomeCurtoDino(textoFormato, [...produtos.map(p => p.nome_curto), ...curtosUsados]);
       // Código do modelo: 3 letras (iniciais quando tem mais de uma palavra) + versão (2.0 -> 2)
       const palavras = semAcento(modelo).replace(/[^a-z0-9 ]/g, ' ').split(/\s+/).filter(Boolean);
       const letras = palavras.filter(p => /^[a-z]/.test(p));
@@ -4831,7 +4872,7 @@
       const existentes = new Set([...produtos.map(p => p.codigo_sku), ...usados].map(s => String(s || '').trim().toUpperCase()));
       let sku = base;
       for (let n = 2; existentes.has(sku); n++) sku = `${base}-${n}`;
-      return { nome, codigo_sku: sku };
+      return { nome, codigo_sku: sku, nome_curto: nomeCurto };
     }
 
     // Produto já cadastrado com o mesmo link do fornecedor ou o mesmo código no mesmo
@@ -4915,9 +4956,11 @@
         // Produto novo: nome e SKU no padrão Nix. Já cadastrado: oferece a reposição.
         const existente = produtoEditando ? null : produtoJaCadastrado(todosProdutos, c);
         if (!produtoEditando && !existente) {
-          const tema = nomeTematico(c, todosProdutos);
-          if (tema) Object.assign(c, tema);
-          else c.codigo_sku = proximoSku(todosProdutos);
+          const tema = nomeTematico({ ...c, nome_curto: document.getElementById('nome_curto').value }, todosProdutos);
+          if (tema) {
+            Object.assign(c, tema);
+            if (!document.getElementById('nome_curto').value.trim()) document.getElementById('nome_curto').value = tema.nome_curto;
+          } else c.codigo_sku = proximoSku(todosProdutos);
         }
         const campos = [...CAMPOS_IMPORTADOS, 'nome', 'fornecedor', 'preco_venda', 'codigo_sku'];
         const atuais = Object.fromEntries(campos.map(campo => [campo, document.getElementById(campo).value]));
@@ -5028,12 +5071,13 @@
     });
 
     document.getElementById('btnGerarNomeSku').addEventListener('click', () => {
-      const campos = Object.fromEntries(['nome_fornecedor', 'formato', 'estilo', 'cor_armacao'].map(c => [c, document.getElementById(c).value]));
+      const campos = Object.fromEntries(['nome_fornecedor', 'formato', 'estilo', 'cor_armacao', 'nome_curto'].map(c => [c, document.getElementById(c).value]));
       const outros = todosProdutos.filter(p => !produtoEditando || p.id !== produtoEditando.id);
       const tema = nomeTematico(campos, outros);
       if (!tema) return mostrarToast('Preencha o Nome Fornec. (ex.: Óculos de Sol Aviador Monaco Light - Preto - Injetado)', 'error');
       document.getElementById('nome').value = tema.nome;
       document.getElementById('codigo_sku').value = tema.codigo_sku;
+      document.getElementById('nome_curto').value = tema.nome_curto;
     });
     document.getElementById('disponibilidade').addEventListener('change', atualizarAvisoSinal);
     document.getElementById('preco_venda').addEventListener('input', atualizarAvisoSinal);
@@ -7715,6 +7759,7 @@
     // reposição não cair no produto da outra cor.
     function recalcularItensPedidoForn(itens, produtos, fornecedor) {
       const usados = [];
+      const curtosUsados = [];
       const porNome = new Map();
       const codigosUsados = new Set(produtos.filter(p => {
         const pf = String(p.fornecedor || '').trim().toLowerCase();
@@ -7726,8 +7771,10 @@
         const tema = nomeTematico({
           nome_fornecedor: `Óculos de Sol ${modelo} ${item.formato}${item.cor ? ` - ${item.cor}` : ''}`,
           formato: item.formato, estilo: '', cor_armacao: item.cor,
-        }, produtos, usados);
+        }, produtos, usados, curtosUsados);
         if (!item.nomeEditado) item.nome = tema ? tema.nome : '';
+        item.nomeCurto = tema ? tema.nome_curto : '';
+        if (item.nomeCurto) curtosUsados.push(item.nomeCurto);
         const igual = porNome.get(item.nome.trim().toLowerCase());
         if (!item.skuEditado) item.sku = igual ? igual.sku : (tema ? tema.codigo_sku : proximoSku(produtos, usados));
         if (!item.vendaEditada) item.venda = String(precoVendaPadrao(lerPreco(item.custo), ehPolarizado(item.tipo, item.descricao, item.modelo)) || '').replace('.', ',');
@@ -7781,7 +7828,7 @@
           produtosLote.push({
             nome: item.nome.trim(), codigo_sku: item.sku.trim(), codigo_fornecedor: item.codigoNovo || item.codigo, nome_fornecedor: item.descricao,
             preco_custo: custo, preco_venda: venda, disponibilidade: 'PRONTA_ENTREGA', formato: item.formato, cor_armacao: item.cor.trim(),
-            material: item.material, tipo: item.tipo, genero: item.genero, quantidade, _item: i,
+            material: item.material, tipo: item.tipo, genero: item.genero, nome_curto: item.nomeCurto || '', quantidade, _item: i,
           });
         } else if (item.destino === 'acessorio-novo') {
           const venda = item.acessorioVenda === '' ? 0 : lerPreco(item.acessorioVenda);

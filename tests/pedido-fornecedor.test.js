@@ -301,7 +301,7 @@ function extrairFuncao(nome) {
     else if (html[i] === '}' && --nivel === 0) return html.slice(inicio, i + 1);
   }
 }
-const funcoes = ['lerTotaisDigitados', 'totalPagoPedidoForn', 'somarPedidosForn', 'lerPreco', 'lerDataCompra', 'precoVendaPadrao', 'ehPolarizado', 'proximoSku', 'nomeTematico', 'semAcentoPf', 'normalizarCodigoForn',
+const funcoes = ['lerTotaisDigitados', 'totalPagoPedidoForn', 'somarPedidosForn', 'lerPreco', 'lerDataCompra', 'precoVendaPadrao', 'ehPolarizado', 'proximoSku', 'nomeCurtoDino', 'nomeTematico', 'semAcentoPf', 'normalizarCodigoForn',
   'candidatosDoItem', 'itemPedidoForn', 'recalcularItensPedidoForn', 'montarLancamentoPedidoForn'];
 const ctx = vm.createContext({ Number, String, Math, Map, Set, Object, Date });
 const j = (v) => JSON.parse(JSON.stringify(v));

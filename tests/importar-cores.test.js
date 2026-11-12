@@ -108,7 +108,7 @@ function extrairFuncao(nome) {
     else if (html[i] === '}' && --nivel === 0) return html.slice(inicio, i + 1);
   }
 }
-const funcoes = ['linkSeguro', 'precoVendaPadrao', 'ehPolarizado', 'proximoSku', 'nomeTematico', 'camposDaImportacao', 'formatarMedida', 'linhaLoteVazia', 'linhaLoteEstaVazia',
+const funcoes = ['linkSeguro', 'precoVendaPadrao', 'ehPolarizado', 'proximoSku', 'nomeCurtoDino', 'nomeTematico', 'camposDaImportacao', 'formatarMedida', 'linhaLoteVazia', 'linhaLoteEstaVazia',
   'conflitosLote', 'produtoJaCadastrado', 'lerCoresLote', 'textoCoresLote', 'linhaDoModeloComCores', 'planoCoresLote', 'resumoCoresLote', 'expandirCoresLote',
   'agruparCoresPorModelo', 'nomeDoModelo', 'coresDoModeloDe', 'lerCoresModelo', 'lerPreco', 'lerMedida', 'lerDataCompra', 'validarLote', 'campoDoCabecalho', 'linhasDaPlanilha', 'lerDisponibilidade', 'lerStatus', 'lerGenero'];
 const ctx = vm.createContext({ Number, String, Math, Map, Set, Object, URL, Array, JSON });
