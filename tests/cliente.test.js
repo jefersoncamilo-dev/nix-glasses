@@ -120,7 +120,7 @@ describe('pedido no WhatsApp', () => {
   });
 
   it('o checkout envia o e-mail do cliente salvo', () => {
-    assert.match(html, /const email = cliente \? cliente\.email : '';/);
+    assert.match(html, /const email = cliente \? cliente\.email : emailDigitado;/);
     assert.match(html, /montarTextoWhatsapp\(maleta, \{[^}]*\bemail\b/);
   });
 });
