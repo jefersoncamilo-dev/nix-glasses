@@ -103,6 +103,15 @@ async function initTables(pool) {
       ADD COLUMN IF NOT EXISTS em_conferencia BOOLEAN NOT NULL DEFAULT false
     `);
 
+    // Produto arquivado (Produtos > Arquivar): sai da lista do painel, da vitrine, das
+    // Métricas, do Editar em estoque e da Conferência de estoque, mas fica guardado
+    // (fotos, compras, vendas) e pode ser desarquivado.
+    await client.query(`
+      ALTER TABLE produtos
+      ADD COLUMN IF NOT EXISTS arquivado BOOLEAN NOT NULL DEFAULT false,
+      ADD COLUMN IF NOT EXISTS arquivado_em TIMESTAMP
+    `);
+
     // Especificações técnicas mostradas ao cliente. Medidas em cm, com uma casa
     // decimal (ex.: diâmetro 5,0); vazio = não informado.
     await client.query(`
