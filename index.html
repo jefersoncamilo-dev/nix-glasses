@@ -43,6 +43,8 @@
     .chrome-btn:hover { filter: brightness(1.08); }
     .glass-card { transition: transform 0.2s ease, box-shadow 0.2s ease; }
     .glass-card:hover { transform: translateY(-4px); box-shadow: 0 20px 40px rgba(0,0,0,0.55); }
+    /* No celular o toque deixa o "hover" preso: o card não sobe */
+    @media (hover: none) { .glass-card:hover { transform: none; box-shadow: none; } }
     .modal-overlay { backdrop-filter: blur(4px); }
     .toast { animation: slideIn 0.3s ease; }
     @keyframes slideIn { from { opacity: 0; transform: translateX(100%); } to { opacity: 1; transform: translateX(0); } }
@@ -195,6 +197,9 @@
     .chip-formato { flex: none; scroll-snap-align: start; display: inline-flex; align-items: center; min-height: 36px; padding: 0 0.95rem; border-radius: 9999px; border: 1px solid rgba(255,255,255,0.16); background: rgba(255,255,255,0.04); color: #d4d4d4; font-size: 0.8125rem; font-weight: 500; white-space: nowrap; cursor: pointer; touch-action: manipulation; -webkit-tap-highlight-color: transparent; transition: background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease; }
     /* Espaço no fim da fileira para a última pílula não ficar sob o esmaecido */
     .chips-formato::after { content: ''; flex: none; width: 16px; }
+    /* Chip de formato só com o desenho do óculos (sem o nome escrito) */
+    .chip-icone { justify-content: center; padding: 0 0.85rem; border-radius: 0.75rem; }
+    .icone-formato { width: 38px; height: 17px; flex: none; }
     /* A fileira do catálogo encosta nas bordas da tela no celular: o "imã" da rolagem
        respeita o recuo, senão a primeira pílula gruda na borda */
     #filtrosRolagem, #filtroPilulas .chips-formato { scroll-padding-left: 1rem; }
@@ -210,9 +215,20 @@
       #filtrosRolagem .chip-formato, #filtroPilulas .chip-formato { min-height: 26px; padding: 0 0.42rem; font-size: 0.625rem; letter-spacing: -0.01em; }
       #chipsFormato .chip-formato { flex: 1 0 auto; justify-content: center; padding: 0 0.3rem; }
       #filtroPilulas .chips-formato { gap: 0.25rem; }
+      /* Formatos só com o desenho: botão mais alto, bom para o dedo */
+      #chipsFormato .chip-icone { min-height: 36px; padding: 0 0.35rem; }
+      #chipsFormato .icone-formato { width: 30px; height: 14px; }
     }
     /* Celular: sem tamanho/gênero para escolher, a linha dos seletores some */
     @media (max-width: 639px) { .linha-selecao:not(:has(select:not(.hidden), .chips-genero:not(.hidden))) { display: none; } }
+    /* Botão da promoção do momento na barra de filtros: o mesmo botão prateado do pop-up,
+       com o texto configurado no painel (POP Anúncio > texto do botão, ex.: BLACK NIX) */
+    .promocoes-filtro { display: flex; gap: 0.375rem; flex: none; }
+    .promocoes-filtro.hidden { display: none; }
+    .botao-promocao-filtro { gap: 0.375rem; min-height: 34px; padding: 0 1rem; border-radius: 9999px; font-size: 0.8125rem; font-weight: 700; letter-spacing: 0.02em; white-space: nowrap; }
+    @media (min-width: 640px) { .botao-promocao-filtro { min-height: 38px; font-size: 0.875rem; } }
+    .botao-promocao-filtro[aria-pressed="true"] { box-shadow: 0 0 0 2px #161616, 0 0 0 4px #e5e5e5; }
+    @media (max-width: 639px) { .botao-promocao-filtro { min-height: 32px; padding: 0 0.85rem; font-size: 12px; } }
     /* Gênero: três chips juntos (Todos / Feminino / Masculino), do tamanho dos chips de modelo */
     .chips-genero { display: flex; gap: 0.5rem; flex: none; }
     .chips-genero.hidden { display: none; }
@@ -255,6 +271,79 @@
     .btn.btn-maleta.btn-sucesso, .btn.btn-maleta.btn-sucesso:hover { background: #16a34a; border-color: #16a34a; color: #fff; box-shadow: 0 0 0 4px rgba(22,163,74,0.22); filter: none; }
     .btn-sucesso svg { animation: checkEntra 0.32s cubic-bezier(0.2, 1.4, 0.4, 1); }
     @keyframes checkEntra { from { transform: scale(0.3); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+
+    /* ====== Celular: layout do exemplo aprovado (topo com menu, logo no centro e maleta;
+       busca; pílulas WhatsApp/Instagram/promoção; gênero num seletor só; formatos só com o
+       desenho; título do formato com a contagem; card com selo, botão + na foto,
+       material · tipo, preço e cores na mesma linha). O computador não muda. ====== */
+    .busca-vitrine { position: relative; max-width: 36rem; margin: 0 auto 0.75rem; }
+    .busca-vitrine svg { position: absolute; left: 0.875rem; top: 50%; transform: translateY(-50%); width: 1.125rem; height: 1.125rem; color: #8a8a8a; pointer-events: none; }
+    .busca-vitrine input { width: 100%; height: 44px; padding: 0 0.875rem 0 2.6rem; border-radius: 14px; background: var(--nix-surface); border: 1px solid var(--nix-border); color: var(--nix-text); font-size: 15px; }
+    .busca-vitrine input::placeholder { color: #7a7a7a; }
+    .busca-vitrine input:focus { outline: none; border-color: rgba(255,255,255,0.35); }
+    .busca-vitrine input::-webkit-search-cancel-button { filter: invert(0.7); }
+    .btn-foto-maleta { display: none; }
+    .titulo-lista { display: none; }
+    .menu-celular-painel { width: min(80vw, 300px); background: #1a1a1a; border-right: 1px solid var(--nix-border); }
+    .menu-celular-painel a, .menu-celular-painel button.item-menu { display: flex; align-items: center; width: 100%; min-height: 48px; padding: 0 1.25rem; color: #e5e5e5; font-size: 15px; font-weight: 500; text-align: left; border-bottom: 1px solid var(--nix-border); }
+    .menu-celular-painel a:active, .menu-celular-painel button.item-menu:active { background: rgba(255,255,255,0.06); }
+    @media (max-width: 639px) {
+      /* Topo: menu à esquerda, logo no centro, maleta à direita */
+      .topo-celular { display: grid; grid-template-columns: 2.75rem 1fr 2.75rem; }
+      .topo-celular > a { justify-self: center; }
+      .topo-celular > div:last-child { justify-self: end; }
+      #btnMaleta { border-color: transparent; padding: 0 0.5rem; }
+      /* Hero enxuto: sem título, descrição e selos (a promoção vai nas pílulas) */
+      #hero { padding-top: 0.75rem; padding-bottom: 0; background: var(--nix-bg); }
+      #hero h1, #hero p[data-loja='descricao'], #abrirComoFunciona, #promocoesVitrine, #heroColecao { display: none !important; }
+      .busca-vitrine { margin-bottom: 0.75rem; }
+      /* Pílulas WhatsApp / Instagram / promoção numa linha, alinhadas à esquerda */
+      .redes-topo { justify-content: flex-start; flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; margin: 0 -1rem 0.25rem; padding: 0 1rem; gap: 0.5rem; }
+      .redes-topo::-webkit-scrollbar { display: none; }
+      .redes-topo .btn-rede { flex: none; min-height: 32px; padding: 0 0.75rem; font-size: 13px; font-weight: 500; background: var(--nix-surface); border: 1px solid var(--nix-border); box-shadow: none; }
+      .redes-topo .btn-rede-whatsapp { color: #4ade80; }
+      .redes-topo .btn-rede svg { width: 15px; height: 15px; }
+      .redes-topo .promocoes-filtro { margin-left: 0; }
+      /* Gênero: um seletor só, ocupando a largura */
+      .linha-selecao > div { width: 100%; }
+      .chips-genero { display: grid; grid-template-columns: repeat(3, 1fr); flex: 1; padding: 3px; gap: 0; border-radius: 12px; background: var(--nix-surface); border: 1px solid var(--nix-border); }
+      .chips-genero .chip-formato { justify-content: center; min-height: 34px; padding: 0; border: 0; border-radius: 9px; background: transparent; color: var(--nix-muted); font-size: 13px; font-weight: 600; letter-spacing: 0; box-shadow: none; }
+      .chips-genero .chip-formato[aria-pressed="true"] { background: linear-gradient(180deg, #f5f5f5 0%, #c9c9c9 45%, #9a9a9a 55%, #d7d7d7 100%); color: #161616; }
+      /* Formatos só com o desenho: botões iguais que dividem a largura */
+      #chipsFormato { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(48px, 1fr); width: 100%; gap: 0.375rem; }
+      #chipsFormato.hidden { display: none; }
+      #chipsFormato .chip-formato { border-radius: 12px; }
+      #chipsFormato .chip-formato[aria-pressed="true"] { background: transparent; color: #f5f5f5; border-color: #d4d4d4; box-shadow: none; }
+      /* Título do formato escolhido com a contagem (no lugar da linha de ajuda) */
+      .titulo-lista { display: flex; justify-content: space-between; align-items: baseline; gap: 0.75rem; margin: 0.25rem 0 0.625rem; }
+      .titulo-lista b { font-size: 15px; color: #fff; white-space: nowrap; }
+      .titulo-lista span { min-width: 0; font-size: 12px; color: var(--nix-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+      #guiaCatalogo { display: none; }
+      #barraFiltros { padding-top: 0.5rem; padding-bottom: 0.625rem; }
+      /* Card: foto inteira em cima, selo no canto, botão + redondo na foto */
+      .card-produto { border-radius: 16px; }
+      .card-produto > div:first-child { padding: 0; }
+      .card-produto .foto-moldura { border-radius: 0; background: #ececec; }
+      .card-produto .selo-card { top: 0.5rem; left: 0.5rem; border-radius: 6px; padding: 0.2rem 0.45rem; font-size: 10px; }
+      [data-selo-promocao-card] { top: 0.5rem; right: 0.5rem; bottom: auto; }
+      [data-selo-promocao-card] .selo-promocao { width: 2.25rem; height: 2.25rem; }
+      [data-selo-maleta] { display: none !important; }
+      .btn-foto-maleta { position: absolute; right: 0.5rem; bottom: 0.5rem; z-index: 2; display: flex; align-items: center; justify-content: center; width: 34px; height: 34px; border-radius: 9999px; background: #161616; color: #fff; box-shadow: 0 4px 10px rgba(0,0,0,0.3); -webkit-tap-highlight-color: transparent; }
+      .btn-foto-maleta.na-maleta { background: #22c55e; }
+      .btn-foto-maleta.encomenda { background: #1d4ed8; }
+      .btn-foto-maleta svg { width: 16px; height: 16px; }
+      .card-produto .card-info { flex-direction: row; flex-wrap: wrap; align-items: flex-end; align-content: flex-start; padding: 0.625rem 0.6875rem 0.75rem; }
+      .card-info > h3 { flex-basis: 100%; order: 1; min-height: 0; color: #fff; font-weight: 600; font-size: 13.5px; line-height: 1.25; -webkit-line-clamp: 1; }
+      .card-info > [data-tags-card] { display: block !important; flex-basis: 100%; order: 2; margin: 0.125rem 0 0; font-size: 11.5px; color: var(--nix-muted); }
+      .card-info > [data-tamanhos-card] { flex-basis: 100%; order: 3; }
+      .card-info > [data-preco-card] { order: 4; flex: 1; margin: 0.5rem 0 0; display: flex; flex-wrap: wrap; align-items: baseline; column-gap: 0.25rem; }
+      .card-info > [data-preco-card] > span { display: inline; }
+      .card-info > [data-preco-card] [data-preco-antes] { font-size: 10.5px; }
+      .card-info > [data-preco-card] > span:last-child { font-size: 15px; }
+      .card-info > [data-cores-card] { order: 5; margin: 0 0 0.125rem; gap: 3px; }
+      .card-info > [data-cores-card] img, .card-info > [data-cores-card] > span:not(.sr-only) { width: 14px; height: 14px; }
+      .card-info > [data-acao-maleta] { display: none; }
+    }
     @media (prefers-reduced-motion: reduce) { .btn-sucesso svg { animation: none; } .chip-formato { transition: none; } }
   </style>
 </head>
@@ -262,12 +351,16 @@
   <!-- Header -->
   <header class="sticky top-0 z-50 border-b" style="background:rgba(22,22,22,0.92);border-color:var(--nix-border);backdrop-filter:blur(12px)">
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-      <div class="flex items-center justify-between h-14 sm:h-16">
+      <div class="topo-celular flex items-center justify-between h-14 sm:h-16">
+        <!-- Celular: menu (Como funciona, Área do cliente, Sobre, Contato) à esquerda -->
+        <button type="button" id="abrirMenu" class="sm:hidden flex items-center justify-center w-10 h-10 -ml-2 text-white" aria-label="Abrir menu" aria-haspopup="dialog" aria-controls="menuCelular">
+          <svg class="w-6 h-6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h10"/></svg>
+        </button>
         <a href="#" class="flex items-center gap-3" aria-label="Início">
           <img src="/logo.png" alt="NIX" class="h-9 sm:h-12 w-auto" onload="document.getElementById('brandFallback').style.display='none'" onerror="this.remove()">
           <span class="flex items-baseline gap-2">
             <span id="brandFallback" data-loja="marca" class="font-brand text-xl sm:text-2xl font-bold tracking-wide chrome-text">NIX</span>
-            <span data-loja="complemento" class="text-[11px] font-medium uppercase" style="letter-spacing:0.35em;color:var(--nix-muted)">Glasses</span>
+            <span data-loja="complemento" class="hidden sm:inline text-[11px] font-medium uppercase" style="letter-spacing:0.35em;color:var(--nix-muted)">Glasses</span>
           </span>
         </a>
         <nav class="hidden md:flex items-center space-x-8">
@@ -276,7 +369,7 @@
           <a href="#contato" class="font-medium transition-colors" style="color:var(--nix-muted)" onmouseover="this.style.color='#fff'" onmouseout="this.style.color='var(--nix-muted)'">Contato</a>
         </nav>
         <div class="flex items-center gap-1 sm:gap-4">
-          <button id="btnCliente" class="flex items-center gap-2 p-2.5 transition-colors" style="color:var(--nix-muted)" onmouseover="this.style.color='#fff'" onmouseout="this.style.color='var(--nix-muted)'" aria-label="Área do Cliente">
+          <button id="btnCliente" class="hidden sm:flex items-center gap-2 p-2.5 transition-colors" style="color:var(--nix-muted)" onmouseover="this.style.color='#fff'" onmouseout="this.style.color='var(--nix-muted)'" aria-label="Área do Cliente">
             <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/></svg>
             <span id="clienteHeader" class="hidden sm:inline text-sm font-medium max-w-[10rem] truncate">Entrar</span>
           </button>
@@ -291,6 +384,24 @@
     </div>
   </header>
 
+  <!-- Menu do celular: o que saiu do topo (Como funciona, Área do cliente, Sobre, Contato) -->
+  <div id="menuCelular" class="fixed inset-0 z-[60] hidden" role="dialog" aria-modal="true" aria-label="Menu">
+    <div data-fechar-menu class="absolute inset-0 bg-black/60"></div>
+    <nav class="menu-celular-painel relative h-full flex flex-col">
+      <div class="flex items-center justify-between h-14 px-4 border-b" style="border-color:var(--nix-border)">
+        <span class="font-brand text-lg font-bold tracking-wide chrome-text" data-loja="marca">NIX</span>
+        <button type="button" id="fecharMenu" class="w-10 h-10 flex items-center justify-center text-white" aria-label="Fechar menu">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
+        </button>
+      </div>
+      <a href="#catalogo" data-fechar-menu>Ver coleção</a>
+      <button type="button" class="item-menu" data-menu="comoFunciona">Como funciona a maleta</button>
+      <button type="button" class="item-menu" data-menu="cliente">Área do cliente</button>
+      <a href="#sobre" data-fechar-menu>Sobre a loja</a>
+      <a href="#contato" data-fechar-menu>Contato</a>
+    </nav>
+  </div>
+
   <!-- Hero enxuto: chamada curta, o Provador Virtual numa faixa baixa e os óculos logo
        em seguida. O "Como funciona" não ocupa mais espaço fixo: abre numa janela pelo
        link discreto abaixo do banner, só para quem tiver dúvida. -->
@@ -301,6 +412,12 @@
            (Configurações > Geral) e o Instagram vem de Dados da loja; cada botão só aparece
            se a loja tiver o dado. O script logo abaixo liga os botões antes de a página
            aparecer, para o topo não pular. -->
+      <!-- Busca: filtra a vitrine por nome, cor, formato, material ou tipo -->
+      <label class="busca-vitrine block">
+        <span class="sr-only">Buscar modelo, cor ou formato</span>
+        <svg fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+        <input type="search" id="buscaVitrine" placeholder="Buscar modelo, cor ou formato" autocomplete="off" enterkeyhint="search">
+      </label>
       <div id="redesTopo" class="redes-topo hidden mb-2.5 sm:mb-4">
         <!-- "Ver coleção" (loja sem Provador Virtual) fica na mesma linha do WhatsApp -->
         <a href="#catalogo" id="heroColecao" class="btn-rede btn-rede-colecao hidden">
@@ -315,6 +432,9 @@
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="5"/><circle cx="12" cy="12" r="4"/><circle cx="17.5" cy="6.5" r="0.6" fill="currentColor"/></svg>
           <span>Instagram</span>
         </a>
+        <!-- Promoção do momento (ex.: BLACK NIX): o botão prateado do pop-up com o texto
+             configurado; um toque mostra só os modelos dela, outro toque volta a todos -->
+        <div id="promocoesFiltro" class="hidden promocoes-filtro" role="group" aria-label="Promoção do momento"></div>
       </div>
       <script>
         // Liga os botões do topo com os dados que o servidor pôs em window.LOJA
@@ -428,6 +548,8 @@
         </div>
       </div>
       <!-- Orientação: uma linha que muda com o filtro (some quando não há o que dizer) -->
+      <!-- Celular: formato escolhido (ou promoção/busca) e quantos modelos -->
+      <div id="tituloLista" class="titulo-lista" aria-live="polite"><b id="tituloListaNome">Todos os modelos</b><span id="tituloListaInfo"></span></div>
       <p id="guiaCatalogo" class="mb-3 sm:mb-6 text-xs sm:text-sm text-neutral-400" role="status"><span id="guiaCatalogoTexto"></span></p>
       <div id="catalogoGrid" class="grid gap-2 sm:gap-5">
         <!-- Cards inseridos via JS -->
@@ -791,11 +913,38 @@
     // Troca os rótulos dos campos e, nas roupas, junta os tamanhos de um modelo num card.
     const NICHO = globalThis.LOJA?.nicho || (globalThis.LOJA?.oculos === false ? 'geral' : 'oculos');
     const ROTULOS_NICHO = {
-      oculos: { formato: 'Formato da lente', formatos: 'TODOS', material: 'Material', tipo: 'Tipo' },
+      oculos: { formato: 'Formato da lente', formatos: 'TODOS', material: 'Material', tipo: 'Tipo', icones: true },
       roupas: { formato: 'Categoria', formatos: 'TODAS', material: 'Tecido / composição', tipo: 'Modelagem' },
       geral: { formato: 'Categoria', formatos: 'TODAS', material: 'Material', tipo: 'Tipo' },
     };
     const rotulos = ROTULOS_NICHO[NICHO] || ROTULOS_NICHO.geral;
+
+    // Ícone de cada formato de óculos para os chips do catálogo (no lugar do nome, para caber
+    // tudo numa linha no celular). O desenho é um par de lentes com a forma do modelo; o nome
+    // fica no aria-label/title. Formato sem desenho aqui continua aparecendo escrito.
+    function iconeFormato(formato) {
+      const chave = String(formato || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim();
+      const lentes = {
+        aviador: x => `M${x-34} -18Q${x} -26 ${x+34} -18Q${x+38} 8 ${x+18} 30Q${x} 42 ${x-18} 30Q${x-40} 10 ${x-34} -18Z`,
+        redondo: x => `M${x-32} 4A32 32 0 1 0 ${x+32} 4A32 32 0 1 0 ${x-32} 4Z`,
+        oval: x => `M${x-38} 4A38 26 0 1 0 ${x+38} 4A38 26 0 1 0 ${x-38} 4Z`,
+        quadrado: x => `M${x-36} -20H${x+36}Q${x+40} -20 ${x+38} 0L${x+34} 22Q${x+32} 30 ${x+24} 30H${x-24}Q${x-32} 30 ${x-34} 22L${x-38} 0Q${x-40} -20 ${x-36} -20Z`,
+        retangular: x => `M${x-38} -14H${x+38}Q${x+41} -14 ${x+40} 0L${x+37} 16Q${x+35} 22 ${x+28} 22H${x-28}Q${x-35} 22 ${x-37} 16L${x-40} 0Q${x-41} -14 ${x-38} -14Z`,
+        gatinho: x => { const s = x < 0 ? -1 : 1; return `M${x-34*s} -10Q${x} -22 ${x+40*s} -26Q${x+36*s} 22 ${x} 28Q${x-32*s} 28 ${x-34*s} -10Z`; },
+        hexagonal: x => `M${x-20} -26H${x+20}L${x+38} 2L${x+20} 30H${x-20}L${x-38} 2Z`,
+        esportivo: x => { const s = x < 0 ? -1 : 1; return `M${x-30*s} -14L${x+44*s} -24Q${x+46*s} 4 ${x+30*s} 22Q${x+10*s} 32 ${x-22*s} 18Q${x-32*s} 8 ${x-30*s} -14Z`; },
+      };
+      const apelidos = { redonda: 'redondo', quadrada: 'quadrado', 'cat eye': 'gatinho', borboleta: 'gatinho', geometrico: 'hexagonal', geometrica: 'hexagonal', esportiva: 'esportivo', shield: 'mascara', escudo: 'mascara' };
+      const nome = apelidos[chave] || chave;
+      const haste = '<path d="M-86 -16L-104 -20M86 -16L104 -20"/>';
+      let corpo;
+      if (nome === 'mascara') corpo = '<path d="M-96 -20Q0 -34 96 -20Q98 14 70 26Q40 34 14 16Q0 8 -14 16Q-40 34 -70 26Q-98 14 -96 -20Z"/>';
+      else if (lentes[nome]) {
+        const ponte = nome === 'aviador' ? '<path d="M-14 -16Q0 -24 14 -16"/>' : '<path d="M-14 -6Q0 -16 14 -6"/>';
+        corpo = `<path d="${lentes[nome](-50)}"/><path d="${lentes[nome](50)}"/>${ponte}`;
+      } else return '';
+      return `<svg class="icone-formato" viewBox="-110 -50 220 100" fill="none" stroke="currentColor" stroke-width="9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${haste}${corpo}</svg>`;
+    }
 
     // Promoções ativas (Configurações > POP Anúncio), o pop-up da tela inicial escolhido no
     // painel e a promoção escolhida no botão do selo (0 = todos os modelos)
@@ -819,6 +968,7 @@
       maleta: () => fecharModalMaleta(),
       cliente: () => fecharCliente(),
       comoFunciona: () => fecharComoFunciona(),
+      menu: () => fecharMenu(),
       popupProvador: () => fecharPopupProvador(),
       popupAnuncio: () => fecharPopupAnuncio(),
     };
@@ -975,10 +1125,23 @@
         return `<button type="button" data-promocao="${id}" aria-pressed="${id === promocaoFiltro}" class="botao-promocao${a.selo_url ? '' : ' botao-promocao-texto'}" aria-label="Promoção ${nome}" title="${nome}">${a.selo_url ? `<img src="${escapeHtml(a.selo_url)}" alt="">` : nome}</button>`;
       }).join('');
       document.getElementById('promocoesVitrine').classList.toggle('hidden', !visiveis.length);
+      // Na barra de filtros (fica presa no topo ao rolar): o botão prateado do pop-up com o
+      // texto do botão configurado (ex.: BLACK NIX). Escolhida, ganha o contorno e o X.
+      const filtro = document.getElementById('promocoesFiltro');
+      filtro.innerHTML = visiveis.map(a => {
+        const id = Number(a.id);
+        const texto = escapeHtml(a.botao_texto || a.nome);
+        const ativa = id === promocaoFiltro;
+        return `<button type="button" data-promocao="${id}" aria-pressed="${ativa}" class="btn btn-primario botao-promocao-filtro" aria-label="Promoção ${escapeHtml(a.nome)}${ativa ? ': toque para ver todos os modelos' : ''}"><span>${texto}</span>${ativa ? '<span aria-hidden="true" class="text-sm leading-none">&times;</span>' : ''}</button>`;
+      }).join('');
+      filtro.classList.toggle('hidden', !visiveis.length);
+      // As pílulas do topo aparecem com a promoção mesmo sem WhatsApp/Instagram
+      if (visiveis.length) document.getElementById('redesTopo')?.classList?.remove('hidden');
       // Na barra de filtros, a promoção escolhida com o X para voltar a todos
       const chip = document.getElementById('chipPromocao');
       const a = anuncioPorId(promocaoFiltro);
-      chip.classList.toggle('hidden', !a);
+      // A promoção que já tem botão na barra de filtros não repete o chip
+      chip.classList.toggle('hidden', !a || visiveis.some(v => Number(v.id) === Number(a.id)));
       chip.innerHTML = a ? `${a.selo_url ? `<img src="${escapeHtml(a.selo_url)}" alt="">` : ''}<span>${escapeHtml(a.nome)}</span><span aria-hidden="true" class="ml-0.5 text-sm leading-none">&times;</span>` : '';
       chip.setAttribute('aria-label', a ? `Promoção ${a.nome}: toque para ver todos os modelos` : '');
     }
@@ -1011,9 +1174,16 @@
       // O formato escolhido sumiu do catálogo (produto vendido/apagado): volta para "Todos"
       if (!formatos.includes(filtroFormato.value)) filtroFormato.value = '';
       chipsFormato.setAttribute('aria-label', rotulos.formato);
-      chipsFormato.innerHTML = ['', ...formatos].map(f =>
-        `<button type="button" data-formato="${escapeHtml(f)}" aria-pressed="${f === filtroFormato.value}" class="chip-formato">${escapeHtml(f || rotulos.formatos)}</button>`
-      ).join('');
+      // Óculos: cada formato vira só o desenho (o nome vai no aria-label e no title)
+      // Com desenhos não há o "TODOS": tocar no formato escolhido de novo volta a todos
+      const todos = rotulos.icones && formatos.every(iconeFormato) ? [] : [''];
+      chipsFormato.innerHTML = [...todos, ...formatos].map(f => {
+        const icone = f && rotulos.icones ? iconeFormato(f) : '';
+        const nome = escapeHtml(f || rotulos.formatos);
+        return icone
+          ? `<button type="button" data-formato="${escapeHtml(f)}" aria-pressed="${f === filtroFormato.value}" class="chip-formato chip-icone" aria-label="${nome}" title="${nome}">${icone}</button>`
+          : `<button type="button" data-formato="${escapeHtml(f)}" aria-pressed="${f === filtroFormato.value}" class="chip-formato">${nome}</button>`;
+      }).join('');
       // Com um formato só (ou nenhum) o filtro não ajuda: a fileira fica escondida
       chipsFormato.classList.toggle('hidden', formatos.length < 2);
     }
@@ -1312,6 +1482,19 @@
       return `<button type="button" data-btn-maleta onclick="abrirDetalhes(${alvo})" aria-pressed="${naMaleta.length > 0}" class="btn btn-sm btn-maleta w-full ${cor}"><span class="sm:hidden">${curto}</span><span class="hidden sm:inline">${longo}</span></button>`;
     }
 
+    // Celular: botão redondo no canto da foto. "+" põe na maleta (um modelo só) ou abre
+    // os detalhes para escolher a cor/o tamanho; com a peça na maleta vira o check verde.
+    function botaoFotoCard(grupo, jaNaMaleta) {
+      const produto = grupo[0];
+      const varios = grupo.length > 1;
+      const encomenda = grupo.every(ehSobEncomenda);
+      const acao = varios ? `abrirDetalhes(${Number(produto.id)})` : `toggleMaleta(${Number(produto.id)})`;
+      const nome = escapeHtml(nomeCard(produto));
+      const rotulo = jaNaMaleta ? (varios ? `${nome} na maleta: ver cores` : `Tirar ${nome} da maleta`) : varios ? `Escolher a cor de ${nome}` : encomenda ? `Encomendar ${nome}` : `Colocar ${nome} na maleta`;
+      const icone = jaNaMaleta ? '<path d="m5 12 5 5 9-10"/>' : '<path d="M12 5v14M5 12h14"/>';
+      return `<button type="button" data-btn-foto onclick="${acao}" aria-pressed="${jaNaMaleta}" class="btn-foto-maleta${jaNaMaleta ? ' na-maleta' : encomenda ? ' encomenda' : ''}" aria-label="${rotulo}"><svg fill="none" stroke="currentColor" stroke-width="${jaNaMaleta ? 3 : 2.6}" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true">${icone}</svg></button>`;
+    }
+
     // Tamanhos do card (roupas): "P · M · G" ou o tamanho único do produto
     function tamanhosCard(grupo) {
       return NICHO === 'roupas' ? grupo.map(p => String(p.tamanho || '').trim()).filter(Boolean) : [];
@@ -1372,6 +1555,29 @@
       return { prova, compras, encomendas, totalProva: soma(prova), totalCompra: soma(compras), totalEncomendas: soma(encomendas), sinal, total: soma(itens), economia };
     }
 
+    // Busca da vitrine: cada palavra digitada precisa aparecer no nome, nome curto, cor,
+    // formato, material, tipo ou código (sem diferença de acento e maiúscula)
+    let termoBusca = '';
+    function normalizarBusca(texto) {
+      return String(texto ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
+    }
+    function passaBusca(p, termo) {
+      const alvo = normalizarBusca([p.nome, p.nome_curto, p.cor_armacao, p.cor, p.formato, p.material, p.tipo, p.codigo_sku].join(' '));
+      return normalizarBusca(termo).split(/\s+/).filter(Boolean).every(palavra => alvo.includes(palavra));
+    }
+
+    // Título da lista no celular: "Aviador", a promoção ou a busca, com quantos modelos
+    function atualizarTituloLista(qtd) {
+      const nome = document.getElementById('tituloListaNome');
+      const info = document.getElementById('tituloListaInfo');
+      if (!nome || !info) return;
+      const promocao = anuncioPorId(promocaoFiltro);
+      const formato = filtroFormato.value;
+      const capitalizar = s => String(s).toLowerCase().replace(/(^|\s)\S/g, c => c.toUpperCase());
+      nome.textContent = termoBusca ? `“${termoBusca}”` : promocao ? (promocao.botao_texto || promocao.nome) : formato ? capitalizar(formato) : 'Todos os modelos';
+      info.textContent = `${qtd} ${qtd === 1 ? 'modelo' : 'modelos'}${qtd > 1 ? ' · Disponíveis primeiro' : ''}`;
+    }
+
     // Renderizar catálogo
     function renderizarCatalogo() {
       const statusFiltro = filtroStatus.value;
@@ -1385,8 +1591,11 @@
         if (formatoFiltro && p.formato !== formatoFiltro) return false;
         if (!passaFiltroGenero(p, generoFiltro)) return false;
         if (tamanhoFiltro && String(p.tamanho || '').trim() !== tamanhoFiltro) return false;
+        if (typeof termoBusca !== 'undefined' && termoBusca && !passaBusca(p, termoBusca)) return false;
         return true;
       });
+      const cardsVitrine = ordenarCardsVitrine(agruparCards(filtrados));
+      if (typeof atualizarTituloLista === 'function') atualizarTituloLista(cardsVitrine.length);
 
       catalogoGrid.innerHTML = '';
 
@@ -1399,7 +1608,7 @@
       catalogoGrid.classList.remove('hidden');
       emptyState.classList.add('hidden');
 
-      ordenarCardsVitrine(agruparCards(filtrados)).forEach(grupo => {
+      cardsVitrine.forEach(grupo => {
         const produto = grupo[0];
         const jaNaMaleta = grupo.some(p => maleta.itens.some(i => i.id === p.id));
         const tamanhos = tamanhosCard(grupo);
@@ -1441,16 +1650,17 @@
             ${mostraEtiqueta ? `<div class="absolute top-1.5 right-1.5 sm:top-3 sm:right-3">
               <span class="px-1.5 sm:px-2 py-0.5 sm:py-1 text-[9px] sm:text-xs font-medium rounded-full ${etiqueta.classe}">${escapeHtml(etiqueta.texto)}</span>
             </div>` : ''}
-            ${promocao ? `<div class="absolute bottom-1 right-1 sm:bottom-2 sm:right-2 pointer-events-none">${htmlSeloPromocao(promocao)}</div>` : ''}
+            ${promocao ? `<div data-selo-promocao-card class="absolute bottom-1 right-1 sm:bottom-2 sm:right-2 pointer-events-none">${htmlSeloPromocao(promocao)}</div>` : ''}
+            <span data-acao-foto>${typeof botaoFotoCard === 'function' ? botaoFotoCard(grupo, jaNaMaleta) : ''}</span>
             <div data-selo-maleta class="${jaNaMaleta ? '' : 'hidden '}chrome-btn absolute bottom-1.5 left-1.5 sm:bottom-3 sm:left-3 w-5 h-5 sm:w-7 sm:h-7 flex items-center justify-center rounded-full shadow text-[10px] sm:text-sm font-bold" title="Na maleta" aria-label="Na maleta">✓</div>
           </div>
           </div>
-          <div class="p-2 sm:p-4 pt-2 sm:pt-3 flex-1 flex flex-col">
+          <div class="card-info p-2 sm:p-4 pt-2 sm:pt-3 flex-1 flex flex-col">
             <h3 class="font-medium text-neutral-300 text-xs sm:text-[15px] leading-snug mb-0.5 line-clamp-2 min-h-[2.75em] break-words" title="${escapeHtml(produto.nome)}">${escapeHtml(nomeCard(produto))}</h3>
             ${tags.length ? `<p data-tags-card class="hidden sm:block text-xs text-neutral-500 mb-2 truncate">${tags.map(escapeHtml).join(' · ')}</p>` : ''}
             ${coresCard(grupo)}
             ${tamanhos.length ? `<p data-tamanhos-card class="text-[10px] sm:text-xs font-medium text-neutral-400 mb-1 sm:mb-2 truncate" title="Tamanhos">${tamanhos.map(escapeHtml).join(' · ')}</p>` : ''}
-            <div class="mt-auto mb-2 sm:mb-3">
+            <div data-preco-card class="mt-auto mb-2 sm:mb-3">
               ${variaPreco ? '<span class="block text-[10px] sm:text-xs text-neutral-500">a partir de</span>' : ''}
               ${antesCard ? `<span data-preco-antes class="block text-[11px] sm:text-sm text-neutral-500 line-through leading-tight" aria-label="De ${formatarMoeda(antesCard)}">${formatarMoeda(antesCard)}</span>` : ''}
               <span ${antesCard ? 'data-preco-promocional ' : ''}class="block text-sm sm:text-xl font-bold ${antesCard ? 'text-pink-400' : 'text-white'} tracking-tight">${antesCard ? '<span class="sr-only">Por </span>' : ''}${formatarMoeda(Math.min(...precos))}</span>
@@ -1509,6 +1719,13 @@
       if (tinhaFoco) botao.focus();
       const selo = card.querySelector('[data-selo-maleta]');
       if (selo) selo.classList.toggle('hidden', !jaNaMaleta);
+      // Celular: o botão redondo da foto vira o check verde (ou volta para o +)
+      const acaoFoto = card.querySelector('[data-acao-foto]');
+      if (acaoFoto && typeof botaoFotoCard === 'function') {
+        const focoFoto = acaoFoto.contains(document.activeElement);
+        acaoFoto.innerHTML = botaoFotoCard(grupo.length ? grupo : [produto], jaNaMaleta);
+        if (focoFoto) acaoFoto.querySelector('[data-btn-foto]')?.focus();
+      }
     }
 
     // Detalhes do produto: foto grande com setas, deslizar e miniaturas
@@ -2715,6 +2932,44 @@
     }
 
     document.getElementById('abrirComoFunciona').addEventListener('click', abrirComoFunciona);
+
+    // Menu do celular (☰): Como funciona, Área do cliente, Sobre e Contato
+    const menuCelular = document.getElementById('menuCelular');
+    function abrirMenu() {
+      menuCelular.classList.remove('hidden');
+      document.body.style.overflow = 'hidden';
+      entrarModalHistorico('menu');
+      document.getElementById('fecharMenu').focus();
+    }
+    function fecharMenu() {
+      if (menuCelular.classList.contains('hidden')) return;
+      menuCelular.classList.add('hidden');
+      document.body.style.overflow = '';
+      sairModalHistorico('menu');
+    }
+    document.getElementById('abrirMenu').addEventListener('click', abrirMenu);
+    document.getElementById('fecharMenu').addEventListener('click', fecharMenu);
+    menuCelular.addEventListener('click', (e) => {
+      const item = e.target.closest('[data-menu]');
+      if (item) {
+        fecharMenu();
+        // Espera o Voltar do menu terminar antes de abrir a outra janela
+        setTimeout(() => (item.dataset.menu === 'cliente' ? abrirCliente() : abrirComoFunciona()), 60);
+        return;
+      }
+      if (e.target.closest('[data-fechar-menu]')) fecharMenu();
+    });
+    document.addEventListener('keydown', (e) => { if (e.key === 'Escape') fecharMenu(); });
+
+    // Busca da vitrine: filtra enquanto a cliente digita
+    document.getElementById('buscaVitrine').addEventListener('input', (e) => {
+      termoBusca = e.target.value.trim();
+      renderizarCatalogo();
+      atualizarGuias();
+    });
+    document.getElementById('buscaVitrine').addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') { e.target.blur(); document.getElementById('catalogo').scrollIntoView({ behavior: 'smooth' }); }
+    });
     document.getElementById('fecharComoFunciona').addEventListener('click', fecharComoFunciona);
     document.getElementById('entendiComoFunciona').addEventListener('click', () => {
       fecharComoFunciona();
@@ -2829,6 +3084,10 @@
       const b = e.target.closest('[data-promocao]');
       if (b) aplicarFiltroPromocao(b.dataset.promocao);
     });
+    document.getElementById('promocoesFiltro').addEventListener('click', (e) => {
+      const b = e.target.closest('[data-promocao]');
+      if (b) aplicarFiltroPromocao(b.dataset.promocao, { rolar: false });
+    });
     document.getElementById('chipPromocao').addEventListener('click', () => aplicarFiltroPromocao(0, { rolar: false }));
 
     // Inicialização
@@ -2869,7 +3128,7 @@
     chipsFormato.addEventListener('click', (e) => {
       const chip = e.target.closest('[data-formato]');
       if (!chip) return;
-      aplicarFiltroFormato(chip.dataset.formato);
+      aplicarFiltroFormato(rotulos.icones && chip.dataset.formato && chip.dataset.formato === filtroFormato.value ? '' : chip.dataset.formato);
       chip.scrollIntoView({ behavior: 'smooth', inline: 'nearest', block: 'nearest' });
       // Com a lista mais curta, a cliente pode ficar abaixo dos cards: volta ao início do catálogo
       const catalogo = document.getElementById('catalogo');
