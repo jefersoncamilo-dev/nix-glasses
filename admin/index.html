@@ -127,7 +127,8 @@
           <div class="flex flex-col sm:flex-row gap-2">
           <button type="button" data-abrir-fotos-sku class="w-full sm:w-auto justify-center bg-gray-100 hover:bg-gray-200 text-gray-700 px-4 py-2 rounded-lg font-medium transition-colors">Fotos por SKU</button>
           <button id="btnConferenciaEstoque" type="button" class="w-full sm:w-auto justify-center bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg font-medium transition-colors" title="Conferir o estoque por pedido do fornecedor: vendido, baixa, encomenda ou esgotado">Conferência de estoque</button>
-          <button id="btnAcertoEstoque" type="button" class="w-full sm:w-auto justify-center bg-white border border-red-300 hover:bg-red-50 text-red-700 px-4 py-2 rounded-lg font-medium transition-colors" title="Excluir produtos definitivamente, um ou vários">Acerto de estoque</button>
+          <button id="btnArquivarEsgotados" type="button" class="w-full sm:w-auto justify-center bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 px-4 py-2 rounded-lg font-medium transition-colors" title="Guardar os produtos esgotados: saem da lista, da vitrine e das Métricas, e podem voltar pelo filtro Arquivados">Arquivar esgotados</button>
+          <button id="btnAcertoEstoque" type="button" class="w-full sm:w-auto justify-center bg-white border border-red-300 hover:bg-red-50 text-red-700 px-4 py-2 rounded-lg font-medium transition-colors" title="Marcar produtos para arquivar ou excluir definitivamente, um ou vários">Acerto de estoque</button>
           <button id="btnAbrirPedidoFornecedor" type="button" class="w-full sm:w-auto justify-center bg-gray-100 hover:bg-gray-200 text-gray-700 px-4 py-2 rounded-lg font-medium transition-colors">Lançar pedido do fornecedor</button>
           <button id="btnAbrirLote" type="button" class="w-full sm:w-auto justify-center bg-gray-100 hover:bg-gray-200 text-gray-700 px-4 py-2 rounded-lg font-medium transition-colors">Cadastro em Lote</button>
           <button id="btnNovoProduto" class="w-full sm:w-auto justify-center bg-orange-500 hover:bg-orange-600 text-white px-4 py-2 rounded-lg font-medium transition-colors flex items-center">
@@ -146,6 +147,7 @@
             <option value="CONDICIONAL">Condicional</option>
             <option value="ESGOTADO">Esgotado</option>
             <option value="EM_CONFERENCIA">Em conferência (fora da vitrine)</option>
+            <option value="ARQUIVADO">Arquivados</option>
           </select>
           <select id="filtroDisponibilidadeAdmin" class="w-full sm:w-auto px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500">
             <option value="">Todas as Disponibilidades</option>
@@ -165,13 +167,14 @@
         <div id="barraAcertoEstoque" class="hidden bg-red-50 border border-red-200 rounded-xl p-4 mb-4">
           <div class="flex flex-col lg:flex-row lg:items-center gap-3">
             <div class="flex-1 min-w-0">
-              <p class="font-semibold text-red-800">Acerto de estoque: excluir produtos definitivamente</p>
-              <p class="text-sm text-red-700">Marque os produtos que saem do cadastro. Os filtros e a busca acima continuam valendo. Produto com peça em maleta ou em pedido aberto não pode ser excluído.</p>
+              <p class="font-semibold text-red-800">Acerto de estoque: arquivar ou excluir produtos</p>
+              <p class="text-sm text-red-700">Marque os produtos. <strong>Arquivar</strong> guarda o produto fora da lista, da vitrine e das Métricas (volta pelo filtro Arquivados); <strong>Excluir</strong> apaga de vez. Os filtros e a busca acima continuam valendo. Produto com peça em maleta ou em pedido aberto não pode sair.</p>
             </div>
             <div class="flex flex-wrap items-center gap-2">
               <span id="contagemAcertoEstoque" class="text-sm font-medium text-red-800">0 marcados</span>
               <button id="btnMarcarFiltrados" type="button" class="bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 px-3 py-2 rounded-lg text-sm font-medium">Marcar os da lista</button>
               <button id="btnDesmarcarTodos" type="button" class="bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 px-3 py-2 rounded-lg text-sm font-medium">Desmarcar</button>
+              <button id="btnArquivarMarcados" type="button" disabled class="bg-gray-800 hover:bg-gray-900 disabled:opacity-40 disabled:cursor-not-allowed text-white px-4 py-2 rounded-lg text-sm font-medium">Arquivar</button>
               <button id="btnExcluirMarcados" type="button" disabled class="bg-red-600 hover:bg-red-700 disabled:opacity-40 disabled:cursor-not-allowed text-white px-4 py-2 rounded-lg text-sm font-medium">Excluir definitivamente</button>
               <button id="btnSairAcertoEstoque" type="button" class="text-sm text-gray-600 hover:text-gray-900 px-2 py-2 font-medium">Sair</button>
             </div>
@@ -179,7 +182,10 @@
         </div>
 
         <!-- Botão que acompanha a rolagem enquanto há produtos marcados -->
-        <button id="btnExcluirFlutuante" type="button" class="hidden fixed bottom-4 right-4 z-40 bg-red-600 hover:bg-red-700 text-white px-5 py-3 rounded-full shadow-lg font-medium">Excluir definitivamente</button>
+        <div id="botoesFlutuantesAcerto" class="hidden fixed bottom-4 right-4 z-40 flex gap-2">
+          <button id="btnArquivarFlutuante" type="button" class="bg-gray-800 hover:bg-gray-900 text-white px-5 py-3 rounded-full shadow-lg font-medium">Arquivar</button>
+          <button id="btnExcluirFlutuante" type="button" class="bg-red-600 hover:bg-red-700 text-white px-5 py-3 rounded-full shadow-lg font-medium">Excluir definitivamente</button>
+        </div>
 
         <!-- Tabela -->
         <div class="bg-white rounded-xl border border-gray-200 overflow-hidden">
@@ -1246,6 +1252,29 @@
       <div class="flex justify-end gap-2 p-4 border-t border-gray-200">
         <button id="btnCancelarExclusao" type="button" class="bg-gray-100 hover:bg-gray-200 text-gray-700 px-4 py-2 rounded-lg font-medium">Cancelar</button>
         <button id="btnConfirmarExclusao" type="button" disabled class="bg-red-600 hover:bg-red-700 disabled:opacity-40 disabled:cursor-not-allowed text-white px-4 py-2 rounded-lg font-medium">Excluir</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Arquivar produtos: prévia antes de confirmar (dá para desarquivar depois) -->
+  <div id="modalArquivar" class="fixed inset-0 modal-overlay bg-black/50 hidden z-50 flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-labelledby="tituloArquivar">
+    <div class="bg-white rounded-2xl max-w-lg w-full max-h-[90vh] overflow-hidden flex flex-col">
+      <div class="flex items-center justify-between p-6 border-b border-gray-200">
+        <h3 id="tituloArquivar" class="text-xl font-bold text-gray-900">Arquivar produtos</h3>
+        <button id="fecharModalArquivar" type="button" class="p-2 text-gray-500 hover:text-gray-700 rounded-lg hover:bg-gray-100" aria-label="Fechar"><svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg></button>
+      </div>
+      <div class="p-6 overflow-y-auto flex-1">
+        <p id="resumoArquivar" class="text-sm text-gray-800 mb-3">Conferindo os produtos...</p>
+        <ul id="listaArquivar" class="divide-y divide-gray-100 border border-gray-200 rounded-lg mb-4 max-h-72 overflow-y-auto"></ul>
+        <div id="bloqueioArquivar" class="hidden bg-red-50 border border-red-200 rounded-lg p-3 mb-4 text-sm text-red-800">
+          <p id="textoBloqueioArquivar"></p>
+          <button id="btnTirarBloqueadosArquivar" type="button" class="mt-2 bg-white border border-red-300 hover:bg-red-100 text-red-700 px-3 py-1.5 rounded-lg text-sm font-medium">Tirar esses da lista e continuar</button>
+        </div>
+        <p id="efeitoArquivar" class="hidden text-sm text-gray-600">Sai da lista de Produtos, da vitrine, das Métricas (estoque, Top 10), do Editar em estoque e da Conferência de estoque. Fotos, compras e as vendas já feitas continuam guardadas. Para trazer de volta: filtro <strong>Arquivados</strong> e <strong>Desarquivar</strong>.</p>
+      </div>
+      <div class="flex justify-end gap-2 p-4 border-t border-gray-200">
+        <button id="btnCancelarArquivar" type="button" class="bg-gray-100 hover:bg-gray-200 text-gray-700 px-4 py-2 rounded-lg font-medium">Cancelar</button>
+        <button id="btnConfirmarArquivar" type="button" disabled class="bg-gray-800 hover:bg-gray-900 disabled:opacity-40 disabled:cursor-not-allowed text-white px-4 py-2 rounded-lg font-medium">Arquivar</button>
       </div>
     </div>
   </div>
@@ -3023,7 +3052,7 @@
 
     // Recarrega a tabela a partir dos produtos do banco (descarta o que não foi salvo)
     function recarregarEdicao() {
-      linhasEdicao = todosProdutos.map(linhaDoProduto);
+      linhasEdicao = todosProdutos.filter(p => !p.arquivado).map(linhaDoProduto);
       originaisEdicao = new Map(linhasEdicao.map(l => [l.id, { ...l }]));
       errosEdicao = {};
       renderizarEdicao();
@@ -3280,7 +3309,10 @@
 
       const filtrados = todosProdutos.filter(p => {
         if (fornecedorFiltro && p.fornecedor !== fornecedorFiltro) return false;
-        if (statusFiltro === 'EM_CONFERENCIA' ? !p.em_conferencia : statusFiltro && p.status !== statusFiltro) return false;
+        // Arquivados só aparecem no filtro Arquivados
+        if (statusFiltro === 'ARQUIVADO') { if (!p.arquivado) return false; }
+        else if (p.arquivado) return false;
+        else if (statusFiltro === 'EM_CONFERENCIA' ? !p.em_conferencia : statusFiltro && p.status !== statusFiltro) return false;
         if (disponibilidadeFiltro && (p.disponibilidade || 'PRONTA_ENTREGA') !== disponibilidadeFiltro) return false;
         if (formatoFiltro && p.formato !== formatoFiltro) return false;
         if (busca && ![p.nome, p.codigo_sku, p.fornecedor, p.codigo_fornecedor, p.nome_fornecedor].some(v => String(v || '').toLowerCase().includes(busca))) return false;
@@ -3347,6 +3379,23 @@
       }
     };
 
+    // Selo "Arquivado" (fora da lista, da vitrine e das Métricas; volta com Desarquivar)
+    function htmlArquivado(produtos) {
+      const arq = produtos.filter(p => p.arquivado);
+      if (!arq.length) return '';
+      const dia = arq[0].arquivado_em ? ` em ${escapeHtml(formatarDia(arq[0].arquivado_em))}` : '';
+      return `<span class="block w-max mt-1 px-2 py-1 text-xs font-medium rounded-full bg-gray-200 text-gray-700" data-arquivado title="Fora da lista, da vitrine e das Métricas">ARQUIVADO${dia}</span>`;
+    }
+
+    // Botão da linha: Arquivar (caixa) ou, no filtro Arquivados, Desarquivar
+    function botaoArquivar(produtos) {
+      const ids = produtos.map(p => Number(p.id));
+      if (produtos.every(p => p.arquivado)) {
+        return `<button type="button" onclick="desarquivarProdutos([${ids.join(',')}])" data-desarquivar class="px-2 py-1.5 text-sm font-medium text-green-700 hover:bg-green-50 rounded-lg transition-colors" title="Volta para a lista (e para a vitrine, se tiver estoque)">Desarquivar</button>`;
+      }
+      return `<button type="button" onclick="abrirArquivar([${ids.join(',')}])" data-arquivar class="p-2 text-gray-500 hover:text-gray-800 hover:bg-gray-100 rounded-lg transition-colors" title="Arquivar${ids.length > 1 ? ' o modelo (todas as cores)' : ''}: sai da lista, da vitrine e das Métricas, mas fica guardado">${'<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4"/></svg>'}</button>`;
+    }
+
     // Nome do modelo: o nome da cor sem o " - <cor>" do fim
     function nomeDoModelo(p) {
       const nome = String(p.nome || '');
@@ -3389,6 +3438,7 @@
           <td class="px-4 sm:px-6 py-4">
             <span class="px-2 py-1 text-xs font-medium rounded-full ${statusClass(status)}">${escapeHtml(status)}</span>
             ${htmlEmConferencia(item.cores)}
+            ${htmlArquivado(item.cores)}
             <span class="block mt-1 text-xs text-gray-500">${estoque} em estoque (todas as cores)${emMaleta ? ` • ${emMaleta} em maleta` : ''}</span>
             ${p.disponibilidade === 'SOB_ENCOMENDA' ? '<span class="block w-max mt-1 px-2 py-1 text-xs font-medium rounded-full bg-blue-100 text-blue-700">SOB ENCOMENDA</span>' : ''}
             ${htmlPromocaoProduto(p)}
@@ -3398,6 +3448,7 @@
             <div class="flex items-center space-x-1">
               <button onclick="editarProduto(${Number(p.id)})" class="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors" title="Editar o modelo (ou toque numa cor para editar só ela)"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg></button>
               ${botaoLinkFornecedor(p.link_fornecedor)}
+              ${botaoArquivar(item.cores)}
             </div>
           </td>
         </tr>`;
@@ -3430,6 +3481,7 @@
           <td class="px-4 sm:px-6 py-4">
             <span class="px-2 py-1 text-xs font-medium rounded-full ${statusClass(p.status)}">${escapeHtml(p.status)}</span>
             ${htmlEmConferencia([p])}
+            ${htmlArquivado([p])}
             <span class="block mt-1 text-xs text-gray-500">${Number(p.estoque) || 0} em estoque${Number(p.em_maleta) ? ` • ${Number(p.em_maleta)} em maleta` : ''}</span>
             ${p.disponibilidade === 'SOB_ENCOMENDA' ? '<span class="block w-max mt-1 px-2 py-1 text-xs font-medium rounded-full bg-blue-100 text-blue-700">SOB ENCOMENDA</span>' : ''}
             ${htmlPromocaoProduto(p)}
@@ -3440,6 +3492,7 @@
               <button onclick="editarProduto(${Number(p.id)})" class="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors" title="Editar"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg></button>
               ${botaoLinkFornecedor(p.link_fornecedor)}
               <button onclick="abrirReposicao(${Number(p.id)})" class="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors" title="Registrar reposição / histórico de compras"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z"/></svg></button>
+              ${botaoArquivar([p])}
               <button onclick="excluirProduto(${Number(p.id)})" class="p-2 text-red-500 hover:text-red-700 hover:bg-red-50 rounded-lg transition-colors" title="Excluir definitivamente"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg></button>
             </div>
           </td>
@@ -3839,7 +3892,7 @@
     function coresDoModeloDe(produto, produtos) {
       const grade = String(produto.grade || '').trim().toLowerCase();
       if (!grade || String(produto.tamanho || '').trim() || !String(produto.cor_armacao || '').trim()) return [];
-      const doModelo = produtos.filter(p => String(p.grade || '').trim().toLowerCase() === grade && !String(p.tamanho || '').trim() && String(p.cor_armacao || '').trim());
+      const doModelo = produtos.filter(p => String(p.grade || '').trim().toLowerCase() === grade && !String(p.tamanho || '').trim() && String(p.cor_armacao || '').trim() && (!p.arquivado || p.id === produto.id));
       const lista = [produto, ...doModelo.filter(p => p.id !== produto.id)];
       return lista.map(p => ({
         produto: p,
@@ -7916,6 +7969,7 @@
     // Não confundir com o Acerto de Maleta (vendidos/devolvidos de uma cliente).
     const barraAcertoEstoque = document.getElementById('barraAcertoEstoque');
     const btnExcluirMarcados = document.getElementById('btnExcluirMarcados');
+    const btnArquivarMarcados = document.getElementById('btnArquivarMarcados');
     const marcarTodosAcerto = document.getElementById('marcarTodosAcerto');
 
     function atualizarBarraAcertoEstoque() {
@@ -7926,9 +7980,13 @@
       document.getElementById('contagemAcertoEstoque').textContent = n === 1 ? '1 marcado' : `${n} marcados`;
       btnExcluirMarcados.disabled = n === 0;
       btnExcluirMarcados.textContent = n ? `Excluir definitivamente (${n})` : 'Excluir definitivamente';
-      const flutuante = document.getElementById('btnExcluirFlutuante');
-      flutuante.classList.toggle('hidden', n === 0);
-      flutuante.textContent = `Excluir definitivamente (${n})`;
+      document.getElementById('botoesFlutuantesAcerto').classList.toggle('hidden', n === 0);
+      document.getElementById('btnExcluirFlutuante').textContent = `Excluir definitivamente (${n})`;
+      // No filtro Arquivados o botão vira Desarquivar
+      const verbo = filtroStatusAdmin.value === 'ARQUIVADO' ? 'Desarquivar' : 'Arquivar';
+      btnArquivarMarcados.disabled = n === 0;
+      btnArquivarMarcados.textContent = n ? `${verbo} (${n})` : verbo;
+      document.getElementById('btnArquivarFlutuante').textContent = `${verbo} (${n})`;
       const ids = produtosFiltrados.map(p => Number(p.id));
       const marcadosNaLista = ids.filter(id => marcadosAcerto.has(id)).length;
       marcarTodosAcerto.checked = ids.length > 0 && marcadosNaLista === ids.length;
@@ -7939,7 +7997,7 @@
       modoAcertoEstoque = ligado;
       if (!ligado) {
         marcadosAcerto.clear();
-        document.getElementById('btnExcluirFlutuante').classList.add('hidden');
+        document.getElementById('botoesFlutuantesAcerto').classList.add('hidden');
       }
       barraAcertoEstoque.classList.toggle('hidden', !ligado);
       document.querySelectorAll('.col-acerto-estoque').forEach(el => el.classList.toggle('hidden', !ligado));
@@ -7971,6 +8029,156 @@
     });
     btnExcluirMarcados.addEventListener('click', () => abrirExclusao([...marcadosAcerto]));
     document.getElementById('btnExcluirFlutuante').addEventListener('click', () => abrirExclusao([...marcadosAcerto]));
+    const arquivarMarcados = () => filtroStatusAdmin.value === 'ARQUIVADO'
+      ? desarquivarProdutos([...marcadosAcerto])
+      : abrirArquivar([...marcadosAcerto]);
+    btnArquivarMarcados.addEventListener('click', arquivarMarcados);
+    document.getElementById('btnArquivarFlutuante').addEventListener('click', arquivarMarcados);
+
+    // ---------- Arquivar produtos ----------
+    // Arquivado sai da lista, da vitrine, das Métricas, do Editar em estoque e da
+    // Conferência de estoque, mas fica guardado (filtro Arquivados > Desarquivar).
+    // O servidor confere antes: peça em maleta ou pedido aberto barra tudo.
+    const modalArquivar = document.getElementById('modalArquivar');
+    const btnConfirmarArquivar = document.getElementById('btnConfirmarArquivar');
+    let arquivamento = { conferidos: [], bloqueados: [], salvando: false, esgotados: false };
+    const plProdutos = n => `${n} ${n === 1 ? 'produto' : 'produtos'}`;
+
+    // "Arquivar todos os esgotados": esgotados que não estão em conferência e cujo modelo
+    // inteiro está esgotado (a cor esgotada de um modelo que ainda vende fica com ele)
+    function esgotadosParaArquivar(produtos) {
+      const vivos = new Set();
+      produtos.forEach(p => {
+        const g = String(p.grade || '').trim().toLowerCase();
+        if (g && !p.arquivado && p.status !== 'ESGOTADO') vivos.add(g);
+      });
+      return produtos.filter(p => !p.arquivado && !p.em_conferencia && p.status === 'ESGOTADO'
+        && !vivos.has(String(p.grade || '').trim().toLowerCase()));
+    }
+
+    function renderizarArquivar() {
+      const { conferidos, bloqueados } = arquivamento;
+      const liberados = conferidos.length - bloqueados.length;
+      document.getElementById('listaArquivar').innerHTML = conferidos.map(p => `
+        <li class="px-3 py-2 text-sm ${p.bloqueios.length ? 'bg-red-50' : ''}">
+          <p class="font-medium text-gray-900">${escapeHtml(nomeProdutoExclusao(p))} <span class="text-gray-500 font-normal">• ${escapeHtml(p.codigo_sku)} • ${Number(p.estoque) || 0} em estoque</span></p>
+          ${p.bloqueios.map(b => `<p class="text-red-700">Não pode arquivar: ${escapeHtml(b)}</p>`).join('')}
+          ${p.avisos.map(a => `<p class="text-amber-700">Atenção: ${escapeHtml(a)}</p>`).join('')}
+        </li>`).join('');
+      document.getElementById('resumoArquivar').innerHTML = arquivamento.esgotados
+        ? `Encontrei <strong>${escapeHtml(plProdutos(conferidos.length))} esgotado${conferidos.length === 1 ? '' : 's'}</strong> (fora da vitrine e fora de conferência) para arquivar:`
+        : conferidos.length === 1 ? 'Este produto vai ser <strong>arquivado</strong>:' : `Estes <strong>${escapeHtml(plProdutos(conferidos.length))}</strong> vão ser <strong>arquivados</strong>:`;
+      document.getElementById('bloqueioArquivar').classList.toggle('hidden', !bloqueados.length);
+      document.getElementById('textoBloqueioArquivar').textContent = `${plProdutos(bloqueados.length)} não ${bloqueados.length === 1 ? 'pode' : 'podem'} ser arquivado${bloqueados.length === 1 ? '' : 's'} agora (em vermelho).`;
+      document.getElementById('btnTirarBloqueadosArquivar').classList.toggle('hidden', liberados === 0);
+      document.getElementById('efeitoArquivar').classList.toggle('hidden', !conferidos.length);
+      btnConfirmarArquivar.textContent = liberados ? `Arquivar ${plProdutos(liberados)}` : 'Arquivar';
+      btnConfirmarArquivar.disabled = arquivamento.salvando || !conferidos.length || bloqueados.length > 0;
+    }
+
+    function aplicarConferenciaArquivar(data) {
+      arquivamento.conferidos = data.produtos || [];
+      arquivamento.bloqueados = arquivamento.conferidos.filter(p => p.bloqueios.length);
+      if (!arquivamento.conferidos.length) {
+        document.getElementById('resumoArquivar').textContent = 'Esses produtos já não existem (a lista mudou). Atualize a tela.';
+        btnConfirmarArquivar.disabled = true;
+        return;
+      }
+      renderizarArquivar();
+    }
+
+    window.abrirArquivar = async (ids, esgotados = false) => {
+      arquivamento = { conferidos: [], bloqueados: [], salvando: false, esgotados };
+      document.getElementById('listaArquivar').innerHTML = '';
+      document.getElementById('bloqueioArquivar').classList.add('hidden');
+      document.getElementById('efeitoArquivar').classList.add('hidden');
+      btnConfirmarArquivar.disabled = true;
+      btnConfirmarArquivar.textContent = 'Arquivar';
+      document.getElementById('tituloArquivar').textContent = esgotados ? 'Arquivar todos os esgotados' : 'Arquivar produtos';
+      modalArquivar.classList.remove('hidden');
+      if (!ids.length) {
+        document.getElementById('resumoArquivar').textContent = 'Nenhum produto esgotado para arquivar. Os que estão em conferência ou são cor de um modelo que ainda tem estoque ficam na lista.';
+        return;
+      }
+      document.getElementById('resumoArquivar').textContent = 'Conferindo os produtos...';
+      try {
+        const res = await fetchAdmin('/api/admin/produtos/arquivar/conferir', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ids: ids.map(Number) })
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(res.status === 403 ? 'Seu usuário não tem acesso a esta tela.' : (data.error || 'Erro ao conferir'));
+        aplicarConferenciaArquivar(data);
+      } catch (err) {
+        document.getElementById('resumoArquivar').textContent = err.message;
+      }
+    };
+
+    function fecharArquivar() {
+      if (arquivamento.salvando) return;
+      modalArquivar.classList.add('hidden');
+    }
+    document.getElementById('fecharModalArquivar').addEventListener('click', fecharArquivar);
+    document.getElementById('btnCancelarArquivar').addEventListener('click', fecharArquivar);
+    modalArquivar.addEventListener('click', (e) => { if (e.target === modalArquivar) fecharArquivar(); });
+    document.getElementById('btnTirarBloqueadosArquivar').addEventListener('click', () => {
+      const bloqueados = new Set(arquivamento.bloqueados.map(p => Number(p.id)));
+      bloqueados.forEach(id => marcadosAcerto.delete(id));
+      arquivamento.conferidos = arquivamento.conferidos.filter(p => !bloqueados.has(Number(p.id)));
+      arquivamento.bloqueados = [];
+      renderizarArquivar();
+      if (modoAcertoEstoque) renderizarTabela();
+    });
+    document.getElementById('btnArquivarEsgotados').addEventListener('click', async () => {
+      if (!todosProdutos.length) await carregarProdutos();
+      abrirArquivar(esgotadosParaArquivar(todosProdutos).map(p => Number(p.id)), true);
+    });
+
+    btnConfirmarArquivar.addEventListener('click', async () => {
+      const ids = arquivamento.conferidos.map(p => Number(p.id));
+      arquivamento.salvando = true;
+      btnConfirmarArquivar.disabled = true;
+      btnConfirmarArquivar.textContent = 'Arquivando...';
+      try {
+        const res = await fetchAdmin('/api/admin/produtos/arquivar', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ids, arquivado: true })
+        });
+        const data = await res.json().catch(() => ({}));
+        arquivamento.salvando = false;
+        if (res.status === 409 && data.produtos) {
+          // Algo mudou desde a conferência (ex.: peça foi para uma maleta): mostra de novo
+          aplicarConferenciaArquivar(data);
+          mostrarToast(data.error, 'error');
+          return;
+        }
+        if (!res.ok) throw new Error(data.error || 'Erro ao arquivar');
+        const feitos = (data.arquivados || []).map(p => Number(p.id));
+        feitos.forEach(id => marcadosAcerto.delete(id));
+        modalArquivar.classList.add('hidden');
+        mostrarToast(feitos.length === 1 ? 'Produto arquivado' : `${feitos.length} produtos arquivados`);
+        await carregarProdutos();
+      } catch (err) {
+        arquivamento.salvando = false;
+        mostrarToast(err.message, 'error');
+        renderizarArquivar();
+      }
+    });
+
+    window.desarquivarProdutos = async (ids) => {
+      if (!ids.length) return;
+      try {
+        const res = await fetchAdmin('/api/admin/produtos/arquivar', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ids: ids.map(Number), arquivado: false })
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.error || 'Erro ao desarquivar');
+        const feitos = (data.desarquivados || []).map(p => Number(p.id));
+        feitos.forEach(id => marcadosAcerto.delete(id));
+        mostrarToast(feitos.length === 1 ? 'Produto desarquivado: voltou para a lista' : `${feitos.length} produtos desarquivados`);
+        await carregarProdutos();
+      } catch (err) {
+        mostrarToast(err.message, 'error');
+      }
+    };
 
     // Modal de exclusão definitiva, o mesmo para produtos, encomendas, acessórios e
     // clientes. O servidor confere antes (o que quebraria pedido ou maleta aberta fica
@@ -8245,6 +8453,7 @@
       const situacao = document.getElementById('confSituacao').value;
       const busca = semAcentoConf(document.getElementById('confBusca').value).trim();
       return todosProdutos.filter(p => {
+        if (p.arquivado) return false;
         if (conf.pedido && !conf.doPedido.has(Number(p.id))) return false;
         const enc = p.disponibilidade === 'SOB_ENCOMENDA';
         const loja = enc ? 0 : Number(p.estoque) || 0;

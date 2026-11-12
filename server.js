@@ -973,9 +973,10 @@ async function reporEstoque(db, produtoId, { custo, quantidade, data, pedido }) 
      RETURNING id, fornecedor, preco_custo, quantidade, origem, to_char(data_compra, 'YYYY-MM-DD') AS data_compra, pedido_fornecedor, created_at`,
     [produtoId, custo, quantidade, data || null, pedido || '']
   );
+  // Comprou de novo um produto arquivado: ele volta para a lista (e para a vitrine)
   await db.query(
     `UPDATE produtos SET
-       estoque = estoque + $2,
+       estoque = estoque + $2, arquivado = false, arquivado_em = NULL,
        preco_custo = (SELECT preco_custo FROM compras_fornecedor WHERE produto_id = $1 ORDER BY data_compra DESC, id DESC LIMIT 1)
      WHERE id = $1`,
     [produtoId, quantidade]
@@ -1413,7 +1414,7 @@ async function startServer() {
                 ${anuncios.sqlPrecoPromocional('p')} AS preco_promocional
          FROM produtos p
          LEFT JOIN anuncios a ON a.id = p.anuncio_id
-         WHERE p.status IN ('DISPONIVEL', 'CONDICIONAL') AND NOT p.em_conferencia
+         WHERE p.status IN ('DISPONIVEL', 'CONDICIONAL') AND NOT p.em_conferencia AND NOT p.arquivado
          ORDER BY p.created_at DESC`
       );
       const { oculos } = await lojaDaEmpresa(req.empresa);
@@ -1432,7 +1433,8 @@ async function startServer() {
         `SELECT p.id, p.nome, p.nome_curto, p.codigo_sku, p.preco_custo, p.preco_venda, p.imagem_url, p.fotos, p.status, p.disponibilidade,
                 p.formato, p.estilo, p.cor_armacao, p.diametro_cm, p.ponte_cm, p.largura_total_cm, p.material, p.tipo, p.genero, p.tamanho, p.grade,
                 p.fornecedor, p.codigo_fornecedor, p.nome_fornecedor, p.link_fornecedor, p.vezes_em_maleta, p.pedido_condicional_id,
-                p.estoque, p.anuncio_id, p.preco_promocional, p.em_conferencia, COALESCE(mp.pedidos, '{}') AS maletas, COALESCE(cardinality(mp.pedidos), 0)::int AS em_maleta,
+                p.estoque, p.anuncio_id, p.preco_promocional, p.em_conferencia, p.arquivado,
+                to_char(p.arquivado_em, 'YYYY-MM-DD') AS arquivado_em, COALESCE(mp.pedidos, '{}') AS maletas, COALESCE(cardinality(mp.pedidos), 0)::int AS em_maleta,
                 to_char(uc.data_compra, 'YYYY-MM-DD') AS ultima_compra, uc.preco_custo AS custo_ultima_compra,
                 ca.preco_custo AS custo_compra_anterior, COALESCE(nc.total, 0)::int AS total_compras
          FROM produtos p
@@ -3549,19 +3551,20 @@ async function startServer() {
   // ficam como estão (os itens deles guardam nome e preço).
   const CONFIRMACAO_EXCLUIR = 'EXCLUIR';
   const MAX_EXCLUIR = 500;
+  const MAX_ARQUIVAR = 3000;
 
-  function idsParaExcluir(body, um = 'produto', varios = 'produtos') {
+  function idsParaExcluir(body, um = 'produto', varios = 'produtos', max = MAX_EXCLUIR) {
     const lista = body && body.ids;
     if (!Array.isArray(lista) || !lista.length) return { erro: `Escolha ao menos um ${um === 'produto' ? 'produto' : 'item'} para excluir` };
-    if (lista.length > MAX_EXCLUIR) return { erro: `No máximo ${MAX_EXCLUIR} ${varios} por vez` };
+    if (lista.length > max) return { erro: `No máximo ${max} ${varios} por vez` };
     const ids = [...new Set(lista.map(Number))];
     if (ids.some((id) => !Number.isInteger(id) || id <= 0 || id >= 2 ** 31)) return { erro: `Lista de ${varios} inválida` };
     return { ids };
   }
 
-  async function conferirExclusao(db, ids, bloquear = false) {
+  async function conferirExclusao(db, ids, bloquear = false, acao = 'excluir') {
     const produtos = (await db.query(
-      `SELECT id, nome, codigo_sku, tamanho, estoque FROM produtos WHERE id = ANY($1) ORDER BY nome, id
+      `SELECT id, nome, codigo_sku, tamanho, estoque, status, disponibilidade, arquivado FROM produtos WHERE id = ANY($1) ORDER BY nome, id
        ${bloquear ? 'FOR UPDATE' : ''}`, [ids]
     )).rows;
     const emMaleta = (await db.query(
@@ -3594,8 +3597,16 @@ async function startServer() {
         const pe = pedidos.get(p.id);
         if (pe) bloqueios.push(`Está no pedido aberto ${pe.pedidos.map((x) => `#${x}`).join(', ')}. Entregue ou cancele o pedido antes.`);
         const en = encomendas.get(p.id);
-        const avisos = en ? [`Tem encomenda aberta (${en.encomendas.map((x) => `#${x}`).join(', ')}). Ela continua, com o modelo e o SKU copiados.`] : [];
-        return { id: p.id, nome: p.nome, codigo_sku: p.codigo_sku, tamanho: p.tamanho, estoque: p.estoque, bloqueios, avisos };
+        const avisos = [];
+        if (en) {
+          const num = en.encomendas.map((x) => `#${x}`).join(', ');
+          avisos.push(acao === 'arquivar'
+            ? `Tem encomenda aberta (${num}). Ela continua normalmente.`
+            : `Tem encomenda aberta (${num}). Ela continua, com o modelo e o SKU copiados.`);
+        }
+        const loja = p.disponibilidade === 'SOB_ENCOMENDA' ? 0 : Number(p.estoque) || 0;
+        if (acao === 'arquivar' && loja > 0) avisos.push(`Ainda tem ${loja} peça(s) em estoque: elas saem da vitrine e das Métricas junto com o produto.`);
+        return { id: p.id, nome: p.nome, codigo_sku: p.codigo_sku, tamanho: p.tamanho, estoque: p.estoque, status: p.status, arquivado: p.arquivado, bloqueios, avisos };
       }),
       nao_encontrados: ids.filter((id) => !encontrados.has(id)),
     };
@@ -3654,6 +3665,60 @@ async function startServer() {
       if (client) await client.query('ROLLBACK').catch(() => {});
       console.error(err);
       res.status(500).json({ error: 'Erro ao excluir. Nada foi apagado.' });
+    } finally {
+      if (client) client.release();
+    }
+  }
+
+  // Arquivar produtos (Produtos > Arquivar): o produto sai da lista, da vitrine, das
+  // Métricas, do Editar em estoque e da Conferência de estoque, mas fica no banco com
+  // fotos, compras e vendas, e pode ser desarquivado. Peça em maleta ou pedido aberto
+  // barra o arquivamento (tudo ou nada), como no Acerto de estoque.
+  async function handleConferirArquivamento(req, res) {
+    const { ids, erro } = idsParaExcluir(req.body, 'produto', 'produtos', MAX_ARQUIVAR);
+    if (erro) return res.status(400).json({ error: erro.replace('para excluir', 'para arquivar') });
+    try {
+      res.json(await conferirExclusao(req.db, ids, false, 'arquivar'));
+    } catch (err) {
+      console.error(err);
+      res.status(500).json({ error: 'Erro ao conferir os produtos' });
+    }
+  }
+
+  // Body { ids: [..], arquivado: true|false } -> { arquivados: [{id, nome, codigo_sku}] }
+  async function handleArquivarProdutos(req, res) {
+    const { ids, erro } = idsParaExcluir(req.body, 'produto', 'produtos', MAX_ARQUIVAR);
+    if (erro) return res.status(400).json({ error: erro.replace('para excluir', 'para arquivar') });
+    const arquivar = (req.body || {}).arquivado !== false;
+    let client;
+    try {
+      client = await req.db.connect();
+      await client.query('BEGIN');
+      if (arquivar) {
+        const conferencia = await conferirExclusao(client, ids, true, 'arquivar');
+        const bloqueados = conferencia.produtos.filter((p) => p.bloqueios.length);
+        if (bloqueados.length || conferencia.nao_encontrados.length) {
+          await client.query('ROLLBACK');
+          return res.status(409).json({
+            error: bloqueados.length
+              ? `${bloqueados.length} produto(s) não podem ser arquivados agora. Nada foi arquivado.`
+              : 'Algum produto já não existe (a lista mudou). Nada foi arquivado.',
+            ...conferencia,
+          });
+        }
+      }
+      const { rows } = await client.query(
+        `UPDATE produtos SET arquivado = $2, arquivado_em = CASE WHEN $2 THEN COALESCE(arquivado_em, CURRENT_TIMESTAMP) END,
+                updated_at = CURRENT_TIMESTAMP
+         WHERE id = ANY($1) RETURNING id, nome, codigo_sku`, [ids, arquivar]
+      );
+      await client.query('COMMIT');
+      console.log(`[${req.empresa.slug}] ${arquivar ? 'arquivados' : 'desarquivados'} ${rows.length} produto(s) por ${req.admin && req.admin.user}`);
+      res.json({ [arquivar ? 'arquivados' : 'desarquivados']: rows });
+    } catch (err) {
+      if (client) await client.query('ROLLBACK').catch(() => {});
+      console.error(err);
+      res.status(500).json({ error: 'Erro ao arquivar. Nada foi alterado.' });
     } finally {
       if (client) client.release();
     }
@@ -4086,6 +4151,7 @@ async function startServer() {
                   CASE WHEN p.disponibilidade = 'SOB_ENCOMENDA' THEN 0 ELSE p.estoque END AS loja,
                   (SELECT COUNT(*) FROM maleta_pecas mp WHERE mp.produto_id = p.id) AS rua
            FROM produtos p
+           WHERE NOT p.arquivado
          )
          SELECT COALESCE(SUM(loja + rua), 0) AS total,
                 COALESCE(SUM(preco_custo * (loja + rua)), 0) AS investido,
@@ -4102,7 +4168,7 @@ async function startServer() {
       const topMaleta = await req.db.query(
         `SELECT id, nome, codigo_sku, vezes_em_maleta, imagem_url
          FROM produtos
-         WHERE vezes_em_maleta > 0
+         WHERE vezes_em_maleta > 0 AND NOT arquivado
          ORDER BY vezes_em_maleta DESC
          LIMIT 10`
       );
@@ -4441,6 +4507,8 @@ async function startServer() {
   app.put('/api/admin/produtos/lote', exigirArea('produtos'), handleUpdateLote);
   app.post('/api/admin/produtos/excluir/conferir', exigirArea('produtos'), handleConferirExclusao);
   app.post('/api/admin/produtos/excluir', exigirArea('produtos'), handleExcluirProdutos);
+  app.post('/api/admin/produtos/arquivar/conferir', exigirArea('produtos'), handleConferirArquivamento);
+  app.post('/api/admin/produtos/arquivar', exigirArea('produtos'), handleArquivarProdutos);
   app.post('/api/admin/produtos/conferencia', exigirArea('produtos'), handleConferenciaProdutos);
   // Conferência de estoque: vendido, baixa, Sob Encomenda ou esgotado (com conferência antes)
   const conferencia = conferenciaEstoque.criarHandlers({ recalcularStatus, textoCurto });

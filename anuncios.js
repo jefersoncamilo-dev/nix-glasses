@@ -145,7 +145,7 @@ function criarHandlers({ salvarImagem, idDaImagem, detectarTipoImagem }) {
   async function publico(req, res) {
     try {
       const { rows } = await req.db.query(
-        `SELECT a.*, (SELECT COUNT(*) FROM produtos p WHERE p.anuncio_id = a.id AND p.status IN ('DISPONIVEL', 'CONDICIONAL'))::int AS produtos
+        `SELECT a.*, (SELECT COUNT(*) FROM produtos p WHERE p.anuncio_id = a.id AND p.status IN ('DISPONIVEL', 'CONDICIONAL') AND NOT p.arquivado)::int AS produtos
          FROM anuncios a WHERE a.ativo ORDER BY a.id`
       );
       const popup = await lerPopupSalvo(req.db);
