@@ -130,3 +130,69 @@ describe('gênero: vitrine', () => {
     assert.deepEqual(JSON.parse(JSON.stringify(vitrine.especificacoesProduto({ genero: '' }))), []);
   });
 });
+
+describe('gênero: chips Feminino / Masculino na vitrine', () => {
+  const nomes = ['escapeHtml', 'passaFiltroGenero', 'produtosDoGenero', 'temFiltroGenero', 'preencherFiltroGenero', 'preencherFiltroFormato', 'aplicarFiltroGenero'];
+  function montar(produtos) {
+    const html = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
+    const botao = (g) => ({ dataset: { genero: g }, attrs: {}, setAttribute(k, v) { this.attrs[k] = v; } });
+    const botoes = ['', 'FEMININO', 'MASCULINO'].map(botao);
+    const chipsGenero = { escondido: null, querySelectorAll: () => botoes, classList: { toggle: (c, v) => { chipsGenero.escondido = v; } } };
+    const chipsFormato = { innerHTML: '', setAttribute() {}, querySelectorAll: () => [], classList: { toggle: (c, v) => { chipsFormato.escondido = v; } } };
+    const chamadas = [];
+    const ctx = vm.createContext({
+      produtos, promocaoFiltro: 0, chipsGenero, chipsFormato, botoes, chamadas,
+      filtroGenero: { value: '' }, filtroFormato: { value: '' }, filtroStatus: { value: '' },
+      rotulos: { formato: 'Formato', formatos: 'TODOS' },
+      marcarFiltroStatus: (v) => { chamadas.push(['status', v]); },
+      atualizarContagemFiltros: () => chamadas.push(['contagem']),
+      renderizarCatalogo: () => chamadas.push(['catalogo']),
+      atualizarGuias: () => chamadas.push(['guias']),
+    });
+    vm.runInContext(`${nomes.map((f) => extrairFuncao(html, f)).join('\n')}\n${nomes.map((f) => `this.${f} = ${f};`).join('\n')}`, ctx);
+    return ctx;
+  }
+  const catalogo = [
+    { id: 1, formato: 'Aviador', genero: 'MASCULINO' },
+    { id: 2, formato: 'Gatinho', genero: 'FEMININO' },
+    { id: 3, formato: 'Oval', genero: 'UNISSEX' },
+    { id: 4, formato: 'Quadrado', genero: '' },
+  ];
+
+  it('Unissex aparece em Masculino e em Feminino; sem gênero só em Todos', () => {
+    const c = montar(catalogo);
+    const ids = (g) => [...c.produtosDoGenero(catalogo, g)].map((p) => p.id);
+    assert.deepEqual(ids(''), [1, 2, 3, 4]);
+    assert.deepEqual(ids('MASCULINO'), [1, 3]);
+    assert.deepEqual(ids('FEMININO'), [2, 3]);
+  });
+
+  it('os chips só aparecem com produto marcado como Masculino ou Feminino', () => {
+    const c = montar(catalogo);
+    c.preencherFiltroGenero();
+    assert.equal(c.chipsGenero.escondido, false);
+    const s = montar([{ genero: 'UNISSEX' }, { genero: '' }]);
+    s.preencherFiltroGenero();
+    assert.equal(s.chipsGenero.escondido, true);
+  });
+
+  it('escolher Feminino marca o chip, deixa nos modelos só os do gênero e volta o modelo sem nada para TODOS', () => {
+    const c = montar(catalogo);
+    c.filtroFormato.value = 'Aviador';
+    c.aplicarFiltroGenero('FEMININO');
+    assert.equal(c.filtroGenero.value, 'FEMININO');
+    assert.deepEqual(c.botoes.map((b) => b.attrs['aria-pressed']), ['false', 'true', 'false']);
+    const modelos = [...c.chipsFormato.innerHTML.matchAll(/class="chip-formato">([^<]*)</g)].map((m) => m[1]);
+    assert.deepEqual(modelos, ['TODOS', 'Gatinho', 'Oval']);
+    assert.equal(c.filtroFormato.value, '');
+    assert.deepEqual(JSON.parse(JSON.stringify(c.chamadas)), [['status', ''], ['contagem'], ['catalogo'], ['guias']]);
+  });
+
+  it('o modelo escolhido fica quando ainda tem produto no gênero', () => {
+    const c = montar(catalogo);
+    c.filtroFormato.value = 'Oval';
+    c.aplicarFiltroGenero('MASCULINO');
+    assert.equal(c.filtroFormato.value, 'Oval');
+    assert.deepEqual(JSON.parse(JSON.stringify(c.chamadas)), [['contagem'], ['catalogo'], ['guias']]);
+  });
+});

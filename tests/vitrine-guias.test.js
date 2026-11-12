@@ -123,8 +123,9 @@ describe('vitrine: atalhos e pílulas de filtro', () => {
     const pilulas = html.match(/<div id="filtroPilulas" class="hidden"[\s\S]*?<\/div>\s*<\/div>/);
     assert.ok(pilulas, 'as pílulas de disponibilidade deveriam começar escondidas');
     for (const f of ['', 'DISPONIVEL', 'SOB_ENCOMENDA']) assert.match(pilulas[0], new RegExp(`data-filtro="${f}" aria-pressed="(true|false)" class="chip-formato filtro-pilula"`));
-    assert.match(html, /<select id="filtroGenero" class="hidden /);
-    assert.doesNotMatch(html, /filtroGenero\.classList\.toggle|function preencherFiltroGenero/);
+    // Gênero: chips Todos / Feminino / Masculino fora da fileira dos modelos, escondidos até haver produto marcado
+    assert.match(html, /<input type="hidden" id="filtroGenero" value="">/);
+    assert.match(html, /<div id="chipsGenero" class="hidden chips-genero" role="group" aria-label="Gênero">/);
     assert.match(html, /\.chips-formato \{[^}]*overflow-x: auto/);
     // botão "TODOS" e, no celular, os modelos numa linha só (chips compactos que dividem a largura)
     assert.match(html, /oculos: \{[^}]*formatos: 'TODOS'/);
@@ -132,8 +133,8 @@ describe('vitrine: atalhos e pílulas de filtro', () => {
 
     const chips = { innerHTML: '', setAttribute() {}, classList: { toggle: (c, v) => { chips.escondido = v; } } };
     const filtroFormato = { value: '' };
-    const c = vm.createContext({ chipsFormato: chips, filtroFormato, promocaoFiltro: 0, rotulos: { formato: 'Formato da lente', formatos: 'Todos os formatos' } });
-    vm.runInContext(`${extrairFuncao('escapeHtml')}\n${extrairFuncao('preencherFiltroFormato')}; this.f = preencherFiltroFormato;`, c);
+    const c = vm.createContext({ chipsFormato: chips, filtroFormato, filtroGenero: { value: '' }, promocaoFiltro: 0, rotulos: { formato: 'Formato da lente', formatos: 'Todos os formatos' } });
+    vm.runInContext(`${['escapeHtml', 'passaFiltroGenero', 'produtosDoGenero', 'preencherFiltroFormato'].map(extrairFuncao).join('\n')}; this.f = preencherFiltroFormato;`, c);
     c.produtos = [{ formato: 'Aviador' }, { formato: 'Aviador' }];
     vm.runInContext('produtos = this.produtos; f();', c);
     assert.equal(chips.escondido, true);
