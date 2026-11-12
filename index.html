@@ -195,6 +195,9 @@
     .chip-formato { flex: none; scroll-snap-align: start; display: inline-flex; align-items: center; min-height: 36px; padding: 0 0.95rem; border-radius: 9999px; border: 1px solid rgba(255,255,255,0.16); background: rgba(255,255,255,0.04); color: #d4d4d4; font-size: 0.8125rem; font-weight: 500; white-space: nowrap; cursor: pointer; touch-action: manipulation; -webkit-tap-highlight-color: transparent; transition: background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease; }
     /* Espaço no fim da fileira para a última pílula não ficar sob o esmaecido */
     .chips-formato::after { content: ''; flex: none; width: 16px; }
+    /* Chip de formato só com o desenho do óculos (sem o nome escrito) */
+    .chip-icone { justify-content: center; padding: 0 0.85rem; border-radius: 0.75rem; }
+    .icone-formato { width: 38px; height: 17px; flex: none; }
     /* A fileira do catálogo encosta nas bordas da tela no celular: o "imã" da rolagem
        respeita o recuo, senão a primeira pílula gruda na borda */
     #filtrosRolagem, #filtroPilulas .chips-formato { scroll-padding-left: 1rem; }
@@ -210,9 +213,19 @@
       #filtrosRolagem .chip-formato, #filtroPilulas .chip-formato { min-height: 26px; padding: 0 0.42rem; font-size: 0.625rem; letter-spacing: -0.01em; }
       #chipsFormato .chip-formato { flex: 1 0 auto; justify-content: center; padding: 0 0.3rem; }
       #filtroPilulas .chips-formato { gap: 0.25rem; }
+      /* Formatos só com o desenho: botão mais alto, bom para o dedo */
+      #chipsFormato .chip-icone { min-height: 36px; padding: 0 0.35rem; }
+      #chipsFormato .icone-formato { width: 30px; height: 14px; }
     }
     /* Celular: sem tamanho/gênero para escolher, a linha dos seletores some */
-    @media (max-width: 639px) { .linha-selecao:not(:has(select:not(.hidden), .chips-genero:not(.hidden))) { display: none; } }
+    @media (max-width: 639px) { .linha-selecao:not(:has(select:not(.hidden), .chips-genero:not(.hidden), .promocoes-filtro:not(.hidden))) { display: none; } }
+    /* Botão da promoção do momento na barra de filtros: o mesmo botão prateado do pop-up,
+       com o texto configurado no painel (POP Anúncio > texto do botão, ex.: BLACK NIX) */
+    .promocoes-filtro { display: flex; gap: 0.375rem; margin-left: auto; flex: none; }
+    .promocoes-filtro.hidden { display: none; }
+    .botao-promocao-filtro { gap: 0.375rem; min-height: 36px; padding: 0 1rem; border-radius: 9999px; font-size: 0.8125rem; font-weight: 600; letter-spacing: 0.02em; white-space: nowrap; }
+    .botao-promocao-filtro[aria-pressed="true"] { box-shadow: 0 0 0 2px #161616, 0 0 0 4px #e5e5e5; }
+    @media (max-width: 639px) { .botao-promocao-filtro { min-height: 30px; padding: 0 0.8rem; font-size: 0.6875rem; } }
     /* Gênero: três chips juntos (Todos / Feminino / Masculino), do tamanho dos chips de modelo */
     .chips-genero { display: flex; gap: 0.5rem; flex: none; }
     .chips-genero.hidden { display: none; }
@@ -409,6 +422,9 @@
             <button type="button" data-genero="FEMININO" aria-pressed="false" class="chip-formato">Feminino</button>
             <button type="button" data-genero="MASCULINO" aria-pressed="false" class="chip-formato">Masculino</button>
           </div>
+          <!-- Promoção do momento (ex.: BLACK NIX) sempre à vista na barra de filtros, ao lado do
+               gênero: um toque mostra só os modelos dela, outro toque volta a todos -->
+          <div id="promocoesFiltro" class="hidden promocoes-filtro" role="group" aria-label="Promoção do momento"></div>
         </div>
        </div>
         <div id="filtrosRolagem" class="chips-formato -mx-4 px-4 sm:mx-0 sm:px-0">
@@ -791,11 +807,38 @@
     // Troca os rótulos dos campos e, nas roupas, junta os tamanhos de um modelo num card.
     const NICHO = globalThis.LOJA?.nicho || (globalThis.LOJA?.oculos === false ? 'geral' : 'oculos');
     const ROTULOS_NICHO = {
-      oculos: { formato: 'Formato da lente', formatos: 'TODOS', material: 'Material', tipo: 'Tipo' },
+      oculos: { formato: 'Formato da lente', formatos: 'TODOS', material: 'Material', tipo: 'Tipo', icones: true },
       roupas: { formato: 'Categoria', formatos: 'TODAS', material: 'Tecido / composição', tipo: 'Modelagem' },
       geral: { formato: 'Categoria', formatos: 'TODAS', material: 'Material', tipo: 'Tipo' },
     };
     const rotulos = ROTULOS_NICHO[NICHO] || ROTULOS_NICHO.geral;
+
+    // Ícone de cada formato de óculos para os chips do catálogo (no lugar do nome, para caber
+    // tudo numa linha no celular). O desenho é um par de lentes com a forma do modelo; o nome
+    // fica no aria-label/title. Formato sem desenho aqui continua aparecendo escrito.
+    function iconeFormato(formato) {
+      const chave = String(formato || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim();
+      const lentes = {
+        aviador: x => `M${x-34} -18Q${x} -26 ${x+34} -18Q${x+38} 8 ${x+18} 30Q${x} 42 ${x-18} 30Q${x-40} 10 ${x-34} -18Z`,
+        redondo: x => `M${x-32} 4A32 32 0 1 0 ${x+32} 4A32 32 0 1 0 ${x-32} 4Z`,
+        oval: x => `M${x-38} 4A38 26 0 1 0 ${x+38} 4A38 26 0 1 0 ${x-38} 4Z`,
+        quadrado: x => `M${x-36} -20H${x+36}Q${x+40} -20 ${x+38} 0L${x+34} 22Q${x+32} 30 ${x+24} 30H${x-24}Q${x-32} 30 ${x-34} 22L${x-38} 0Q${x-40} -20 ${x-36} -20Z`,
+        retangular: x => `M${x-38} -14H${x+38}Q${x+41} -14 ${x+40} 0L${x+37} 16Q${x+35} 22 ${x+28} 22H${x-28}Q${x-35} 22 ${x-37} 16L${x-40} 0Q${x-41} -14 ${x-38} -14Z`,
+        gatinho: x => { const s = x < 0 ? -1 : 1; return `M${x-34*s} -10Q${x} -22 ${x+40*s} -26Q${x+36*s} 22 ${x} 28Q${x-32*s} 28 ${x-34*s} -10Z`; },
+        hexagonal: x => `M${x-20} -26H${x+20}L${x+38} 2L${x+20} 30H${x-20}L${x-38} 2Z`,
+        esportivo: x => { const s = x < 0 ? -1 : 1; return `M${x-30*s} -14L${x+44*s} -24Q${x+46*s} 4 ${x+30*s} 22Q${x+10*s} 32 ${x-22*s} 18Q${x-32*s} 8 ${x-30*s} -14Z`; },
+      };
+      const apelidos = { redonda: 'redondo', quadrada: 'quadrado', 'cat eye': 'gatinho', borboleta: 'gatinho', geometrico: 'hexagonal', geometrica: 'hexagonal', esportiva: 'esportivo', shield: 'mascara', escudo: 'mascara' };
+      const nome = apelidos[chave] || chave;
+      const haste = '<path d="M-86 -16L-104 -20M86 -16L104 -20"/>';
+      let corpo;
+      if (nome === 'mascara') corpo = '<path d="M-96 -20Q0 -34 96 -20Q98 14 70 26Q40 34 14 16Q0 8 -14 16Q-40 34 -70 26Q-98 14 -96 -20Z"/>';
+      else if (lentes[nome]) {
+        const ponte = nome === 'aviador' ? '<path d="M-14 -16Q0 -24 14 -16"/>' : '<path d="M-14 -6Q0 -16 14 -6"/>';
+        corpo = `<path d="${lentes[nome](-50)}"/><path d="${lentes[nome](50)}"/>${ponte}`;
+      } else return '';
+      return `<svg class="icone-formato" viewBox="-110 -50 220 100" fill="none" stroke="currentColor" stroke-width="9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${haste}${corpo}</svg>`;
+    }
 
     // Promoções ativas (Configurações > POP Anúncio), o pop-up da tela inicial escolhido no
     // painel e a promoção escolhida no botão do selo (0 = todos os modelos)
@@ -975,10 +1018,21 @@
         return `<button type="button" data-promocao="${id}" aria-pressed="${id === promocaoFiltro}" class="botao-promocao${a.selo_url ? '' : ' botao-promocao-texto'}" aria-label="Promoção ${nome}" title="${nome}">${a.selo_url ? `<img src="${escapeHtml(a.selo_url)}" alt="">` : nome}</button>`;
       }).join('');
       document.getElementById('promocoesVitrine').classList.toggle('hidden', !visiveis.length);
+      // Na barra de filtros (fica presa no topo ao rolar): o botão prateado do pop-up com o
+      // texto do botão configurado (ex.: BLACK NIX). Escolhida, ganha o contorno e o X.
+      const filtro = document.getElementById('promocoesFiltro');
+      filtro.innerHTML = visiveis.map(a => {
+        const id = Number(a.id);
+        const texto = escapeHtml(a.botao_texto || a.nome);
+        const ativa = id === promocaoFiltro;
+        return `<button type="button" data-promocao="${id}" aria-pressed="${ativa}" class="btn btn-primario botao-promocao-filtro" aria-label="Promoção ${escapeHtml(a.nome)}${ativa ? ': toque para ver todos os modelos' : ''}"><span>${texto}</span>${ativa ? '<span aria-hidden="true" class="text-sm leading-none">&times;</span>' : ''}</button>`;
+      }).join('');
+      filtro.classList.toggle('hidden', !visiveis.length);
       // Na barra de filtros, a promoção escolhida com o X para voltar a todos
       const chip = document.getElementById('chipPromocao');
       const a = anuncioPorId(promocaoFiltro);
-      chip.classList.toggle('hidden', !a);
+      // A promoção que já tem botão na barra de filtros não repete o chip
+      chip.classList.toggle('hidden', !a || visiveis.some(v => Number(v.id) === Number(a.id)));
       chip.innerHTML = a ? `${a.selo_url ? `<img src="${escapeHtml(a.selo_url)}" alt="">` : ''}<span>${escapeHtml(a.nome)}</span><span aria-hidden="true" class="ml-0.5 text-sm leading-none">&times;</span>` : '';
       chip.setAttribute('aria-label', a ? `Promoção ${a.nome}: toque para ver todos os modelos` : '');
     }
@@ -1011,9 +1065,14 @@
       // O formato escolhido sumiu do catálogo (produto vendido/apagado): volta para "Todos"
       if (!formatos.includes(filtroFormato.value)) filtroFormato.value = '';
       chipsFormato.setAttribute('aria-label', rotulos.formato);
-      chipsFormato.innerHTML = ['', ...formatos].map(f =>
-        `<button type="button" data-formato="${escapeHtml(f)}" aria-pressed="${f === filtroFormato.value}" class="chip-formato">${escapeHtml(f || rotulos.formatos)}</button>`
-      ).join('');
+      // Óculos: cada formato vira só o desenho (o nome vai no aria-label e no title)
+      chipsFormato.innerHTML = ['', ...formatos].map(f => {
+        const icone = f && rotulos.icones ? iconeFormato(f) : '';
+        const nome = escapeHtml(f || rotulos.formatos);
+        return icone
+          ? `<button type="button" data-formato="${escapeHtml(f)}" aria-pressed="${f === filtroFormato.value}" class="chip-formato chip-icone" aria-label="${nome}" title="${nome}">${icone}</button>`
+          : `<button type="button" data-formato="${escapeHtml(f)}" aria-pressed="${f === filtroFormato.value}" class="chip-formato">${nome}</button>`;
+      }).join('');
       // Com um formato só (ou nenhum) o filtro não ajuda: a fileira fica escondida
       chipsFormato.classList.toggle('hidden', formatos.length < 2);
     }
@@ -2828,6 +2887,10 @@
     document.getElementById('botoesPromocao').addEventListener('click', (e) => {
       const b = e.target.closest('[data-promocao]');
       if (b) aplicarFiltroPromocao(b.dataset.promocao);
+    });
+    document.getElementById('promocoesFiltro').addEventListener('click', (e) => {
+      const b = e.target.closest('[data-promocao]');
+      if (b) aplicarFiltroPromocao(b.dataset.promocao, { rolar: false });
     });
     document.getElementById('chipPromocao').addEventListener('click', () => aplicarFiltroPromocao(0, { rolar: false }));
 
