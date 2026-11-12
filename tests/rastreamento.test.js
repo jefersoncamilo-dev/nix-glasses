@@ -321,3 +321,25 @@ describe('API: rastreamento e Conversions API', () => {
     assert.equal(recebidos[0].corpo.test_event_code, undefined);
   });
 });
+
+describe('painel: tela de Rastreamento explica cada campo', () => {
+  const admin = ler('admin/index.html');
+  it('cada campo tem passo a passo, exemplo e selo de estado; aviso e guia de conferência', () => {
+    for (const id of ['estadoGtm', 'estadoPixel', 'estadoToken', 'estadoTeste']) assert.match(admin, new RegExp(`id="${id}"`));
+    assert.match(admin, /placeholder="Exemplo: GTM-AB12CD3"/);
+    assert.match(admin, /placeholder="Exemplo: 123456789012345"/);
+    assert.match(admin, /Gerar token de acesso/);
+    assert.match(admin, /Sem estes dados, nada é enviado\./);
+    assert.match(admin, /Como conferir se está funcionando/);
+  });
+  it('situação diz o que falta', () => {
+    const vm = require('node:vm');
+    const ini = admin.indexOf('function textoSituacaoRastreamento(');
+    const fim = admin.indexOf('\n    }\n', ini) + 6;
+    const ctx = vm.createContext({});
+    vm.runInContext(admin.slice(ini, fim) + '\nthis.f = textoSituacaoRastreamento;', ctx);
+    assert.equal(ctx.f({}), 'GTM desligado: falta o ID · API de Conversões desligada: faltam o Pixel ID e o token');
+    assert.equal(ctx.f({ gtm_id: 'GTM-AB12CD3', meta_pixel_id: '1' }), 'GTM ligado (GTM-AB12CD3) · API de Conversões desligada: falta o token');
+    assert.match(ctx.f({ capi_ativo: true, meta_test_code: 'TEST1' }), /modo de teste/);
+  });
+});

@@ -1038,35 +1038,88 @@
           <button id="btnSalvarLoja" class="mt-6 bg-orange-500 hover:bg-orange-600 text-white px-6 py-2 rounded-lg font-medium transition-colors">Salvar dados da loja</button>
         </div>
 
-        <!-- Rastreamento: GTM na vitrine e API de Conversões da Meta (servidor). O token
-             nunca volta para a tela: só aparece "Token salvo". -->
+        <!-- Rastreamento: GTM na vitrine e API de Conversões da Meta (servidor). Cada campo
+             tem o passo a passo de onde copiar, um exemplo e o estado (configurado/faltando).
+             O token nunca volta para a tela: só aparece "Token salvo". -->
         <div id="cardRastreamento" class="bg-white rounded-xl border border-gray-200 p-6 max-w-xl mt-6">
           <h4 class="text-base font-semibold text-gray-900 mb-1">Rastreamento e anúncios</h4>
-          <p class="text-sm text-gray-500 mb-4">Google Tag Manager (GA4, Meta Pixel, Google Ads) e API de Conversões da Meta. Campo vazio desliga.</p>
-          <div class="space-y-4">
+          <p class="text-sm text-gray-500 mb-3">Liga o Google Tag Manager (GA4, Meta Pixel, Google Ads) na vitrine e a API de Conversões da Meta no servidor.</p>
+          <div class="mb-5 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+            <strong>Sem estes dados, nada é enviado.</strong> Enquanto o ID do GTM estiver vazio, a vitrine não carrega o GTM. Sem o Pixel ID <em>e</em> o token, o servidor não manda nenhum evento para a Meta. Preencha os 3 campos de cima e toque em <strong>Salvar rastreamento</strong>.
+          </div>
+          <div class="space-y-6">
             <div>
-              <label for="rast_gtm" class="block text-sm font-medium text-gray-700 mb-1">ID do Google Tag Manager</label>
-              <input type="text" id="rast_gtm" maxlength="20" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="GTM-XXXXXXX" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500">
-              <p class="text-xs text-gray-500 mt-1">Em tagmanager.google.com, no topo do contêiner. Com ele salvo, a vitrine carrega o GTM; o painel nunca.</p>
+              <div class="flex items-center justify-between gap-2 mb-1">
+                <label for="rast_gtm" class="text-sm font-medium text-gray-700">1. ID do Google Tag Manager</label>
+                <span id="estadoGtm" class="estado-rast px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-600">Faltando</span>
+              </div>
+              <ol class="list-decimal ml-5 mb-2 text-xs text-gray-600 space-y-0.5">
+                <li>Abra <strong>tagmanager.google.com</strong> e entre no contêiner da loja (tipo <em>Web</em>).</li>
+                <li>No topo da tela, ao lado do nome do contêiner, aparece um código que começa com <strong>GTM-</strong>.</li>
+                <li>Copie esse código inteiro e cole aqui.</li>
+              </ol>
+              <input type="text" id="rast_gtm" maxlength="20" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="Exemplo: GTM-AB12CD3" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500">
+              <p class="text-xs text-gray-500 mt-1">Só a vitrine carrega o GTM; o painel nunca. Depois, monte as tags no GTM seguindo o guia (rastreamento/guia-gtm.md) e clique em <strong>Publicar</strong> lá no GTM.</p>
             </div>
             <div>
-              <label for="rast_pixel" class="block text-sm font-medium text-gray-700 mb-1">Meta Pixel ID (conjunto de dados)</label>
-              <input type="text" id="rast_pixel" maxlength="20" inputmode="numeric" autocomplete="off" placeholder="123456789012345" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500">
+              <div class="flex items-center justify-between gap-2 mb-1">
+                <label for="rast_pixel" class="text-sm font-medium text-gray-700">2. Meta Pixel ID (conjunto de dados)</label>
+                <span id="estadoPixel" class="estado-rast px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-600">Faltando</span>
+              </div>
+              <ol class="list-decimal ml-5 mb-2 text-xs text-gray-600 space-y-0.5">
+                <li>Abra <strong>business.facebook.com/events_manager</strong> (Gerenciador de Eventos).</li>
+                <li>Em <strong>Fontes de dados</strong>, clique no Pixel da loja.</li>
+                <li>Copie o número de <strong>ID</strong> que aparece abaixo do nome (só números) e cole aqui.</li>
+              </ol>
+              <input type="text" id="rast_pixel" maxlength="20" inputmode="numeric" autocomplete="off" placeholder="Exemplo: 123456789012345" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500">
             </div>
             <div>
-              <label for="rast_token" class="block text-sm font-medium text-gray-700 mb-1">Token da API de Conversões</label>
-              <input type="password" id="rast_token" autocomplete="new-password" spellcheck="false" placeholder="Cole o token gerado no Gerenciador de Eventos" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500">
-              <p id="rastTokenSituacao" class="text-xs text-gray-500 mt-1">Gerenciador de Eventos &gt; seu Pixel &gt; Configurações &gt; API de Conversões &gt; Gerar token de acesso.</p>
+              <div class="flex items-center justify-between gap-2 mb-1">
+                <label for="rast_token" class="text-sm font-medium text-gray-700">3. Token da API de Conversões</label>
+                <span id="estadoToken" class="estado-rast px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-600">Faltando</span>
+              </div>
+              <ol class="list-decimal ml-5 mb-2 text-xs text-gray-600 space-y-0.5">
+                <li>No Gerenciador de Eventos, abra o mesmo Pixel e vá em <strong>Configurações</strong>.</li>
+                <li>Desça até <strong>API de Conversões</strong> e clique em <strong>Gerar token de acesso</strong>.</li>
+                <li>Copie o token inteiro (um texto longo que começa com <strong>EAA</strong>) e cole aqui. A Meta mostra ele uma vez só.</li>
+              </ol>
+              <input type="password" id="rast_token" autocomplete="new-password" spellcheck="false" placeholder="Exemplo: EAAG... (texto longo)" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500">
+              <p id="rastTokenSituacao" class="text-xs text-gray-500 mt-1">O token fica guardado cifrado e não aparece mais nesta tela. Para trocar, é só colar outro.</p>
               <button type="button" id="btnRemoverTokenCapi" class="hidden mt-1 text-sm text-red-600 hover:underline">Remover token</button>
             </div>
             <div>
-              <label for="rast_teste" class="block text-sm font-medium text-gray-700 mb-1">Código de teste da Meta <span class="font-normal text-gray-400">(só para testar)</span></label>
-              <input type="text" id="rast_teste" maxlength="20" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="TEST12345" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500">
-              <p class="text-xs text-gray-500 mt-1">Da aba "Testar eventos". Enquanto estiver preenchido, os eventos do servidor aparecem só lá. Apague depois de testar.</p>
+              <div class="flex items-center justify-between gap-2 mb-1">
+                <label for="rast_teste" class="text-sm font-medium text-gray-700">4. Código de teste da Meta <span class="font-normal text-gray-400">(opcional)</span></label>
+                <span id="estadoTeste" class="estado-rast px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-600">Vazio</span>
+              </div>
+              <ol class="list-decimal ml-5 mb-2 text-xs text-gray-600 space-y-0.5">
+                <li>No Gerenciador de Eventos, abra o Pixel e vá na aba <strong>Testar eventos</strong>.</li>
+                <li>Copie o código que aparece em <strong>Eventos do servidor</strong> (começa com <strong>TEST</strong>).</li>
+                <li>Use só para conferir. <strong>Apague depois</strong>: enquanto estiver preenchido, os eventos do servidor não entram nos relatórios.</li>
+              </ol>
+              <input type="text" id="rast_teste" maxlength="20" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="Exemplo: TEST12345" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500">
             </div>
-            <p id="rastSituacao" class="text-sm"></p>
+            <p id="rastSituacao" class="text-sm font-medium"></p>
           </div>
           <button id="btnSalvarRastreamento" class="mt-6 bg-orange-500 hover:bg-orange-600 text-white px-6 py-2 rounded-lg font-medium transition-colors">Salvar rastreamento</button>
+          <details class="mt-6 rounded-lg border border-gray-200 bg-gray-50 p-3 text-sm text-gray-700">
+            <summary class="cursor-pointer font-medium text-gray-900">Como conferir se está funcionando</summary>
+            <p class="mt-3 font-medium">No Google Tag Manager</p>
+            <ol class="list-decimal ml-5 mt-1 space-y-0.5 text-xs text-gray-600">
+              <li>No GTM, clique em <strong>Visualizar</strong> e informe o endereço da vitrine com <strong>?utm_source=teste</strong> no final.</li>
+              <li>Na vitrine que abrir, veja um óculos, toque em <strong>+ Maleta</strong>, abra a maleta e finalize até o WhatsApp.</li>
+              <li>Na janela do GTM devem aparecer: <strong>view_item</strong>, <strong>add_to_cart</strong>, <strong>begin_checkout</strong>, <strong>generate_lead</strong> e <strong>purchase</strong>, com as tags disparadas.</li>
+            </ol>
+            <p class="mt-3 font-medium">Na Meta</p>
+            <ol class="list-decimal ml-5 mt-1 space-y-0.5 text-xs text-gray-600">
+              <li>Preencha o <strong>código de teste</strong> (campo 4) e salve.</li>
+              <li>Deixe aberta a aba <strong>Testar eventos</strong> do Gerenciador de Eventos e faça um pedido de teste na vitrine.</li>
+              <li>Cada evento (Lead, Purchase...) deve aparecer como <strong>Navegador</strong> e <strong>Servidor</strong>, marcado como <strong>Deduplicado</strong>.</li>
+              <li>Terminou? <strong>Apague o código de teste</strong> e salve de novo.</li>
+            </ol>
+            <p class="mt-3 font-medium">Aqui no painel</p>
+            <p class="mt-1 text-xs text-gray-600">Em <strong>Pedidos</strong>, o pedido de teste mostra a linha <strong>Origem: teste</strong>. Apague esse pedido depois.</p>
+          </details>
         </div>
 
         <!-- Zerar um cadastro de cada vez (só o dono): cada linha mostra quantos existem
@@ -6570,24 +6623,37 @@
     });
 
     // Rastreamento (GTM, Pixel, API de Conversões)
+    // Selo de estado de um campo do rastreamento: verde (configurado), âmbar (faltando),
+    // cinza (vazio, para o opcional) ou azul (modo de teste)
+    const CORES_ESTADO_RAST = { ok: 'bg-green-100 text-green-800', falta: 'bg-amber-100 text-amber-800', vazio: 'bg-gray-100 text-gray-600', teste: 'bg-blue-100 text-blue-800' };
+    function marcarEstadoRast(id, tipo, texto) {
+      const el = document.getElementById(id);
+      el.className = 'estado-rast px-2 py-0.5 rounded-full text-xs font-medium ' + CORES_ESTADO_RAST[tipo];
+      el.textContent = texto;
+    }
+
     function preencherRastreamento(r) {
       document.getElementById('rast_gtm').value = r.gtm_id || '';
       document.getElementById('rast_pixel').value = r.meta_pixel_id || '';
       document.getElementById('rast_teste').value = r.meta_test_code || '';
       document.getElementById('rast_token').value = '';
-      document.getElementById('rast_token').placeholder = r.capi_token_configurado ? 'Token salvo (cole outro para trocar)' : 'Cole o token gerado no Gerenciador de Eventos';
+      document.getElementById('rast_token').placeholder = r.capi_token_configurado ? 'Token salvo (cole outro só para trocar)' : 'Exemplo: EAAG... (texto longo)';
       document.getElementById('btnRemoverTokenCapi').classList.toggle('hidden', !r.capi_token_configurado);
+      marcarEstadoRast('estadoGtm', r.gtm_id ? 'ok' : 'falta', r.gtm_id ? 'Configurado' : 'Faltando');
+      marcarEstadoRast('estadoPixel', r.meta_pixel_id ? 'ok' : 'falta', r.meta_pixel_id ? 'Configurado' : 'Faltando');
+      marcarEstadoRast('estadoToken', r.capi_token_configurado ? 'ok' : 'falta', r.capi_token_configurado ? 'Token salvo' : 'Faltando');
+      marcarEstadoRast('estadoTeste', r.meta_test_code ? 'teste' : 'vazio', r.meta_test_code ? 'Modo de teste ligado' : 'Vazio');
       const sit = document.getElementById('rastSituacao');
       sit.textContent = textoSituacaoRastreamento(r);
-      sit.className = 'text-sm ' + (r.capi_ativo ? 'text-green-700' : 'text-gray-600');
+      sit.className = 'text-sm font-medium ' + (r.capi_ativo && r.gtm_id ? 'text-green-700' : 'text-amber-700');
     }
 
     function textoSituacaoRastreamento(r) {
-      const partes = [r.gtm_id ? `GTM ligado (${r.gtm_id})` : 'GTM desligado'];
-      if (r.capi_ativo) partes.push(`API de Conversões ligada${r.meta_test_code ? ' em modo de teste' : ''}`);
+      const partes = [r.gtm_id ? `GTM ligado (${r.gtm_id})` : 'GTM desligado: falta o ID'];
+      if (r.capi_ativo) partes.push(`API de Conversões ligada${r.meta_test_code ? ' em modo de teste (apague o código depois)' : ''}`);
       else if (r.meta_pixel_id && !r.capi_token_configurado) partes.push('API de Conversões desligada: falta o token');
       else if (!r.meta_pixel_id && r.capi_token_configurado) partes.push('API de Conversões desligada: falta o Pixel ID');
-      else partes.push('API de Conversões desligada');
+      else partes.push('API de Conversões desligada: faltam o Pixel ID e o token');
       return partes.join(' · ');
     }
 
