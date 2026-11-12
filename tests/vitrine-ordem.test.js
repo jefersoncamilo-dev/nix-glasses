@@ -49,7 +49,9 @@ describe('ordem dos cards na vitrine', () => {
   });
 
   it('o catálogo usa a ordem ao montar os cards', () => {
-    assert.match(extrairFuncao('renderizarCatalogo'), /ordenarCardsVitrine\(agruparCards\(filtrados\)\)\.forEach/);
+    const f = extrairFuncao('renderizarCatalogo');
+    assert.match(f, /const cardsVitrine = ordenarCardsVitrine\(agruparCards\(filtrados\)\);/);
+    assert.match(f, /cardsVitrine\.forEach\(grupo =>/);
   });
 });
 
