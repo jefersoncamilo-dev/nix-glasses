@@ -1302,6 +1302,7 @@ async function conectarBanco(slug, databaseUrl) {
     await conferirDonoDoBanco({ slug, pool });
     await ajustePrecosOculos.aplicarUmaVez(slug, pool);
     await ajusteNomesCurtos.aplicarUmaVez(slug, pool);
+    await ajusteNomesCurtos.corrigirUmaVez(slug, pool);
     return pool;
   } catch (err) {
     await pool.end().catch(() => {});

@@ -138,4 +138,40 @@ async function aplicarUmaVez(slug, pool) {
   }
 }
 
-module.exports = { CHAVE, TABELA, planejarAjuste, aplicarUmaVez };
+// Correção (Jefe, 2026-11-12): o "NIX Brachio B" (modelo NIX-JJ7-PTE) estava com o código
+// JJ7023 e ganhou Nycto (Aviador), mas a foto e a referência do fornecedor (K&L-7055) são de
+// armação redonda grande: vira Diplodoc, formato Redondo. Uma vez, com antes/depois guardado.
+const CHAVE_CORRECAO = 'ajuste_nomes_curtos_2026_11_12_b';
+const CORRECOES = [{ grade: 'NIX-JJ7-PTE', nome_curto: 'Diplodoc', formato: 'REDONDO' }];
+
+async function corrigirUmaVez(slug, pool) {
+  if (slug !== LOJA) return null;
+  const { rows: [feito] } = await pool.query('SELECT 1 FROM configuracoes WHERE chave = $1', [CHAVE_CORRECAO]);
+  if (feito) return null;
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const alterados = [];
+    for (const c of CORRECOES) {
+      const { rows } = await client.query(
+        `UPDATE produtos p SET nome_curto = $2, formato = $3, updated_at = CURRENT_TIMESTAMP
+           FROM (SELECT id, nome_curto, formato FROM produtos WHERE grade = $1 FOR UPDATE) a
+          WHERE p.id = a.id
+          RETURNING p.id, p.nome, a.nome_curto AS antes, a.formato AS formato_antes`, [c.grade, c.nome_curto, c.formato]);
+      for (const r of rows) alterados.push({ ...r, depois: c.nome_curto, formato_depois: c.formato });
+    }
+    await client.query('INSERT INTO configuracoes (chave, valor) VALUES ($1, $2)',
+      [CHAVE_CORRECAO, JSON.stringify({ data: new Date().toISOString(), alterados })]);
+    await client.query('COMMIT');
+    console.log(`[ajuste-nomes] correção: ${alterados.length} produtos ${JSON.stringify(alterados)}`);
+    return alterados;
+  } catch (err) {
+    await client.query('ROLLBACK').catch(() => {});
+    console.error('[ajuste-nomes] Não consegui aplicar a correção:', err.message);
+    return null;
+  } finally {
+    client.release();
+  }
+}
+
+module.exports = { CHAVE, CHAVE_CORRECAO, TABELA, planejarAjuste, aplicarUmaVez, corrigirUmaVez };
