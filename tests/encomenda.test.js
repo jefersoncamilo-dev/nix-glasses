@@ -209,17 +209,17 @@ describe('maleta com itens Sob Encomenda', () => {
     assert.match(v.toasts[0], /Cat Eye removido da maleta/);
   });
 
-  it('destaca a encomenda na lista com a etiqueta e o combinado pelo WhatsApp', () => {
+  it('destaca a encomenda na lista com a etiqueta e o aviso para finalizar e consultar os prazos', () => {
     const v = vitrine([pronta, encomenda]);
     v.ctx.toggleMaleta(1);
     v.ctx.toggleMaleta(3);
     const lista = v.els.maletaItens.innerHTML;
     assert.equal((lista.match(/SOB ENCOMENDA/g) || []).length, 1);
-    assert.match(lista, /Prazo e condições combinados pelo WhatsApp/);
+    assert.match(lista, /Finalize o pedido e consulte os prazos/);
     assert.doesNotMatch(lista, /sinal/i);
     assert.equal(v.els.maletaTotal.textContent, 'R$ 550,24');
-    assert.equal(v.els.maletaSinal.textContent, 'Encomendas: prazo e pagamento combinados pelo WhatsApp');
-    assert.equal(v.els.maletaSinal.escondido, false);
+    assert.equal(v.els.maletaSinal.textContent, '');
+    assert.equal(v.els.maletaSinal.escondido, true);
   });
 
   it('esconde o sinal quando só há itens para prova e soma preços que vêm como texto', () => {
