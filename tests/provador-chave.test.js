@@ -86,13 +86,13 @@ describe('API: salvar a chave do Provador Virtual', () => {
     assert.equal(desligado.body.provador, false);
     assert.equal(desligado.body.oculos, true);
     let pagina = await (await fetch(srv.url('/'))).text();
-    assert.match(pagina, /window\.LOJA = \{[^}]*"provador":false\}/);
+    assert.match(pagina, /window\.LOJA = \{[^}]*"provador":false[,}]/);
     // Salvar outros dados sem mandar a chave não religa
     assert.equal((await salvar({ chamada: 'Nova chamada' })).body.provador, false);
     const ligado = await salvar({ provador: true });
     assert.equal(ligado.body.provador, true);
     pagina = await (await fetch(srv.url('/'))).text();
-    assert.match(pagina, /window\.LOJA = \{[^}]*"provador":true\}/);
+    assert.match(pagina, /window\.LOJA = \{[^}]*"provador":true[,}]/);
     await h.pool.query(`DELETE FROM configuracoes WHERE chave = 'loja_chamada'`);
   });
 });

@@ -24,6 +24,10 @@ const CAMPOS_TEXTO = {
 // padrão. Desligada, a vitrine esconde o card, o pop-up e o botão "Provar virtualmente";
 // as fotos (inclusive a foto 4 do provador) continuam salvas para religar depois.
 const NICHOS = ['oculos', 'roupas', 'geral'];
+// Rastreamento (Configurações > Rastreamento, ver rastreamento.js): loja_gtm_id (contêiner do
+// GTM, vai para a vitrine) e loja_meta_pixel (Pixel ID). O token da CAPI fica em
+// meta_capi_token, cifrado: aqui só se sabe SE ele existe (capi_ativo), nunca o valor.
+const { lerIdGtm, lerPixelId, snippetGtm } = require('./rastreamento');
 // Instagram da loja (loja_instagram), de Configurações > Dados da loja: guardado só o
 // usuário, sem @ (aceita "@loja", "loja" ou o link do perfil). Vazio = sem botão.
 // O botão de WhatsApp do topo usa o número de pedidos (whatsapp_number); sem número, some.
@@ -151,6 +155,9 @@ function montarLoja(empresa, linhas) {
   loja.instagram = lerInstagram(salvo.get('loja_instagram')) || '';
   loja.whatsapp = String(salvo.get('whatsapp_number') || '').replace(/\D/g, '');
   loja.logo = salvo.get('loja_logo') || '';
+  loja.gtm_id = lerIdGtm(salvo.get('loja_gtm_id')) || '';
+  loja.meta_pixel = lerPixelId(salvo.get('loja_meta_pixel')) || '';
+  loja.capi_ativo = !!(loja.meta_pixel && salvo.get('meta_capi_token'));
   return loja;
 }
 
@@ -181,12 +188,24 @@ function renderizarPagina(html, loja) {
   out = out.replace(/\salt="NIX"/g, ` alt="${escapeHtml(loja.marca)}"`);
   const publico = { nome: loja.nome, marca: loja.marca, oculos: loja.oculos, nicho: loja.nicho,
     instagram: loja.instagram || '', whatsapp: loja.whatsapp || '', provador: loja.provador !== false };
+  const vitrine = out.includes('id="catalogoGrid"');
+  // Rastreamento só na vitrine (o painel nunca leva GTM): a vitrine só precisa saber se o
+  // servidor repete os eventos na CAPI (nada de token ou segredo aqui).
+  if (vitrine) publico.capi = !!loja.capi_ativo;
   // A grade da vitrine já sai com as colunas da loja (sem pular de 3 para outro número)
   const c = colunasVitrine(loja);
-  const estilo = out.includes('id="catalogoGrid"')
+  const estilo = vitrine
     ? `  <style>:root { --colunas-celular: ${c.celular}; --colunas-tablet: ${c.tablet}; --colunas-computador: ${c.computador}; }${c.celular >= 4 ? SELO_APERTADO : ''}</style>\n`
     : '';
-  return out.replace('</head>', `${estilo}  <script>window.LOJA = ${jsonParaScript(publico)};</script>\n</head>`);
+  out = out.replace('</head>', `${estilo}  <script>window.LOJA = ${jsonParaScript(publico)};</script>\n</head>`);
+  // GTM: o script o mais alto possível no <head> e o <noscript> logo depois do <body>.
+  // A vitrine cria o dataLayer antes (no <head>, em rastreamento-vitrine.js).
+  const gtm = vitrine ? snippetGtm(loja.gtm_id) : null;
+  if (gtm) {
+    out = out.replace(/<head>\n?/, (m) => m + gtm.head);
+    out = out.replace(/<body\b[^>]*>/, (m) => m + gtm.body);
+  }
+  return out;
 }
 
 module.exports = { CAMPOS_TEXTO, NICHOS, lerInstagram, COLUNAS, lerColunas, colunasVitrine, PADRAO_NIX, lojaPadrao, lerNicho, limparTextoLoja, montarLoja, renderizarPagina, escapeHtml };

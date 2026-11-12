@@ -278,7 +278,7 @@ describe('painel (admin/index.html) escapa clientes e pedidos', () => {
 
   it('nos pedidos', () => {
     const lista = elemento();
-    const ctx = carregar('admin/index.html', ['escapeHtml', 'intencaoItemPedido', 'precoNormalDoItem', 'etiquetaIntencao', 'badgeStatusPedido', 'rotuloStatusEncomenda', 'htmlPedido', 'renderizarPedidos'], {
+    const ctx = carregar('admin/index.html', ['escapeHtml', 'intencaoItemPedido', 'precoNormalDoItem', 'etiquetaIntencao', 'badgeStatusPedido', 'rotuloStatusEncomenda', 'origemPedido', 'htmlPedido', 'renderizarPedidos'], {
       ...globais,
       STATUS_PEDIDO: [['NOVO', 'Novo', '']],
       document: { getElementById: () => lista },

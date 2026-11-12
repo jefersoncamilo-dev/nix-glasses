@@ -225,7 +225,7 @@ describe('painel: perfil e relatório escapam dados', () => {
 
   it('pedido avisa quando ela já devolveu o modelo', () => {
     const lista = { innerHTML: '' };
-    const ctx = carregar('admin/index.html', ['escapeHtml', 'intencaoItemPedido', 'precoNormalDoItem', 'etiquetaIntencao', 'badgeStatusPedido', 'rotuloStatusEncomenda', 'htmlPedido', 'renderizarPedidos'], {
+    const ctx = carregar('admin/index.html', ['escapeHtml', 'intencaoItemPedido', 'precoNormalDoItem', 'etiquetaIntencao', 'badgeStatusPedido', 'rotuloStatusEncomenda', 'origemPedido', 'htmlPedido', 'renderizarPedidos'], {
       document: { getElementById: () => lista }, formatarMoeda, formatarData: String, STATUS_PEDIDO: [],
     });
     ctx.renderizarPedidos([{ id: 5, status: 'NOVO', total: 2, ja_devolvidos: [2],
