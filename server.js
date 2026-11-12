@@ -16,6 +16,7 @@ const conferenciaEstoque = require('./conferencia-estoque');
 const vendas = require('./vendas');
 const anuncios = require('./anuncios');
 const rastreamento = require('./rastreamento');
+const origens = require('./origens');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -4730,6 +4731,7 @@ async function startServer() {
   app.get('/api/admin/rastreamento', exigirArea('config'), handleGetRastreamento);
   app.put('/api/admin/rastreamento', exigirArea('config'), handleUpdateRastreamento);
   app.post('/api/rastreamento/evento', handleEventoRastreamento);
+  app.get('/api/admin/origens', exigirArea('metricas'), origens.criarHandler({ lerMetricasDesde }));
   app.get('/api/admin/loja', exigirArea('config'), handleGetLoja);
   app.put('/api/admin/loja', exigirArea('config'), handleUpdateLoja);
   app.post('/api/admin/loja/logo', exigirArea('config'), uploadImagem, handleUpdateLogo);

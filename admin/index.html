@@ -834,6 +834,77 @@
           </div>
           <p class="mt-4 text-xs text-gray-500">Pedido conta quando é entregue (com desconto e acessórios). Peça vendida no acerto da maleta conta na hora do acerto e passa para o pedido quando ele é entregue, sem contar duas vezes. O lucro usa o custo do cadastro do produto.</p>
         </div>
+        <!-- Origem dos pedidos: UTMs guardadas em cada pedido (instagram / bio, campanha...) e o
+             montador do link com UTMs para a bio, stories e anúncios. -->
+        <div id="cardOrigens" class="bg-white rounded-xl border border-gray-200 p-4 sm:p-6 mb-8">
+          <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-4">
+            <div>
+              <h4 class="text-lg font-semibold text-gray-900">Origem dos pedidos</h4>
+              <p class="text-sm text-gray-500">De onde veio cada pedido da vitrine (Instagram, anúncio, WhatsApp...).</p>
+            </div>
+            <select id="periodoOrigens" aria-label="Período da origem dos pedidos" class="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-orange-500">
+              <option value="mes" selected>Este mês</option>
+              <option value="mes_passado">Mês passado</option>
+              <option value="30">Últimos 30 dias</option>
+              <option value="90">Últimos 90 dias</option>
+              <option value="ano">Este ano</option>
+              <option value="tudo">Tudo</option>
+            </select>
+          </div>
+          <div class="overflow-x-auto">
+            <table class="w-full text-sm">
+              <thead class="text-left text-xs text-gray-500 border-b border-gray-200">
+                <tr>
+                  <th class="px-2 sm:px-3 py-2 font-medium">Origem / campanha</th>
+                  <th class="px-2 sm:px-3 py-2 font-medium text-right">Pedidos</th>
+                  <th class="hidden sm:table-cell px-3 py-2 font-medium text-right">Valor pedido</th>
+                  <th class="px-2 sm:px-3 py-2 font-medium text-right">Vendido</th>
+                </tr>
+              </thead>
+              <tbody id="tabelaOrigens" class="divide-y divide-gray-100"></tbody>
+            </table>
+          </div>
+          <p class="mt-3 text-xs text-gray-500"><strong>Pedidos</strong>: maletas enviadas pela vitrine no período (sem os cancelados). <strong>Vendido</strong>: o que já foi entregue, com desconto. Pedidos de antes do rastreamento, ou de quem abriu o site direto, ficam em "Direto / sem origem". Visitas sem pedido aparecem no GA4 e na Meta, não aqui.</p>
+
+          <div class="mt-6 rounded-lg border border-gray-200 bg-gray-50 p-4">
+            <h5 class="text-sm font-semibold text-gray-900 mb-1">Montar link com origem (para a bio, stories, anúncios)</h5>
+            <p class="text-xs text-gray-600 mb-3">Use este link no lugar do endereço simples da loja. Quem entrar por ele e fizer um pedido aparece no quadro acima com a origem certa. Exemplo para a bio do Instagram: <code class="px-1 bg-white border border-gray-200 rounded">?utm_source=instagram&amp;utm_medium=bio</code></p>
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <label class="block">
+                <span class="block text-xs text-gray-600 mb-1">Onde o link vai ficar</span>
+                <select id="linkOrigemOnde" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-orange-500">
+                  <option value="instagram|bio" selected>Instagram: link da bio</option>
+                  <option value="instagram|stories">Instagram: stories</option>
+                  <option value="instagram|direct">Instagram: direct</option>
+                  <option value="whatsapp|status">WhatsApp: status</option>
+                  <option value="whatsapp|lista">WhatsApp: lista de transmissão</option>
+                  <option value="facebook|post">Facebook: post</option>
+                  <option value="tiktok|bio">TikTok: link da bio</option>
+                  <option value="facebook|cpc">Anúncio Meta (Instagram/Facebook pago)</option>
+                  <option value="google|cpc">Anúncio Google</option>
+                  <option value="outro">Outro (digitar)</option>
+                </select>
+              </label>
+              <label class="block">
+                <span class="block text-xs text-gray-600 mb-1">Campanha <span class="text-gray-400">(opcional, ex.: verao, black-friday)</span></span>
+                <input type="text" id="linkOrigemCampanha" maxlength="60" autocomplete="off" placeholder="verao" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-orange-500">
+              </label>
+              <label id="linkOrigemOutroFonte" class="hidden block">
+                <span class="block text-xs text-gray-600 mb-1">Origem (utm_source)</span>
+                <input type="text" id="linkOrigemFonte" maxlength="40" autocomplete="off" placeholder="ex.: parceira-ana" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-orange-500">
+              </label>
+              <label id="linkOrigemOutroMeio" class="hidden block">
+                <span class="block text-xs text-gray-600 mb-1">Meio (utm_medium)</span>
+                <input type="text" id="linkOrigemMeio" maxlength="40" autocomplete="off" placeholder="ex.: indicacao" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-orange-500">
+              </label>
+            </div>
+            <label for="linkOrigemPronto" class="block text-xs text-gray-600 mt-3 mb-1">Link pronto</label>
+            <div class="flex gap-2">
+              <input type="text" id="linkOrigemPronto" readonly class="flex-1 min-w-0 px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white text-gray-900">
+              <button type="button" id="btnCopiarLinkOrigem" class="whitespace-nowrap bg-orange-500 hover:bg-orange-600 text-white px-4 py-2 rounded-lg text-sm font-medium">Copiar</button>
+            </div>
+          </div>
+        </div>
         <h4 class="text-lg font-semibold text-gray-900 mb-3">Estoque agora</h4>
         <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
           <div class="bg-white rounded-xl border border-gray-200 p-6">
@@ -1923,7 +1994,7 @@
         if (target === 'pedidos') carregarPedidosGeral();
         if (target === 'encomendas') carregarEncomendas();
         if (target === 'acessorios') carregarAcessorios();
-        if (target === 'metricas') { carregarVendas(); carregarMetricas(); carregarResumoFornecedores(); carregarRelatorioMaletas(); }
+        if (target === 'metricas') { carregarVendas(); carregarOrigens(); carregarMetricas(); carregarResumoFornecedores(); carregarRelatorioMaletas(); }
         if (target === 'config') abrirConfig();
         sidebar.classList.remove('open');
         sidebarOverlay.classList.add('hidden');
@@ -5424,6 +5495,75 @@
     }
     document.getElementById('periodoVendas').addEventListener('change', carregarVendas);
 
+    // Origem dos pedidos (Métricas): uma linha por origem e, embaixo, as campanhas dela
+    function linhasOrigens(dados) {
+      const linha = (o, campanha) => `
+          <tr class="${campanha ? 'text-gray-600' : ''}">
+            <td class="px-2 sm:px-3 py-2">${campanha ? `<span class="pl-4 text-xs">↳ campanha ${escapeHtml(o.nome)}</span>` : `<span class="font-medium text-gray-900">${escapeHtml(o.nome)}</span>`}</td>
+            <td class="px-2 sm:px-3 py-2 text-right">${o.pedidos}${o.cancelados ? ` <span class="text-xs text-gray-400">(+${o.cancelados} cancel.)</span>` : ''}</td>
+            <td class="hidden sm:table-cell px-3 py-2 text-right whitespace-nowrap">${formatarMoeda(o.valor)}</td>
+            <td class="px-2 sm:px-3 py-2 text-right whitespace-nowrap ${o.vendido ? 'text-green-700' : ''}">${formatarMoeda(o.vendido)}${o.entregues ? `<span class="block text-xs text-gray-500">${o.entregues} entregue${o.entregues === 1 ? '' : 's'}</span>` : ''}</td>
+          </tr>`;
+      if (!dados.origens.length) return '<tr><td colspan="4" class="px-3 py-3 text-gray-500">Nenhum pedido no período.</td></tr>';
+      const t = dados.totais;
+      return dados.origens.map(o => linha(o) + o.campanhas.map(c => linha(c, true)).join('')).join('') + `
+          <tr class="border-t border-gray-200 font-semibold text-gray-900">
+            <td class="px-2 sm:px-3 py-2">Total</td>
+            <td class="px-2 sm:px-3 py-2 text-right">${t.pedidos}</td>
+            <td class="hidden sm:table-cell px-3 py-2 text-right whitespace-nowrap">${formatarMoeda(t.valor)}</td>
+            <td class="px-2 sm:px-3 py-2 text-right whitespace-nowrap">${formatarMoeda(t.vendido)}</td>
+          </tr>`;
+    }
+
+    async function carregarOrigens() {
+      const corpo = document.getElementById('tabelaOrigens');
+      try {
+        const res = await fetchAdmin(`/api/admin/origens?periodo=${encodeURIComponent(document.getElementById('periodoOrigens').value)}`);
+        if (!res.ok) throw new Error();
+        corpo.innerHTML = linhasOrigens(await res.json());
+      } catch {
+        corpo.innerHTML = '<tr><td colspan="4" class="px-3 py-3 text-red-600">Não foi possível carregar a origem dos pedidos.</td></tr>';
+      }
+    }
+    document.getElementById('periodoOrigens').addEventListener('change', carregarOrigens);
+
+    // Link da loja com UTMs: só letras, números, hífen e _ (espaço vira hífen, sem acento)
+    function limparUtm(v) {
+      return String(v || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().toLowerCase()
+        .replace(/\s+/g, '-').replace(/[^a-z0-9_-]/g, '').slice(0, 60);
+    }
+    function montarLinkOrigem(base, onde, campanha, fonteOutro, meioOutro) {
+      const [fonte, meio] = onde === 'outro' ? [limparUtm(fonteOutro), limparUtm(meioOutro)] : String(onde).split('|');
+      const url = new URL(base);
+      if (fonte) url.searchParams.set('utm_source', fonte);
+      if (meio) url.searchParams.set('utm_medium', meio);
+      const c = limparUtm(campanha);
+      if (c) url.searchParams.set('utm_campaign', c);
+      return url.toString();
+    }
+    function atualizarLinkOrigem() {
+      const onde = document.getElementById('linkOrigemOnde').value;
+      document.getElementById('linkOrigemOutroFonte').classList.toggle('hidden', onde !== 'outro');
+      document.getElementById('linkOrigemOutroMeio').classList.toggle('hidden', onde !== 'outro');
+      document.getElementById('linkOrigemPronto').value = montarLinkOrigem(location.origin + '/', onde,
+        document.getElementById('linkOrigemCampanha').value, document.getElementById('linkOrigemFonte').value, document.getElementById('linkOrigemMeio').value);
+    }
+    for (const id of ['linkOrigemOnde', 'linkOrigemCampanha', 'linkOrigemFonte', 'linkOrigemMeio']) {
+      document.getElementById(id).addEventListener('input', atualizarLinkOrigem);
+      document.getElementById(id).addEventListener('change', atualizarLinkOrigem);
+    }
+    atualizarLinkOrigem();
+    document.getElementById('btnCopiarLinkOrigem').addEventListener('click', async () => {
+      const campo = document.getElementById('linkOrigemPronto');
+      try {
+        await navigator.clipboard.writeText(campo.value);
+      } catch {
+        campo.select();
+        document.execCommand('copy');
+      }
+      mostrarToast('Link copiado!');
+    });
+
     // Métricas
     async function carregarMetricas() {
       try {
@@ -5483,7 +5623,7 @@
       }
     }
 
-    btnAtualizarMetricas.addEventListener('click', () => { carregarVendas(); carregarMetricas(); carregarResumoFornecedores(); carregarRelatorioMaletas(); });
+    btnAtualizarMetricas.addEventListener('click', () => { carregarVendas(); carregarOrigens(); carregarMetricas(); carregarResumoFornecedores(); carregarRelatorioMaletas(); });
 
     // Clientes e pedidos (pedidos gravados no checkout da vitrine)
     let todosClientes = [];
@@ -6831,6 +6971,7 @@
         fecharLimparTestes();
         mostrarToast('Testes limpos. As Métricas contam a partir de agora.');
         carregarVendas();
+        carregarOrigens();
         carregarMetricas();
         carregarRelatorioMaletas();
         carregarProdutos();

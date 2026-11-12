@@ -192,7 +192,6 @@ describe('API: rastreamento e Conversions API', () => {
     await h.pool.query(`DELETE FROM configuracoes WHERE chave IN ('loja_gtm_id', 'loja_meta_pixel', 'meta_capi_token', 'meta_capi_teste')`);
     await srv.parar();
     await new Promise((ok) => meta.close(ok));
-    await h.fecharBanco();
   });
 
   async function api(method, p, { body, token = tokenAdmin, headers: extra = {} } = {}) {
@@ -343,3 +342,72 @@ describe('painel: tela de Rastreamento explica cada campo', () => {
     assert.match(ctx.f({ capi_ativo: true, meta_test_code: 'TEST1' }), /modo de teste/);
   });
 });
+
+describe('Métricas: origem dos pedidos', () => {
+  const { origemDe, agruparOrigens } = require('../origens');
+  it('nomeia a origem pelas UTMs, pelo clique do anúncio ou direto', () => {
+    assert.equal(origemDe({ utm_source: 'Instagram', utm_medium: 'bio' }), 'instagram / bio');
+    assert.equal(origemDe({ utm_source: 'google' }), 'google');
+    assert.equal(origemDe({ fbclid: 'x' }), 'Anúncio Meta (sem UTM)');
+    assert.equal(origemDe({ gclid: 'x' }), 'Anúncio Google (sem UTM)');
+    assert.equal(origemDe({}), 'Direto / sem origem');
+    assert.equal(origemDe(null), 'Direto / sem origem');
+  });
+  it('agrupa por origem e campanha; cancelado fica fora do valor; vendido = fechamento dos entregues', () => {
+    const bio = { utm_source: 'instagram', utm_medium: 'bio' };
+    const r = agruparOrigens([
+      { rastreamento: { ...bio, utm_campaign: 'verao' }, status: 'NOVO', total: '100.10' },
+      { rastreamento: { ...bio, utm_campaign: 'verao' }, status: 'ENTREGUE', total: '200.00', total_final: '180.20' },
+      { rastreamento: bio, status: 'CANCELADO', total: '999' },
+      { rastreamento: {}, status: 'ENTREGUE', total: '50', total_final: null },
+    ]);
+    assert.deepEqual(r.origens.map((o) => [o.nome, o.pedidos, o.cancelados, o.valor, o.entregues, o.vendido]), [
+      ['instagram / bio', 2, 1, 300.1, 1, 180.2],
+      ['Direto / sem origem', 1, 0, 50, 1, 50],
+    ]);
+    assert.deepEqual(r.origens[0].campanhas.map((c) => [c.nome, c.pedidos, c.valor]), [['verao', 2, 300.1]]);
+    assert.deepEqual(r.totais, { pedidos: 3, cancelados: 1, valor: 350.1, entregues: 2, vendido: 230.2 });
+    assert.equal(r.rastreados, 2);
+  });
+  it('painel: link com UTMs limpo e tabela escapada', () => {
+    const vm = require('node:vm');
+    const admin = ler('admin/index.html');
+    const pegar = (nome) => { const i = admin.indexOf(`function ${nome}(`); let n = 0, j = admin.indexOf('{', i); for (; ; j++) { if (admin[j] === '{') n++; else if (admin[j] === '}' && --n === 0) return admin.slice(i, j + 1); } };
+    const ctx = vm.createContext({ URL, formatarMoeda: (v) => 'R$ ' + v, escapeHtml: (t) => String(t).replace(/[&<>"']/g, '_') });
+    vm.runInContext(['limparUtm', 'montarLinkOrigem', 'linhasOrigens'].map(pegar).join('\n') + '\nthis.link = montarLinkOrigem; this.linhas = linhasOrigens;', ctx);
+    assert.equal(ctx.link('https://loja.com/', 'instagram|bio', ''), 'https://loja.com/?utm_source=instagram&utm_medium=bio');
+    assert.equal(ctx.link('https://loja.com/', 'outro', 'Black Friday!', 'Parceira Ána', 'indicação'), 'https://loja.com/?utm_source=parceira-ana&utm_medium=indicacao&utm_campaign=black-friday');
+    const html = ctx.linhas({ origens: [{ nome: '<img src=x>', pedidos: 1, cancelados: 0, valor: 1, entregues: 0, vendido: 0, campanhas: [{ nome: '"><b>', pedidos: 1, cancelados: 0, valor: 1, entregues: 0, vendido: 0 }] }], totais: { pedidos: 1, valor: 1, vendido: 0 } });
+    assert.doesNotMatch(html, /<img src=x|"><b>/);
+    assert.match(ctx.linhas({ origens: [], totais: {} }), /Nenhum pedido no período/);
+  });
+});
+
+describe('API: origem dos pedidos', () => {
+  let srv;
+  let tokenAdmin;
+  before(async () => {
+    srv = await h.iniciarServidor();
+    tokenAdmin = await h.login(srv);
+  });
+  beforeEach(h.limparBanco);
+  after(async () => { await srv.parar(); });
+
+  it('soma os pedidos do período por origem, só para quem vê Métricas', async () => {
+    const form = new FormData();
+    for (const [k, val] of Object.entries({ nome: 'Óculos A', codigo_sku: 'A1', preco_custo: 10, preco_venda: 100 })) form.append(k, String(val));
+    const id = (await (await fetch(srv.url('/api/produtos'), { method: 'POST', headers: { Authorization: `Bearer ${tokenAdmin}` }, body: form })).json()).id;
+    const pedir = (origem) => fetch(srv.url('/api/maleta/checkout'), { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ itens: [{ id }], contato: { nome: 'Ana' }, rastreamento: { origem } }) });
+    await pedir({ utm_source: 'instagram', utm_medium: 'bio' });
+    await pedir({ utm_source: 'instagram', utm_medium: 'bio', utm_campaign: 'verao' });
+    await pedir({});
+    assert.equal((await fetch(srv.url('/api/admin/origens'))).status, 401);
+    const r = await (await fetch(srv.url('/api/admin/origens?periodo=tudo'), { headers: { Authorization: `Bearer ${tokenAdmin}` } })).json();
+    assert.deepEqual(r.origens.map((o) => [o.nome, o.pedidos, o.valor]), [['instagram / bio', 2, 200], ['Direto / sem origem', 1, 100]]);
+    assert.deepEqual(r.origens[0].campanhas.map((c) => c.nome), ['verao']);
+    assert.equal(r.totais.pedidos, 3);
+  });
+});
+
+after(() => h.fecharBanco());
