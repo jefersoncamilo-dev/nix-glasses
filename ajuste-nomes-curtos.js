@@ -141,7 +141,8 @@ async function aplicarUmaVez(slug, pool) {
 // Correção (Jefe, 2026-11-12): o "NIX Brachio B" (modelo NIX-JJ7-PTE) estava com o código
 // JJ7023 e ganhou Nycto (Aviador), mas a foto e a referência do fornecedor (K&L-7055) são de
 // armação redonda grande: vira Diplodoc, formato Redondo. Uma vez, com antes/depois guardado.
-const CHAVE_CORRECAO = 'ajuste_nomes_curtos_2026_11_12_b';
+// (a versão _b procurou só pela grade, que nesse produto está vazia: 0 alterados; a _c olha também o SKU)
+const CHAVE_CORRECAO = 'ajuste_nomes_curtos_2026_11_12_c';
 const CORRECOES = [{ grade: 'NIX-JJ7-PTE', nome_curto: 'Diplodoc', formato: 'REDONDO' }];
 
 async function corrigirUmaVez(slug, pool) {
@@ -155,7 +156,8 @@ async function corrigirUmaVez(slug, pool) {
     for (const c of CORRECOES) {
       const { rows } = await client.query(
         `UPDATE produtos p SET nome_curto = $2, formato = $3, updated_at = CURRENT_TIMESTAMP
-           FROM (SELECT id, nome_curto, formato FROM produtos WHERE grade = $1 FOR UPDATE) a
+           FROM (SELECT id, nome_curto, formato FROM produtos
+                  WHERE COALESCE(NULLIF(TRIM(grade), ''), codigo_sku) = $1 FOR UPDATE) a
           WHERE p.id = a.id
           RETURNING p.id, p.nome, a.nome_curto AS antes, a.formato AS formato_antes`, [c.grade, c.nome_curto, c.formato]);
       for (const r of rows) alterados.push({ ...r, depois: c.nome_curto, formato_depois: c.formato });
