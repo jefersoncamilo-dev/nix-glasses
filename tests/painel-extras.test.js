@@ -19,7 +19,7 @@ function extrairFuncao(nome) {
 }
 
 const funcoes = ['escapeHtml', 'linkSeguro', 'botaoLinkFornecedor', 'variacaoCusto', 'htmlVariacao', 'htmlUltimaCompra',
-  'formatarMedida', 'nomeArquivoSku', 'precoVendaPadrao', 'proximoSku', 'nomeTematico', 'produtoJaCadastrado', 'camposDaImportacao', 'aplicarImportacao', 'associarFotosPorSku', 'montarResumoMaleta', 'calcularAcerto'];
+  'formatarMedida', 'nomeArquivoSku', 'precoVendaPadrao', 'proximoSku', 'nomeCurtoDino', 'nomeTematico', 'produtoJaCadastrado', 'camposDaImportacao', 'aplicarImportacao', 'associarFotosPorSku', 'montarResumoMaleta', 'calcularAcerto'];
 const ctx = vm.createContext({ Number, String, Math, Map, Set, Object, URL, Intl });
 vm.runInContext(`
   const MAX_FOTOS = 4;
@@ -145,13 +145,13 @@ describe('painel: SKU, reposição e venda sugerida na importação', () => {
   it('nome e SKU no padrão Nix Dinossauros, com o dinossauro pelo formato', () => {
     const t = (nome_fornecedor, produtos, usados, extra) => ({ ...ctx.nomeTematico({ nome_fornecedor, ...extra }, produtos, usados) });
     assert.deepEqual(t('Óculos de Sol Aviador Monaco Light - Preto/Laranja - Injetado'),
-      { nome: 'Nix Ptero Monaco Light - Onyx Black / Orange', codigo_sku: 'NIX-MLI-PTE-BLK-ORG' });
+      { nome: 'Nix Ptero Monaco Light - Onyx Black / Orange', codigo_sku: 'NIX-MLI-PTE-BLK-ORG', nome_curto: 'Dimorph' });
     assert.deepEqual(t('Óculos de Sol Hexagonal Premium Bawlgriff - Preto - Metal'),
-      { nome: 'Nix Ankylo Bawlgriff - Onyx Black', codigo_sku: 'NIX-BAW-ANK-BLK' });
+      { nome: 'Nix Ankylo Bawlgriff - Onyx Black', codigo_sku: 'NIX-BAW-ANK-BLK', nome_curto: 'Styraco' });
     assert.deepEqual(t('Óculos de Sol Quadrado Veneza 2.0 - Rosa Degradê - Dourado - Metal'),
-      { nome: 'Nix Rex Veneza 2.0 - Blush Pink Gradient / Gold', codigo_sku: 'NIX-VEN2-REX-PNK-GLD' });
+      { nome: 'Nix Rex Veneza 2.0 - Blush Pink Gradient / Gold', codigo_sku: 'NIX-VEN2-REX-PNK-GLD', nome_curto: 'Styraco' });
     assert.deepEqual(t('Óculos de Sol Redondo Oval New Gold - Azul/Amarelo/Dourado - Metal'),
-      { nome: 'Nix Bronto New Gold - Ocean Blue / Yellow Gold', codigo_sku: 'NIX-NGO-BRO-BLU-YLGL' });
+      { nome: 'Nix Bronto New Gold - Ocean Blue / Yellow Gold', codigo_sku: 'NIX-NGO-BRO-BLU-YLGL', nome_curto: 'Amargas' });
     assert.equal(t('Óculos de Sol Gatinho Arredondado Geovana - Marrom Degradê - Acetato').nome, 'Nix Dilo Geovana - Mocha Brown Gradient');
     assert.equal(t('Óculos de Sol Retangular Samba - Amarelo/Preto - Metal').codigo_sku, 'NIX-SAM-SPI-YLW-BLK');
     assert.equal(t('Óculos de Sol Esportivo Máscara Nitro - Multicolors Espelhado - Injetado').nome, 'Nix Raptor Nitro - Spectrum Flash Mirror');
@@ -162,6 +162,25 @@ describe('painel: SKU, reposição e venda sugerida na importação', () => {
     // Sem cor no nome: usa a cor da armação; sem nome do fornecedor: null
     assert.equal(t('Óculos de Sol Quadrado Iris', [], [], { cor_armacao: 'Preto fosco, haste preta' }).nome, 'Nix Rex Iris - Onyx Black Matte');
     assert.equal(ctx.nomeTematico({ nome_fornecedor: '' }), null);
+  });
+
+  it('nome curto: dinossauro raro da linha do formato, sem repetir', () => {
+    const curto = (nome_fornecedor, produtos = [], extra = {}, curtos = []) => ctx.nomeTematico({ nome_fornecedor, ...extra }, produtos, [], curtos).nome_curto;
+    assert.equal(curto('Óculos de Sol Esportivo Máscara Nitro - Preto - Injetado'), 'Deinony');
+    assert.equal(curto('Óculos de Sol Gatinho Geovana - Marrom - Acetato'), 'Amargas');
+    assert.equal(curto('Óculos de Sol Retangular Samba - Preto - Metal'), 'Styraco');
+    assert.equal(curto('Óculos de Sol Dubai', [], { formato: 'Hexagonal', estilo: 'Top Bar' }), 'Styraco');
+    // Nome já usado no banco (sem diferença de acento/maiúscula) ou no lote: pula para o próximo
+    assert.equal(curto('Óculos de Sol Aviador Monaco - Preto', [{ nome: 'Nix Ptero Falcon - Black', nome_curto: 'dimorph' }], {}, ['Quetzal']), 'Rhampho');
+    // Outra cor de um modelo já cadastrado: o mesmo nome curto
+    assert.equal(curto('Óculos de Sol Aviador Falcon - Dourado - Metal', [{ nome: 'Nix Ptero Falcon - Onyx Black', nome_curto: 'Quetzal' }]), 'Quetzal');
+    // O que a pessoa já digitou fica; formato fora das 4 linhas fica vazio
+    assert.equal(curto('Óculos de Sol Aviador Monaco - Preto', [], { nome_curto: 'Meu Nome' }), 'Meu Nome');
+    assert.equal(curto('Óculos de Sol Clássico Iris - Preto'), '');
+    // Acabaram os nomes da linha: repete o primeiro com número
+    const todos = ['Deinony', 'Troodon', 'Cerato', 'Utah', 'Triássico', 'Megaptor', 'Concaven', 'Pyroraptor', 'Dakotaraptor',
+      'Velocis', 'Austro', 'Buitre', 'Microraptor', 'Linheraptor'];
+    assert.equal(ctx.nomeCurtoDino('esportivo', [...todos, 'Deinony 2']), 'Deinony 3');
   });
 
   it('reconhece produto já cadastrado pelo link ou pelo código no mesmo fornecedor', () => {
