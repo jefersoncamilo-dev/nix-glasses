@@ -1842,11 +1842,13 @@ async function startServer() {
       // as cores do modelo (é o que o Editar produto promete). Trocou ou tirou uma foto 2 a 4
       // numa cor, as outras cores recebem as mesmas, cada uma com a sua capa. Sem isso, a foto
       // tirada continuava nas outras cores e "voltava" na vitrine ao escolher outra cor.
+      // Salvar pelo Editar produto do modelo (fotos_modelo) iguala as fotos 2 a 4 de todas as
+      // cores mesmo sem mudança aqui: acerta modelos que ficaram com fotos diferentes por cor.
       const salvo = result.rows[0];
       const comunsAntes = posicoesFotos(fotosDoProduto(anterior.rows[0])).slice(1);
       const comunsAgora = posicoesFotos(fotosDoProduto(salvo)).slice(1);
       if (mexeNasFotos && grade && !String(salvo.tamanho || '').trim() && String(salvo.cor_armacao || '').trim()
-          && comunsAntes.some((url, i) => url !== comunsAgora[i])) {
+          && (req.body.fotos_modelo === 'true' || comunsAntes.some((url, i) => url !== comunsAgora[i]))) {
         const outras = await client.query(
           `SELECT id, imagem_url, fotos FROM produtos
            WHERE grade = $1 AND id <> $2 AND COALESCE(btrim(tamanho), '') = ''
