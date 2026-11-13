@@ -108,7 +108,7 @@ function extrairFuncao(nome) {
     else if (html[i] === '}' && --nivel === 0) return html.slice(inicio, i + 1);
   }
 }
-const funcoes = ['linkSeguro', 'precoVendaPadrao', 'ehPolarizado', 'proximoSku', 'nomeCurtoDino', 'nomeTematico', 'camposDaImportacao', 'formatarMedida', 'linhaLoteVazia', 'linhaLoteEstaVazia',
+const funcoes = ['linkSeguro', 'precoVendaPadrao', 'ehPolarizado', 'proximoSku', 'nomeCurtoDino', 'nomeNix', 'nomeTematico', 'camposDaImportacao', 'formatarMedida', 'linhaLoteVazia', 'linhaLoteEstaVazia',
   'conflitosLote', 'produtoJaCadastrado', 'lerCoresLote', 'textoCoresLote', 'linhaDoModeloComCores', 'planoCoresLote', 'resumoCoresLote', 'expandirCoresLote',
   'agruparCoresPorModelo', 'nomeDoModelo', 'coresDoModeloDe', 'lerCoresModelo', 'lerPreco', 'lerMedida', 'lerDataCompra', 'validarLote', 'campoDoCabecalho', 'linhasDaPlanilha', 'lerDisponibilidade', 'lerStatus', 'lerGenero'];
 const ctx = vm.createContext({ Number, String, Math, Map, Set, Object, URL, Array, JSON });
@@ -146,7 +146,8 @@ describe('painel: Cadastro em Lote com as cores do link (um produto, estoque por
     const r = ctx.linhaDoModeloComCores(linhaBase(dados), dados, [], []);
     assert.deepEqual([...r.esgotadas], ['Marrom']);
     const l = r.linha;
-    assert.equal(l.nome, 'Nix Raptor NV1720');
+    // Nome NIX + nome curto + tipo + formato da lente (sem a cor; cada cor ganha " - <cor>")
+    assert.equal(l.nome, 'NIX Deinony Polarizado Geométrico');
     assert.equal(l.codigo_sku, 'NIX-NV1-RAP');
     assert.equal(l.cores, 'Preto:1, Marrom:0:esgotado, Azul:1', 'esgotada no site entra como Esgotado');
     assert.equal(l.cor_armacao, '');
@@ -164,7 +165,7 @@ describe('painel: Cadastro em Lote com as cores do link (um produto, estoque por
     assert.equal(e.incluir.length, 0);
     assert.deepEqual([...e.origens], [0, 0]);
     const [preto, azul] = e.produtos;
-    assert.equal(preto.nome, 'Nix Raptor NV1720 - Preto');
+    assert.equal(preto.nome, 'NIX Deinony Polarizado Geométrico - Preto');
     assert.equal(preto.codigo_sku, 'NIX-NV1-RAP-PRETO');
     assert.equal(preto.grade, 'NIX-NV1-RAP');
     assert.equal(preto.cor_armacao, 'Preto');
