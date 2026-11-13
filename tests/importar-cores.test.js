@@ -365,3 +365,71 @@ describe('API: produto importado fica em conferência até liberar', () => {
     assert.equal(r.status, 400);
   });
 });
+
+// ---------- Botão "Importar" do link: a função inteira, com o painel de verdade ----------
+// Regressão: o PR #91 tirou o campo "Mesmo fornecedor para todas as linhas" (loteFornecedorTodos)
+// e importarLinkLote ainda lia o .value dele, então TODO link dava
+// "Cannot read properties of null (reading 'value')" e nada era importado.
+describe('painel: Importar pelo link do fornecedor (botão do Cadastro em Lote)', () => {
+  const idsDoPainel = new Set([...html.matchAll(/\bid="([A-Za-z0-9_-]+)"/g)].map(m => m[1]));
+
+  it('todo getElementById do painel aponta para um elemento que existe', () => {
+    const lidos = [...new Set([...html.matchAll(/getElementById\('([A-Za-z0-9_-]+)'\)/g)].map(m => m[1]))];
+    assert.deepEqual(lidos.filter(id => !idsDoPainel.has(id)), [], 'id lido no código que não existe no painel');
+  });
+
+  function painelDoLote(pagina, url) {
+    const c = vm.createContext({ Number, String, Math, Map, Set, Object, URL, Array, JSON, Promise,
+      linhasLote: [], todosProdutos: [],
+      // Como no navegador: id que não está no painel -> null
+      document: { getElementById: id => (idsDoPainel.has(id) ? { value: '', textContent: '', classList: { add() {}, remove() {} } } : null) },
+      // Como o servidor (importarProduto): os dados da página + o link
+      buscarImportacao: async () => ({ ...extrairDadosProduto(pagina, url), link_fornecedor: url }),
+      renderizarLote: () => {},
+    });
+    vm.runInContext(`
+      const ACRESCIMO_VENDA = 100;
+      const CAMPOS_MEDIDA = ['diametro_cm', 'ponte_cm', 'largura_total_cm'];
+      ${html.match(/const COLUNAS_LOTE = \[[\s\S]*?\n {4}\];/)[0]}
+      ${[...funcoes, 'importarLinkLote'].map(extrairFuncao).join('\n')}
+      function adicionarLinhasLote(novas) { linhasLote.push(...novas); }
+      this.importarLinkLote = importarLinkLote;
+    `, c);
+    return c;
+  }
+
+  it('link com cores (Tassia): importa uma linha com as cores e o nome NIX', async () => {
+    const p = painelDoLote(paginaNuvemshop(variacoes), URL_TASSIA);
+    const r = await p.importarLinkLote(URL_TASSIA);
+    assert.equal(r.novos, 1);
+    assert.equal(p.linhasLote.length, 1);
+    const l = p.linhasLote[0];
+    assert.equal(l.nome, 'NIX Deinony Polarizado Geométrico');
+    assert.equal(l.cores, 'Preto:1, Marrom:0:esgotado, Azul:1');
+    assert.equal(l.fornecedor, 'Tassia Nunes Atacado');
+    assert.equal(l.em_conferencia, true);
+    // O mesmo link de novo soma 1 em cada cor
+    assert.equal((await p.importarLinkLote(URL_TASSIA)).repetidos, 1);
+    assert.equal(p.linhasLote[0].cores, 'Preto:2, Marrom:0:esgotado, Azul:2');
+  });
+
+  it('link sem cores (o do erro, BRN50729): importa com nome NIX, SKU e fornecedor', async () => {
+    const url = 'https://tassianunesatacado.com.br/produtos/oculos-de-sol-brn50729-geometrico-tendencia-unissex-1i66a';
+    const nome = 'Óculos de Sol BRN50729 Geométrico Tendência Unissex';
+    const pagina = `<!doctype html><html><head><title>${nome} - Comprar em Tassia Nunes Atacado</title>
+<meta property="og:site_name" content="Tassia Nunes Atacado"><meta property="og:title" content="${nome}">
+<script type="application/ld+json">{"@context":"https://schema.org/","@type":"Product","name":"${nome}","image":"https:${CDN}/brn-1024-1024.webp","offers":{"@type":"Offer","price":"24.90","priceCurrency":"BRL"}}</script>
+</head><body><div id="single-product" class="js-product-detail"></div></body></html>`;
+    const p = painelDoLote(pagina, url);
+    const r = await p.importarLinkLote(url);
+    assert.equal(r.novos, 1);
+    const l = p.linhasLote[0];
+    assert.equal(l.codigo_fornecedor, 'BRN50729');
+    assert.equal(l.fornecedor, 'Tassia Nunes Atacado');
+    assert.equal(l.nome_fornecedor, nome);
+    assert.match(l.nome, /^NIX \S+ .*Geométrico$/, `nome no padrão NIX: ${l.nome}`);
+    assert.ok(l.codigo_sku, 'SKU preenchido');
+    assert.equal(l.preco_custo, '24,90');
+    assert.equal(l.em_conferencia, true);
+  });
+});
