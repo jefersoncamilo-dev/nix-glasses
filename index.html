@@ -1865,8 +1865,10 @@
     }
 
     // Cores dos detalhes: a foto de cada cor com o nome embaixo; a escolhida fica marcada
-    // e as que estão na maleta ganham ✓
-    function botoesCor(grupo, escolhidoId) {
+    // e as que estão na maleta ganham ✓.
+    // compacto (celular, logo abaixo da foto): só a foto, numa fileira que rola de lado; o nome
+    // da cor escolhida aparece no título "Cor: ..." acima da fileira.
+    function botoesCor(grupo, escolhidoId, compacto) {
       return grupo.map(p => {
         const id = Number(p.id);
         const marcado = id === escolhidoId;
@@ -1874,6 +1876,12 @@
         const foto = fotosDoProduto(p)[0];
         const nome = escapeHtml(p.cor_armacao || nomeCard(p));
         const titulo = p.status === 'CONDICIONAL' ? 'Em condicional com outra cliente' : nome;
+        if (compacto) {
+          return `<button type="button" onclick="escolherTamanho(${id})" aria-pressed="${marcado}" aria-label="Cor ${nome}${naMaleta ? ' (na maleta)' : ''}" title="${titulo}" class="relative flex-shrink-0 w-12 h-12 rounded-lg overflow-hidden border-2 bg-gray-100 ${marcado ? 'border-gray-900' : 'border-gray-200'}${p.status === 'CONDICIONAL' ? ' opacity-60' : ''}">
+          ${foto ? `<img src="${escapeHtml(foto)}" alt="" loading="lazy" class="w-full h-full object-cover" onerror="imgFallback(this)">` : ''}
+          ${naMaleta ? '<span class="absolute top-0.5 right-0.5 w-4 h-4 rounded-full bg-emerald-600 text-white text-[10px] leading-4 text-center font-bold" aria-hidden="true">✓</span>' : ''}
+        </button>`;
+        }
         return `<button type="button" onclick="escolherTamanho(${id})" aria-pressed="${marcado}" aria-label="Cor ${nome}${naMaleta ? ' (na maleta)' : ''}" title="${titulo}" class="w-16 sm:w-[4.5rem] flex flex-col items-center gap-1${p.status === 'CONDICIONAL' ? ' opacity-60' : ''}">
           <span class="block w-16 h-16 sm:w-[4.5rem] sm:h-[4.5rem] rounded-xl overflow-hidden border-2 bg-gray-100 ${marcado ? 'border-gray-900' : 'border-gray-200 hover:border-gray-400'}">${foto ? `<img src="${escapeHtml(foto)}" alt="" loading="lazy" class="w-full h-full object-cover" onerror="imgFallback(this)">` : ''}</span>
           <span class="w-full truncate text-center text-[11px] leading-tight ${marcado ? 'font-semibold text-gray-900' : 'text-gray-600'}">${nome}${naMaleta ? ' ✓' : ''}</span>
@@ -1932,6 +1940,7 @@
                   <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M4 12v7a2 2 0 002 2h12a2 2 0 002-2v-7M16 6l-4-4-4 4M12 2v14"/></svg>
                   Compartilhar</button>`;
       const textoBotao = falteTamanho ? 'Escolha o tamanho' : jaNaMaleta ? '✓ Na Maleta · Remover' : encomenda ? 'Encomendar (adicionar à Maleta)' : 'Adicionar à Maleta';
+      const botaoMaleta = `<button type="button" onclick="toggleMaleta(${id}); renderizarDetalhes()" aria-pressed="${jaNaMaleta}"${falteTamanho ? ' disabled' : ''} class="btn btn-lg btn-maleta w-full ${jaNaMaleta ? 'btn-na-maleta' : 'btn-destaque'}">${textoBotao}</button>`;
       detalhesConteudo.innerHTML = `
         <div class="grid md:grid-cols-2">
           <div class="p-3 sm:p-4">
@@ -1950,41 +1959,55 @@
                 <img src="${escapeHtml(f)}" alt="" class="w-full h-full object-cover" onerror="imgFallback(this)">
               </button>`).join('')}
             </div>` : ''}
+            ${porCor ? `
+            <!-- Celular: as cores ficam coladas na foto (no computador continuam ao lado, com o nome) -->
+            <div data-cores-celular class="sm:hidden mt-2">
+              <p class="text-xs text-gray-600 mb-1.5 truncate">Cor: <span class="font-semibold text-gray-900">${escapeHtml(produto.cor_armacao || '')}</span> · ${grupo.length} cores</p>
+              <div class="flex gap-2 overflow-x-auto pb-1" role="group" aria-label="Cores">${botoesCor(grupo, id, true)}</div>
+            </div>` : ''}
           </div>
-          <div class="p-4 sm:p-6 md:pl-2 flex flex-col">
-            ${encomenda ? '' : `<span class="self-start px-2 py-1 text-xs font-medium rounded-full mb-3 ${etiqueta.classe}">${escapeHtml(etiqueta.texto)}</span>`}
-            <h3 class="text-xl sm:text-2xl font-bold text-gray-900 mb-1 pr-8">${escapeHtml(comTamanhos || porCor ? nomeModelo(produto) : produto.nome)}</h3>
-            <p class="text-sm text-gray-500 mb-3">Ref: ${escapeHtml(produto.codigo_sku)}</p>
+          <div class="px-4 pt-1 pb-4 sm:p-6 md:pl-2 flex flex-col">
+            ${encomenda ? '' : `<span class="self-start px-2 py-1 text-xs font-medium rounded-full mb-2 sm:mb-3 ${etiqueta.classe}">${escapeHtml(etiqueta.texto)}</span>`}
+            <h3 class="text-lg leading-snug sm:text-2xl font-bold text-gray-900 mb-0.5 sm:mb-1 sm:pr-8">${escapeHtml(comTamanhos || porCor ? nomeModelo(produto) : produto.nome)}</h3>
+            <p class="text-[11px] sm:text-sm text-gray-400 sm:text-gray-500 mb-2 sm:mb-3 truncate">Ref: ${escapeHtml(produto.codigo_sku)}</p>
             ${precoAntes(produto) ? `
-            <div data-preco-detalhes class="mb-4">
+            <div data-preco-detalhes class="mb-3 sm:mb-4">
               <p class="text-base text-gray-400"><span class="sr-only">De </span><span data-preco-antes class="line-through">${formatarMoeda(precoAntes(produto))}</span>
                 <span class="ml-1 px-2 py-0.5 rounded-full bg-pink-600 text-white text-xs font-bold align-middle">-${Math.round((1 - precoDe(produto) / precoAntes(produto)) * 100)}%</span></p>
-              <p data-preco-promocional class="text-2xl sm:text-3xl font-bold text-pink-600"><span class="sr-only">Por </span>${formatarMoeda(precoDe(produto))}</p>
+              <p data-preco-promocional class="text-xl sm:text-3xl font-bold text-pink-600"><span class="sr-only">Por </span>${formatarMoeda(precoDe(produto))}</p>
               <p class="text-sm font-medium text-emerald-700">Você economiza ${formatarMoeda((Math.round(precoAntes(produto) * 100) - Math.round(precoDe(produto) * 100)) / 100)} nesta promoção</p>
-            </div>` : `<p class="text-2xl sm:text-3xl font-bold text-gray-900 mb-4">${formatarMoeda(produto.preco_venda)}</p>`}
+            </div>` : `<p class="text-xl sm:text-3xl font-bold text-gray-900 mb-3 sm:mb-4">${formatarMoeda(produto.preco_venda)}</p>`}
             ${encomenda ? `
-            <div data-aviso-encomenda class="rounded-xl border border-blue-200 bg-blue-50 px-3 py-2.5 mb-4">
-              <p class="flex flex-wrap items-center gap-2 text-sm font-semibold text-blue-900"><span class="px-2 py-0.5 rounded-full bg-blue-600 text-white text-[11px] font-bold tracking-wide">SOB ENCOMENDA</span>Prazo e condições pelo WhatsApp</p>
-              <p class="mt-1.5 text-sm text-blue-900">Fale com a gente para consultar o prazo e combinar o pagamento.</p>
-              ${linkWhats ? `<a data-whatsapp-encomenda href="${escapeHtml(linkWhats)}" aria-label="Falar no WhatsApp sobre esta encomenda" target="_blank" rel="noopener" class="btn btn-whatsapp mt-2.5 w-full gap-2">
+            <div data-aviso-encomenda class="rounded-xl border border-blue-200 bg-blue-50 px-3 py-2 sm:py-2.5 mb-3 sm:mb-4">
+              <p class="flex flex-wrap items-center gap-x-2 gap-y-1 text-[13px] sm:text-sm font-semibold text-blue-900"><span class="px-2 py-0.5 rounded-full bg-blue-600 text-white text-[11px] font-bold tracking-wide">SOB ENCOMENDA</span>Prazo e condições pelo WhatsApp</p>
+              <p class="hidden sm:block mt-1.5 text-sm text-blue-900">Fale com a gente para consultar o prazo e combinar o pagamento.</p>
+              ${linkWhats ? `<div class="mt-2 sm:mt-2.5 flex gap-2">
+                <a data-whatsapp-encomenda href="${escapeHtml(linkWhats)}" aria-label="Falar no WhatsApp sobre esta encomenda" target="_blank" rel="noopener" class="btn btn-whatsapp flex-1 w-full gap-2">
                 ${iconeWhatsapp}
-                WhatsApp</a>` : ''}
+                WhatsApp</a>
+                <!-- Celular: Compartilhar ao lado do WhatsApp (no computador fica logo abaixo do aviso) -->
+                <div class="flex-1 sm:hidden">${botaoCompartilhar}</div>
+              </div>` : ''}
             </div>
-            <div class="-mt-2 mb-4">${botaoCompartilhar}</div>` : ''}
+            <div class="${linkWhats ? 'hidden sm:block ' : ''}-mt-2 mb-4">${botaoCompartilhar}</div>` : ''}
             ${porCor ? `
+            <div class="hidden sm:block">
             <h4 class="text-sm font-semibold text-gray-900 mb-2">Cor: <span class="font-normal">${escapeHtml(produto.cor_armacao || '')}</span> <span class="font-normal text-gray-500">· ${grupo.length} cores</span></h4>
-            <div data-cores class="flex flex-wrap gap-2 mb-4" role="group" aria-label="Cores">${botoesCor(grupo, id)}</div>` : ''}
+            <div data-cores class="flex flex-wrap gap-2 mb-4" role="group" aria-label="Cores">${botoesCor(grupo, id)}</div>
+            </div>` : ''}
             ${comTamanhos ? `
             <h4 class="text-sm font-semibold text-gray-900 mb-2">Tamanho${falteTamanho ? '' : `: <span class="font-normal">${escapeHtml(produto.tamanho)}</span>`}</h4>
             <div data-tamanhos class="flex flex-wrap gap-2 mb-4" role="group" aria-label="Tamanhos">${botoesTamanho(grupo, falteTamanho ? null : id)}</div>` : ''}
             <!-- Ações: "Adicionar à Maleta" é o botão principal (sólido); o provador fica logo abaixo, como apoio -->
             <div class="mt-auto flex flex-col gap-2">
-              <button type="button" onclick="toggleMaleta(${id}); renderizarDetalhes()" aria-pressed="${jaNaMaleta}"${falteTamanho ? ' disabled' : ''} class="btn btn-lg btn-maleta w-full ${jaNaMaleta ? 'btn-na-maleta' : 'btn-destaque'}">${textoBotao}</button>
+              <div class="hidden sm:block">${botaoMaleta}</div>
               ${fotoProvador(produto) && provadorLigado() ? `<button type="button" onclick="abrirProvador(${id})" class="btn btn-secundario w-full">Provar virtualmente</button>` : ''}
               <!-- WhatsApp (pronta entrega e condicional) e, logo abaixo dele, Compartilhar o link do
                    produto. Na encomenda o Compartilhar fica logo abaixo do WhatsApp do aviso. -->
-              ${linkWhats && !encomenda ? `<a data-whatsapp-produto href="${escapeHtml(linkWhats)}" target="_blank" rel="noopener" aria-label="Falar no WhatsApp sobre este produto" class="btn btn-whatsapp-claro w-full gap-2">${iconeWhatsapp}WhatsApp</a>` : ''}
-              ${encomenda ? '' : botaoCompartilhar}
+              ${encomenda ? '' : `<div class="flex gap-2 sm:flex-col">
+              ${linkWhats ? `<a data-whatsapp-produto href="${escapeHtml(linkWhats)}" target="_blank" rel="noopener" aria-label="Falar no WhatsApp sobre este produto" class="btn btn-whatsapp-claro flex-1 w-full gap-2">${iconeWhatsapp}WhatsApp</a>` : ''}
+              <div class="flex-1">${botaoCompartilhar}</div>
+              </div>`}
             </div>
             ${especificacoes.length || produto.estilo ? `
             <details data-detalhes-tecnicos class="detalhes-tecnicos mt-4 rounded-xl border border-gray-200"${detalhes.tecnicosAbertos ? ' open' : ''} ontoggle="if (detalhes) detalhes.tecnicosAbertos = this.open">
@@ -1999,6 +2022,8 @@
             </details>` : ''}
           </div>
         </div>
+        <!-- Celular: o botão da maleta fica sempre à vista, preso no rodapé da janela -->
+        <div data-maleta-rodape class="sm:hidden sticky bottom-0 z-10 bg-white/95 backdrop-blur border-t border-gray-200 px-4 py-2.5">${botaoMaleta}</div>
       `;
     }
 
