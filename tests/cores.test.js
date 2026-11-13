@@ -122,6 +122,41 @@ describe('cadastro por cores', () => {
     assert.equal((await fetch(srv.url(tartaruga.fotos[0]))).status, 200);
   });
 
+  it('tirar ou trocar as fotos 2 a 4 numa cor vale para todas as cores do modelo, cada uma com a sua capa', async () => {
+    const r = await enviar('POST', '/api/produtos', { ...oculos, cores },
+      { foto2: png(2), foto3: png(3), foto4: png(4), foto_cor_1: png(11), foto_cor_2: png(12), foto_cor_3: png(13) });
+    const [preto, tartaruga, azul] = r.body.produtos;
+    const listar = async () => Object.fromEntries((await api('GET', '/api/admin/produtos')).body.map((p) => [p.id, p]));
+
+    // Tira a foto 2 e a 3 (as de modelo) no preto: some de todas as cores
+    const ed = await enviar('PUT', `/api/produtos/${preto.id}`, { fotos_manter: [preto.fotos[0], null, null, preto.fotos[3]] });
+    assert.equal(ed.status, 200);
+    let todos = await listar();
+    for (const [p, capa] of [[preto, preto.fotos[0]], [tartaruga, tartaruga.fotos[0]], [azul, azul.fotos[0]]]) {
+      assert.deepEqual(todos[p.id].fotos, [capa, null, null, preto.fotos[3]]);
+      assert.equal(todos[p.id].imagem_url, capa);
+    }
+    // As fotos tiradas não ficam em nenhuma cor (nem no banco)
+    assert.equal((await fetch(srv.url(tartaruga.fotos[1]))).status, 404);
+    assert.equal((await fetch(srv.url(azul.fotos[2]))).status, 404);
+
+    // Troca a foto 2 no tartaruga: as outras cores recebem a mesma foto 2
+    const troca = await enviar('PUT', `/api/produtos/${tartaruga.id}`, { fotos_manter: [tartaruga.fotos[0], null, null, preto.fotos[3]] }, { foto2: png(22) });
+    assert.equal(troca.status, 200);
+    todos = await listar();
+    const nova2 = todos[tartaruga.id].fotos[1];
+    assert.ok(nova2);
+    assert.deepEqual(todos[preto.id].fotos, [preto.fotos[0], nova2, null, preto.fotos[3]]);
+    assert.deepEqual(todos[azul.id].fotos, [azul.fotos[0], nova2, null, preto.fotos[3]]);
+
+    // Trocar só a capa de uma cor não mexe nas outras
+    const capa = await enviar('PUT', `/api/produtos/${azul.id}`, { fotos_manter: [null, nova2, null, preto.fotos[3]] }, { foto1: png(31) });
+    assert.equal(capa.status, 200);
+    const depois = await listar();
+    assert.deepEqual(depois[preto.id].fotos, todos[preto.id].fotos);
+    assert.deepEqual(depois[tartaruga.id].fotos, todos[tartaruga.id].fotos);
+  });
+
   it('o pedido leva a cor e a foto dela, e a venda baixa só o estoque da cor comprada', async () => {
     const r = await enviar('POST', '/api/produtos', { ...oculos, cores: cores.slice(0, 2) }, { foto_cor_1: png(11), foto_cor_2: png(12) });
     const [preto, tartaruga] = r.body.produtos;
