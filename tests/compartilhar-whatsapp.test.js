@@ -45,6 +45,7 @@ describe('detalhes do produto: WhatsApp e Compartilhar', () => {
       assert.ok(link, 'botão de WhatsApp');
       assert.match(decodeURIComponent(link[1]), /\*NIX Fossil Polarizado Redondo\*[\s\S]*https:\/\/loja\.exemplo\/\?produto=7/);
       assert.match(h, /data-compartilhar onclick="compartilharProduto\(7\)"/);
+      assert.ok(h.indexOf('data-compartilhar') > h.indexOf('data-whatsapp-produto'), 'Compartilhar logo abaixo do WhatsApp');
     }
   });
 
@@ -53,6 +54,9 @@ describe('detalhes do produto: WhatsApp e Compartilhar', () => {
     assert.match(h, /data-whatsapp-encomenda/);
     assert.doesNotMatch(h, /data-whatsapp-produto/);
     assert.match(h, /data-compartilhar/);
+    // logo abaixo do WhatsApp do aviso, antes das cores e do botão da maleta
+    assert.ok(h.indexOf('data-compartilhar') > h.indexOf('data-whatsapp-encomenda'));
+    assert.ok(h.indexOf('data-compartilhar') < h.indexOf('btn-maleta'));
   });
 
   it('loja sem número de WhatsApp: só o Compartilhar', () => {
