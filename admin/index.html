@@ -2890,9 +2890,9 @@
       }
       const dados = await buscarImportacao(url);
       const c = camposDaImportacao(dados);
-      const fornecedorTodos = document.getElementById('loteFornecedorTodos').value.trim();
-      // Importado pelo link: o cadastro vai "em conferência" (fora da vitrine até liberar)
-      const linha = { ...linhaLoteVazia(), ...c, fornecedor: fornecedorTodos || c.fornecedor, preco_custo: c.preco_custo.replace('.', ','), preco_venda: c.preco_venda.replace('.', ','), em_conferencia: true };
+      // Importado pelo link: o cadastro vai "em conferência" (fora da vitrine até liberar).
+      // Fornecedor = o da loja do link (para trocar em várias linhas: "Preencher uma coluna de uma vez")
+      const linha = { ...linhaLoteVazia(), ...c, preco_custo: c.preco_custo.replace('.', ','), preco_venda: c.preco_venda.replace('.', ','), em_conferencia: true };
       if (Array.isArray(dados.cores) && dados.cores.length) {
         const r = linhaDoModeloComCores(linha, dados, todosProdutos, linhasLote.map(l => l.codigo_sku), linhasLote.map(l => l.nome_curto));
         adicionarLinhasLote([r.linha]);
