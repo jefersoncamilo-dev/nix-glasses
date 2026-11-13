@@ -157,6 +157,34 @@ describe('cadastro por cores', () => {
     assert.deepEqual(depois[tartaruga.id].fotos, todos[tartaruga.id].fotos);
   });
 
+  it('salvar o modelo pelo Editar produto (fotos_modelo) iguala as fotos 2 a 4 que estavam diferentes por cor', async () => {
+    const r = await enviar('POST', '/api/produtos', { ...oculos, cores: cores.slice(0, 2) },
+      { foto2: png(2), foto3: png(3), foto_cor_1: png(11), foto_cor_2: png(12) });
+    const [preto, tartaruga] = r.body.produtos;
+    // Dados antigos: o tartaruga ficou com outra foto 2 e sem a 3
+    const div = await enviar('PUT', `/api/produtos/${tartaruga.id}`, { fotos_manter: [tartaruga.fotos[0], null, null, null] }, { foto2: png(40) });
+    assert.equal(div.status, 200);
+    let lista = Object.fromEntries((await api('GET', '/api/admin/produtos')).body.map((p) => [p.id, p]));
+    // (essa troca já levou a foto 2 nova para o preto; desfaz direto no banco para simular o legado)
+    await h.pool.query('UPDATE produtos SET fotos = $1 WHERE id = $2', [preto.fotos, preto.id]);
+    const fotosTart = lista[tartaruga.id].fotos;
+    assert.notDeepEqual(fotosTart.slice(1), preto.fotos.slice(1));
+
+    // Sem mudar nada nas fotos, sem fotos_modelo: cada cor continua como está
+    await enviar('PUT', `/api/produtos/${preto.id}`, { fotos_manter: preto.fotos });
+    lista = Object.fromEntries((await api('GET', '/api/admin/produtos')).body.map((p) => [p.id, p]));
+    assert.deepEqual(lista[tartaruga.id].fotos, fotosTart);
+
+    // Com fotos_modelo: o tartaruga fica com as fotos 2 a 4 do preto e a sua capa
+    const ed = await enviar('PUT', `/api/produtos/${preto.id}`, { fotos_manter: preto.fotos, fotos_modelo: 'true' });
+    assert.equal(ed.status, 200);
+    lista = Object.fromEntries((await api('GET', '/api/admin/produtos')).body.map((p) => [p.id, p]));
+    assert.deepEqual(lista[tartaruga.id].fotos, [tartaruga.fotos[0], ...preto.fotos.slice(1)]);
+    assert.deepEqual(lista[preto.id].fotos, preto.fotos);
+    // A foto 2 que só o tartaruga tinha saiu do banco
+    assert.equal((await fetch(srv.url(fotosTart[1]))).status, 404);
+  });
+
   it('o pedido leva a cor e a foto dela, e a venda baixa só o estoque da cor comprada', async () => {
     const r = await enviar('POST', '/api/produtos', { ...oculos, cores: cores.slice(0, 2) }, { foto_cor_1: png(11), foto_cor_2: png(12) });
     const [preto, tartaruga] = r.body.produtos;

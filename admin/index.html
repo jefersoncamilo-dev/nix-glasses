@@ -1752,6 +1752,7 @@
           <label class="block text-sm font-medium text-gray-700 mb-1">Fotos (até 4)</label>
           <p class="text-xs text-gray-500 mb-2">A foto 1 é a capa do produto na vitrine: use a foto com a modelo ou a foto principal. Arraste várias fotos de uma vez para cá: elas ocupam as posições livres, em ordem.</p>
           <p data-so-nicho="oculos" class="text-xs text-gray-500 mb-2">A foto 4 é só do Provador Virtual: quem visita o site vê as fotos 1 a 3, nunca a 4. Use o óculos de frente, em PNG de fundo transparente e recortado rente à armação (fundo branco liso também funciona, ele é removido na hora). Sem a foto 4, o óculos não aparece no provador. Arrastar várias fotos preenche só as fotos 1 a 3.</p>
+          <p id="avisoFotosModelo" class="hidden text-xs text-orange-800 bg-orange-50 border border-orange-200 rounded-lg px-3 py-2 mb-2"></p>
           <div id="slotsFotos" class="grid grid-cols-2 sm:grid-cols-4 gap-3"></div>
           <input type="file" id="imagemCamera" accept="image/*" capture="environment" class="hidden">
         </div>
@@ -4886,6 +4887,23 @@
       }));
     }
 
+    // Modelo com cores: a foto 1 é de cada cor; as fotos 2 a 4 deste cadastro valem para
+    // todas as cores ao salvar. Avisa quando hoje as outras cores têm fotos 2 a 4 diferentes.
+    function fotosComunsDiferentes(produto, cores) {
+      const comuns = (p) => JSON.stringify([1, 2, 3].map(i => (Array.isArray(p.fotos) && p.fotos[i]) || null));
+      return cores.filter(c => c.produto.id !== produto.id && comuns(c.produto) !== comuns(produto)).map(c => c.cor);
+    }
+    function avisarFotosModelo(produto, cores) {
+      const aviso = document.getElementById('avisoFotosModelo');
+      if (!aviso) return;
+      if (!produto || cores.length < 2) { aviso.classList.add('hidden'); return; }
+      const diferentes = fotosComunsDiferentes(produto, cores);
+      aviso.textContent = diferentes.length
+        ? `As fotos 2, 3 e 4 valem para todas as cores. Hoje ${diferentes.length === 1 ? 'a cor' : 'as cores'} ${diferentes.join(', ')} ${diferentes.length === 1 ? 'está' : 'estão'} com fotos 2 a 4 diferentes destas: ao salvar, todas ficam com as fotos 2 a 4 daqui (a foto 1 de cada cor continua a dela).`
+        : 'As fotos 2, 3 e 4 valem para todas as cores: o que mudar aqui muda em todas. A foto 1 é de cada cor (botão Fotos ao lado da cor).';
+      aviso.classList.remove('hidden');
+    }
+
     function desenharCoresModelo() {
       const caixa = document.getElementById('coresDoModelo');
       caixa.classList.toggle('hidden', !coresModelo.length);
@@ -5092,6 +5110,7 @@
         document.getElementById('coresEdicao').firstChild.textContent = 'Inclua outras cores deste modelo: cada cor nova vira um produto com a sua foto, o seu estoque e SKU próprio, com os mesmos preços e especificações deste produto (as fotos 2 a 4 também vêm daqui). A cor deste produto é a do campo Cor lá em cima. ';
       }
       desenharCoresModelo();
+      avisarFotosModelo(produto, coresModelo);
       atualizarAvisoSinal();
       atualizarAbrirLink();
       preencherPromocaoProduto(produto);
@@ -5749,6 +5768,8 @@
       if (id && coresModelo.length && !modelo) return mostrarToast('Confira as cores do modelo: cada cor com nome, uma vez só, e a quantidade em número', 'error');
       const nomeModelo = document.getElementById('nome').value.trim();
       if (modelo) {
+        // Fotos 2 a 4 deste cadastro passam a valer para todas as cores do modelo
+        if (modelo.length > 1) formData.append('fotos_modelo', 'true');
         formData.set('nome', `${nomeModelo} - ${modelo[0].cor}`);
         formData.set('cor_armacao', modelo[0].cor);
         formData.set('estoque', String(modelo[0].estoque));
