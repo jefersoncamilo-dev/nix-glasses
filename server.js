@@ -282,6 +282,11 @@ function organizarFotos(posicoes) {
   return [...galeria, quarta];
 }
 
+// As 4 posições (1 a 4) de uma lista de fotos, com null nas vazias
+function posicoesFotos(fotos) {
+  return Array.from({ length: MAX_FOTOS }, (_, i) => (fotos && fotos[i]) || null);
+}
+
 // O que a vitrine recebe: na loja de óculos, `fotos` só com as fotos 1 a 3 e a foto 4
 // à parte em `foto_provador` (o visitante nunca vê a foto 4). Nas outras lojas, as 4.
 function fotosPublicas(row, oculos) {
@@ -1831,6 +1836,34 @@ async function startServer() {
           [result.rows[0].fotos, result.rows[0].imagem_url, grade, result.rows[0].id, result.rows[0].cor_armacao]
         );
         for (const r of irmaos.rows) removidas.push(...(r.fotos || []).filter((url) => url && !result.rows[0].fotos.includes(url)));
+      }
+
+      // Modelo com cores (óculos): a foto 1 é de cada cor, mas as fotos 2 a 4 valem para todas
+      // as cores do modelo (é o que o Editar produto promete). Trocou ou tirou uma foto 2 a 4
+      // numa cor, as outras cores recebem as mesmas, cada uma com a sua capa. Sem isso, a foto
+      // tirada continuava nas outras cores e "voltava" na vitrine ao escolher outra cor.
+      const salvo = result.rows[0];
+      const comunsAntes = posicoesFotos(fotosDoProduto(anterior.rows[0])).slice(1);
+      const comunsAgora = posicoesFotos(fotosDoProduto(salvo)).slice(1);
+      if (mexeNasFotos && grade && !String(salvo.tamanho || '').trim() && String(salvo.cor_armacao || '').trim()
+          && comunsAntes.some((url, i) => url !== comunsAgora[i])) {
+        const outras = await client.query(
+          `SELECT id, imagem_url, fotos FROM produtos
+           WHERE grade = $1 AND id <> $2 AND COALESCE(btrim(tamanho), '') = ''
+             AND COALESCE(btrim(cor_armacao), '') <> ''
+             AND lower(btrim(cor_armacao)) <> lower(btrim($3)) FOR UPDATE`,
+          [grade, salvo.id, salvo.cor_armacao]
+        );
+        for (const outra of outras.rows) {
+          const antes = fotosDoProduto(outra);
+          const capa = antes[0] && !comunsAgora.includes(antes[0]) ? antes[0] : null;
+          const novas = organizarFotos([capa, ...comunsAgora]);
+          await client.query(
+            'UPDATE produtos SET fotos = $1, imagem_url = $2, updated_at = CURRENT_TIMESTAMP WHERE id = $3',
+            [novas, novas[0] || null, outra.id]
+          );
+          removidas.push(...antes.filter((url) => url && !novas.includes(url)));
+        }
       }
 
       // A promoção vale para o modelo inteiro (todos os tamanhos e cores do mesmo código)
