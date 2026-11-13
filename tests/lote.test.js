@@ -238,9 +238,12 @@ function carregarPainel(globais = {}) {
   const html = fs.readFileSync(path.join(__dirname, '..', 'admin', 'index.html'), 'utf8');
   const colunas = html.match(/const COLUNAS_LOTE = \[[\s\S]*?\n {4}\];/)[0];
   const medidas = html.match(/const CAMPOS_MEDIDA = \[.*\];/)[0];
-  const funcoes = ['escapeHtml', 'linhaLoteVazia', 'linhaLoteEstaVazia', 'lerPreco', 'lerMedida', 'lerDisponibilidade', 'lerStatus', 'lerGenero', 'campoDoCabecalho', 'linhasDaPlanilha', 'linkSeguro', 'lerDataCompra', 'validarLote', 'avisosDuplicidade', 'conflitosLote', 'renderizarLote'];
-  const fonte = `${colunas}\n${medidas}\nconst MAX_LOTE = 100;\n${funcoes.map(f => extrairFuncao(html, f)).join('\n')}`;
-  const ctx = vm.createContext({ Number, String, Math, Map, Set, Object, URL, todosProdutos: [], ...globais });
+  const fixas = html.match(/const COLUNAS_FIXAS_PLANILHA = .*;/)[0];
+  const funcoes = ['escapeHtml', 'linhaLoteVazia', 'linhaLoteEstaVazia', 'lerPreco', 'lerMedida', 'lerDisponibilidade', 'lerStatus', 'lerGenero', 'campoDoCabecalho', 'linhasDaPlanilha', 'linkSeguro', 'lerDataCompra', 'validarLote', 'avisosDuplicidade', 'conflitosLote', 'renderizarLote',
+    'colunasNaTela', 'camposComErro', 'htmlCampoPlanilha', 'focoNaPlanilha', 'restaurarFoco', 'nomeColuna', 'celulasDaColagem', 'valorColadoNaColuna', 'colarNaPlanilha'];
+  const fonte = `${colunas}\n${medidas}\n${fixas}\nconst MAX_LOTE = 100;\n${funcoes.map(f => extrairFuncao(html, f)).join('\n')}`;
+  const ctx = vm.createContext({ Number, String, Math, Map, Set, Object, URL, todosProdutos: [], colunasOcultasLote: [], marcadasLote: new Set(),
+    tituloColunaLote: c => c.titulo, guardarRascunhoLote: () => {}, atualizarMarcadasLote: () => {}, ...globais });
   vm.runInContext(`${fonte}\n${funcoes.map(f => `this.${f} = ${f};`).join('\n')}`, ctx);
   return ctx;
 }
@@ -402,6 +405,6 @@ describe('painel: cadastro em lote', () => {
     assert.match(tabelaLote.innerHTML, /lote-aviso/); // a 2ª linha repete o SKU da 1ª
     assert.doesNotMatch(tabelaLote.innerHTML, /<img src=x/);
     assert.match(tabelaLote.innerHTML, /&lt;img src=x onerror=alert\(1\)&gt;/);
-    assert.match(resumo.textContent, /2 produto\(s\) preenchido\(s\) de 2 linha\(s\), 1 duplicado/);
+    assert.match(resumo.textContent, /2 produto\(s\) preenchido\(s\) de 2 linha\(s\), 1 com erro \(em vermelho\), 1 duplicado/);
   });
 });

@@ -37,6 +37,24 @@
     #relatorioImpressao th { background: #f3f4f6; }
     #relatorioImpressao .num { text-align: right; white-space: nowrap; }
     #relatorioImpressao tfoot td { font-weight: 700; border-top: 2px solid #111; }
+    /* Planilhas do Cadastro em Lote e do Editar em estoque: cabeçalho e as duas primeiras
+       colunas (marcar/# ou foto, e o Nome) ficam paradas ao rolar a tabela */
+    .planilha-caixa { max-height: 72vh; overflow: auto; }
+    .planilha { border-collapse: separate; border-spacing: 0; }
+    .planilha thead th { position: sticky; top: 0; z-index: 3; background: #f9fafb; border-bottom: 1px solid #e5e7eb; }
+    .planilha td { background: #fff; border-bottom: 1px solid #e5e7eb; }
+    .planilha .fixa-1 { position: sticky; left: 0; z-index: 2; width: var(--fixa-1); min-width: var(--fixa-1); }
+    .planilha .fixa-2 { position: sticky; left: var(--fixa-1); z-index: 2; box-shadow: 2px 0 0 #e5e7eb; }
+    .planilha thead .fixa-1, .planilha thead .fixa-2 { z-index: 4; }
+    .planilha tr.linha-alterada > td { background: #fffbeb; }
+    .planilha tr.linha-marcada > td { background: #eff6ff; }
+    .planilha tr.linha-alterada.linha-marcada > td { background: #fef3c7; }
+    .planilha tr.edicao-grupo > td { background: #f3f4f6; border-top: 2px solid #d1d5db; }
+    .planilha .celula-alterada { border-color: #f59e0b !important; background: #fef3c7; }
+    @media (max-width: 639.98px) {
+      .planilha-caixa { max-height: 65vh; }
+      .planilha .fixa-2 input { width: 8.5rem; }
+    }
   </style>
 </head>
 <body class="bg-gray-50 min-h-screen flex">
@@ -343,7 +361,7 @@
           </div>
         </div>
 
-        <div class="grid lg:grid-cols-2 gap-4 mb-4">
+        <div class="grid lg:grid-cols-2 items-start gap-4 mb-4">
           <details class="bg-white rounded-xl border border-gray-200 p-4">
             <summary class="cursor-pointer font-medium text-gray-900">Colar da planilha (Excel / Google Sheets)</summary>
             <p class="text-xs text-gray-500 mt-2 mb-2">Copie as linhas na planilha e cole abaixo. Com a linha de cabeçalho (começando por "Nome", "Produto" ou "Modelo"), as colunas são lidas pelo título, em qualquer ordem. Sem cabeçalho, a ordem é: <span id="loteOrdemColunas" class="font-medium"></span>. Preços aceitam 199,90 ou R$ 1.234,56.</p>
@@ -361,21 +379,50 @@
           <p class="pasta-fotos hidden text-xs text-gray-600 mt-2">Fotos dos produtos novos: <span class="rotulo-pasta-fotos font-medium">pasta de Downloads</span> <button type="button" class="btn-pasta-fotos underline text-orange-600 hover:text-orange-700">Escolher pasta</button></p>
           </div>
           <div class="bg-white rounded-xl border border-gray-200 p-4">
-            <p class="font-medium text-gray-900 mb-2">Mesmo fornecedor para todas as linhas</p>
-            <div class="flex flex-col sm:flex-row gap-2">
-              <input type="text" id="loteFornecedorTodos" maxlength="120" list="listaFornecedores" class="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-orange-500" placeholder="Nome do fornecedor">
-              <button id="btnLoteFornecedorTodos" class="bg-gray-100 hover:bg-gray-200 text-gray-700 px-4 py-2 rounded-lg text-sm font-medium transition-colors">Aplicar a todas</button>
+            <p class="font-medium text-gray-900 mb-1">Preencher uma coluna de uma vez</p>
+            <p class="text-xs text-gray-500 mb-2">Ex.: o mesmo fornecedor, pedido, data da compra ou disponibilidade. Vai em todas as linhas preenchidas, ou só nas que você marcou na tabela.</p>
+            <div class="flex flex-wrap items-center gap-2">
+              <select id="loteMassaCampo" class="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"></select>
+              <span id="loteMassaValorCaixa" class="flex-1 min-w-[10rem]"></span>
+            </div>
+            <div class="flex flex-wrap gap-2 mt-2">
+              <button type="button" id="btnLoteMassa" class="bg-gray-800 hover:bg-gray-900 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors">Aplicar nas preenchidas</button>
+              <button type="button" id="btnLoteMassaMarcadas" disabled class="bg-blue-600 hover:bg-blue-700 disabled:opacity-40 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors">Só nas marcadas (0)</button>
             </div>
           </div>
         </div>
 
+        <div id="loteRascunhoAviso" class="hidden mb-3 flex flex-wrap items-center gap-2 bg-blue-50 border border-blue-200 rounded-lg px-3 py-2 text-sm text-blue-900" role="status">
+          <span id="loteRascunhoTexto"></span>
+          <button type="button" id="btnLoteDescartarRascunho" class="underline hover:text-blue-700">Começar do zero</button>
+        </div>
+
+<div class="flex flex-wrap items-center gap-2 mb-2">
+          <details id="loteColunas" class="relative">
+            <summary class="list-none cursor-pointer select-none px-3 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 bg-white hover:bg-gray-50">Colunas <span data-colunas-contagem class="font-normal text-gray-500"></span> ▾</summary>
+            <div class="absolute left-0 z-30 mt-1 w-72 max-w-[85vw] bg-white border border-gray-200 rounded-xl shadow-lg p-3">
+              <p class="text-xs text-gray-500 mb-2">Escolha as colunas que aparecem na tabela. Nome e SKU ficam sempre. Fica guardado neste computador.</p>
+              <div class="flex gap-2 mb-2">
+                <button type="button" data-colunas-preset="essenciais" class="px-2 py-1 text-xs border border-gray-300 rounded-md hover:bg-gray-50">Só as essenciais</button>
+                <button type="button" data-colunas-preset="todas" class="px-2 py-1 text-xs border border-gray-300 rounded-md hover:bg-gray-50">Mostrar todas</button>
+              </div>
+              <div data-colunas-lista class="max-h-72 overflow-y-auto grid gap-1 text-sm"></div>
+            </div>
+          </details>
+          <span id="loteMarcadasBarra" class="hidden inline-flex flex-wrap items-center gap-2 px-3 py-2 bg-blue-50 border border-blue-200 rounded-lg text-sm text-blue-900">
+            <strong data-marcadas-n></strong> marcada(s):
+            <button type="button" data-acao-marcadas="remover" class="underline text-red-600 hover:text-red-700">Remover</button> ·
+            <button type="button" data-acao-marcadas="desmarcar" class="underline hover:text-blue-700">Desmarcar</button>
+          </span>
+          <p class="text-xs text-gray-500 sm:ml-auto">Enter desce para a linha de baixo • cole várias células da planilha direto na tabela • Ctrl+S salva</p>
+        </div>
         <div class="bg-white rounded-xl border border-gray-200 overflow-hidden">
-          <div class="overflow-x-auto">
-            <table class="w-full min-w-[1750px] text-sm">
-              <thead class="bg-gray-50 border-b border-gray-200">
+          <div class="planilha-caixa">
+            <table class="planilha min-w-full text-sm" style="--fixa-1: 3.75rem">
+              <thead>
                 <tr id="loteCabecalho"></tr>
               </thead>
-              <tbody id="tabelaLote" class="divide-y divide-gray-200"></tbody>
+              <tbody id="tabelaLote"></tbody>
             </table>
           </div>
         </div>
@@ -406,7 +453,7 @@
           <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
             <div>
               <h3 class="text-lg font-semibold text-gray-900">Editar em estoque</h3>
-              <p class="text-sm text-gray-500">Os produtos já cadastrados, um por linha. Altere direto na tabela: as linhas alteradas ficam amarelas e só elas são salvas. Fotos e histórico de compras continuam na edição de cada produto.</p>
+              <p class="text-sm text-gray-500">Os produtos já cadastrados, um por linha. Altere direto na tabela: as linhas alteradas ficam amarelas (a célula mudada fica destacada, com o valor de antes ao passar o mouse) e só elas são salvas. Antes de gravar, você confere a lista do que mudou. Fotos e histórico de compras continuam na edição de cada produto.</p>
             </div>
             <div class="flex flex-col sm:flex-row gap-2">
               <button id="btnEdicaoDesfazer" class="bg-gray-100 hover:bg-gray-200 text-gray-700 px-4 py-2 rounded-lg font-medium transition-colors">Desfazer alterações</button>
@@ -435,21 +482,41 @@
               </span>
             </div>
             <div class="bg-white rounded-xl border border-gray-200 p-3">
-              <p class="text-xs font-medium text-gray-600 mb-1">Alterar em massa <span class="font-normal text-gray-500">(muda a coluna em todas as linhas da lista, ou só de um grupo pelo botão no grupo; depois confira e salve)</span></p>
+              <p class="text-xs font-medium text-gray-600 mb-1">Alterar em massa <span class="font-normal text-gray-500">(muda a coluna em todas as linhas da lista, só nas marcadas, ou só num grupo pelo botão no grupo; depois confira e salve)</span></p>
               <div class="flex flex-wrap items-center gap-2">
                 <select id="edicaoMassaCampo" class="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"></select>
                 <span id="edicaoMassaValorCaixa" class="flex-1 min-w-[10rem]"></span>
                 <button type="button" id="btnEdicaoMassa" disabled class="bg-gray-800 hover:bg-gray-900 disabled:opacity-40 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors">Aplicar à lista</button>
+                <button type="button" id="btnEdicaoMassaMarcados" disabled class="bg-blue-600 hover:bg-blue-700 disabled:opacity-40 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors">Aos marcados (0)</button>
               </div>
             </div>
           </div>
+  <div class="flex flex-wrap items-center gap-2 mb-2">
+          <details id="edicaoColunas" class="relative">
+            <summary class="list-none cursor-pointer select-none px-3 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 bg-white hover:bg-gray-50">Colunas <span data-colunas-contagem class="font-normal text-gray-500"></span> ▾</summary>
+            <div class="absolute left-0 z-30 mt-1 w-72 max-w-[85vw] bg-white border border-gray-200 rounded-xl shadow-lg p-3">
+              <p class="text-xs text-gray-500 mb-2">Escolha as colunas que aparecem na tabela. Nome e SKU ficam sempre. Fica guardado neste computador.</p>
+              <div class="flex gap-2 mb-2">
+                <button type="button" data-colunas-preset="essenciais" class="px-2 py-1 text-xs border border-gray-300 rounded-md hover:bg-gray-50">Só as essenciais</button>
+                <button type="button" data-colunas-preset="todas" class="px-2 py-1 text-xs border border-gray-300 rounded-md hover:bg-gray-50">Mostrar todas</button>
+              </div>
+              <div data-colunas-lista class="max-h-72 overflow-y-auto grid gap-1 text-sm"></div>
+            </div>
+          </details>
+          <span id="edicaoMarcadasBarra" class="hidden inline-flex flex-wrap items-center gap-2 px-3 py-2 bg-blue-50 border border-blue-200 rounded-lg text-sm text-blue-900">
+            <strong data-marcadas-n></strong> marcado(s):
+            <button type="button" data-acao-marcadas="desfazer" class="underline hover:text-blue-700">Desfazer as alterações deles</button> ·
+            <button type="button" data-acao-marcadas="desmarcar" class="underline hover:text-blue-700">Desmarcar</button>
+          </span>
+          <p class="text-xs text-gray-500 sm:ml-auto">Enter desce para a linha de baixo • cole várias células da planilha direto na tabela • Ctrl+S salva</p>
+        </div>
           <div class="bg-white rounded-xl border border-gray-200 overflow-hidden">
-            <div class="overflow-x-auto">
-              <table class="w-full min-w-[2100px] text-sm">
-                <thead class="bg-gray-50 border-b border-gray-200">
+            <div class="planilha-caixa">
+              <table class="planilha min-w-full text-sm" style="--fixa-1: 6.5rem">
+                <thead>
                   <tr id="edicaoCabecalho"></tr>
                 </thead>
-                <tbody id="tabelaEdicao" class="divide-y divide-gray-200"></tbody>
+                <tbody id="tabelaEdicao"></tbody>
               </table>
             </div>
           </div>
@@ -1756,11 +1823,26 @@
   </div>
 
   <!-- Modal Conferência do cadastro em lote: produto que já existe ou linha repetida -->
-  <div id="modalConferencia" class="fixed inset-0 modal-overlay bg-black/50 hidden z-50 flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-labelledby="tituloConferencia">
+  <!-- Editar em estoque: o que mudou, antes de gravar -->
+  <div id="modalRevisaoEdicao" class="fixed inset-0 modal-overlay bg-black/50 hidden z-50 flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-labelledby="tituloRevisaoEdicao">
+    <div class="bg-white rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-hidden flex flex-col">
+      <div class="p-5 border-b border-gray-200">
+        <h3 id="tituloRevisaoEdicao" class="text-xl font-bold text-gray-900">Conferir antes de salvar</h3>
+        <p id="resumoRevisaoEdicao" class="text-sm text-gray-600 mt-1"></p>
+      </div>
+      <ul id="listaRevisaoEdicao" class="px-5 py-2 overflow-y-auto flex-1 divide-y divide-gray-100"></ul>
+      <div class="p-4 border-t border-gray-200 flex flex-col-reverse sm:flex-row sm:justify-end gap-2">
+        <button type="button" id="btnRevisaoVoltar" class="px-4 py-2 border border-gray-300 rounded-lg font-medium text-gray-700 hover:bg-gray-50">Voltar e editar</button>
+        <button type="button" id="btnRevisaoSalvar" class="px-6 py-2 bg-orange-500 hover:bg-orange-600 text-white rounded-lg font-medium">Salvar alterações</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="modalConferenciaLote" class="fixed inset-0 modal-overlay bg-black/50 hidden z-50 flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-labelledby="tituloConferenciaLote">
     <div class="bg-white rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-hidden flex flex-col">
       <div class="flex items-center justify-between p-5 border-b border-gray-200">
         <div class="min-w-0">
-          <h3 id="tituloConferencia" class="text-xl font-bold text-gray-900">Conferir produto</h3>
+          <h3 id="tituloConferenciaLote" class="text-xl font-bold text-gray-900">Conferir produto</h3>
           <p id="conferenciaMotivo" class="text-sm text-amber-700"></p>
         </div>
         <button type="button" id="btnConferenciaFechar" class="p-2 text-gray-500 hover:text-gray-700 rounded-lg hover:bg-gray-100" aria-label="Voltar ao lote sem salvar"><svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg></button>
@@ -2088,11 +2170,197 @@
     const MAX_LOTE = 100;
     let linhasLote = [];
     let errosLote = [];
+    // Linhas marcadas na caixinha da 1ª coluna (pelo índice; desmarca quando as linhas mudam de lugar)
+    let marcadasLote = new Set();
     const tabelaLote = document.getElementById('tabelaLote');
 
     // Título da coluna no tipo de loja (ex.: "Formato da lente" vira "Categoria" nas roupas)
     function tituloColunaLote(c) {
       return rotulosPainel()[c.campo] || c.titulo;
+    }
+
+    // ---------- Planilha: o que Cadastrar novos e Editar em estoque têm em comum ----------
+    // Colunas escondidas (escolha guardada no navegador), colar várias células de uma
+    // planilha direto na tabela, andar com Enter/setas e as colunas paradas ao rolar.
+    // Colunas que nunca ficam escondidas: identificam a linha
+    const COLUNAS_FIXAS_PLANILHA = ['nome', 'codigo_sku'];
+    // "Só as essenciais" no botão Colunas
+    const ESSENCIAIS_LOTE = ['nome', 'codigo_sku', 'fornecedor', 'codigo_fornecedor', 'link_fornecedor', 'preco_custo', 'preco_venda', 'disponibilidade', 'cor_armacao', 'nome_curto', 'quantidade', 'cores'];
+    const ESSENCIAIS_EDICAO = ['nome', 'codigo_sku', 'fornecedor', 'preco_custo', 'preco_venda', 'anuncio_id', 'preco_promocional', 'disponibilidade', 'estoque', 'cor_armacao', 'nome_curto'];
+    let colunasOcultasLote = lerColunasOcultas('colunasOcultasLote');
+    let colunasOcultasEdicao = lerColunasOcultas('colunasOcultasEdicao');
+
+    function nomeColuna(c) {
+      return tituloColunaLote(c).replace(' *', '');
+    }
+
+    function lerColunasOcultas(chave) {
+      try {
+        const v = JSON.parse(localStorage.getItem(chave) || '[]');
+        return Array.isArray(v) ? v.map(String) : [];
+      } catch (_) { return []; }
+    }
+
+    function salvarColunasOcultas(chave, ocultas) {
+      try { localStorage.setItem(chave, JSON.stringify(ocultas)); } catch (_) { /* ok */ }
+    }
+
+    // Colunas que aparecem: todas menos as escondidas. Nome e SKU sempre aparecem,
+    // e uma coluna escondida com erro volta a aparecer para dar para corrigir.
+    function colunasNaTela(colunas, ocultas, comErro = []) {
+      const esconder = new Set(ocultas || []);
+      return colunas.filter(c => COLUNAS_FIXAS_PLANILHA.includes(c.campo) || comErro.includes(c.campo) || !esconder.has(c.campo));
+    }
+
+    // [{ campo: mensagem }, ...] -> campos que têm erro em alguma linha
+    function camposComErro(erros) {
+      return [...new Set((erros || []).flatMap(e => Object.keys(e || {})))];
+    }
+
+    // Campo de uma célula: lista de opções (select) ou texto, com o teclado certo no celular
+    function htmlCampoPlanilha(col, valor, attrs, opcoes) {
+      if (opcoes) return `<select ${attrs}>${opcoes.map(([v, t]) => `<option value="${escapeHtml(v)}"${valor === v ? ' selected' : ''}>${escapeHtml(t)}</option>`).join('')}</select>`;
+      const modo = col.campo.startsWith('preco') || CAMPOS_MEDIDA.includes(col.campo) ? ' inputmode="decimal"'
+        : ['estoque', 'quantidade'].includes(col.campo) ? ' inputmode="numeric"' : '';
+      const link = col.campo === 'link_fornecedor';
+      return `<input type="${link ? 'url' : 'text'}" ${attrs} value="${escapeHtml(valor)}"${modo}${link ? ' placeholder="https://..."' : ''}>`;
+    }
+
+    // Texto copiado de várias células de uma planilha -> [[célula, ...], ...] (linhas x colunas).
+    // Uma célula só (sem TAB nem quebra de linha) -> null: aí a colagem é a normal do campo.
+    function celulasDaColagem(texto) {
+      const t = String(texto ?? '').replace(/\r\n?/g, '\n').replace(/\n+$/, '');
+      if (!t.includes('\t') && !t.includes('\n')) return null;
+      return t.split('\n').map(l => l.split('\t').map(c => c.trim()));
+    }
+
+    // Valor colado -> valor da coluna. Nas colunas de opções vale o código ou o texto
+    // ("Sob encomenda", "fem", o nome da promoção); texto que não é opção fica vazio.
+    function valorColadoNaColuna(col, texto, opcoes) {
+      const v = String(texto ?? '').trim();
+      if (col.campo === 'disponibilidade') return lerDisponibilidade(v);
+      if (col.campo === 'status') return lerStatus(v);
+      if (col.campo === 'genero') return lerGenero(v);
+      if (!opcoes) return v;
+      const norm = x => String(x ?? '').normalize('NFD').replace(/[̀-ͯ]/g, '').trim().toLowerCase();
+      const opcao = opcoes.find(([cod, t]) => norm(cod) === norm(v) || norm(t) === norm(v));
+      return opcao ? opcao[0] : '';
+    }
+
+    // Cola a matriz a partir da célula (primeira linha de `linhas`, coluna `campoInicio`),
+    // indo para a direita pelas colunas da tela e para baixo pelas linhas.
+    // opcoesDe(col, valorAtual) dá as opções da coluna. -> quantas células mudaram.
+    function colarNaPlanilha(linhas, colunas, campoInicio, matriz, opcoesDe) {
+      const c0 = colunas.findIndex(c => c.campo === campoInicio);
+      if (c0 < 0) return 0;
+      let mudou = 0;
+      matriz.forEach((celulas, di) => {
+        const l = linhas[di];
+        if (!l) return;
+        celulas.forEach((texto, dj) => {
+          const col = colunas[c0 + dj];
+          if (!col) return;
+          const valor = valorColadoNaColuna(col, texto, opcoesDe ? opcoesDe(col, l[col.campo]) : col.opcoes);
+          if (String(l[col.campo] ?? '') !== valor) mudou++;
+          l[col.campo] = valor;
+        });
+      });
+      return mudou;
+    }
+
+    // Enter / ↓ vai para a mesma coluna da linha de baixo; Shift+Enter / ↑ para a de cima.
+    // (Nas listas de opções as setas continuam trocando a opção.) aoPassarDoFim() é chamado
+    // no Enter da última linha e devolve true quando criou uma linha nova.
+    function navegarPlanilha(e, tbody, seletor, aoPassarDoFim) {
+      const el = e.target.closest && e.target.closest(seletor);
+      if (!el || e.altKey || e.ctrlKey || e.metaKey) return;
+      const lista = el.tagName === 'SELECT';
+      let passo = 0;
+      if (e.key === 'Enter') passo = e.shiftKey ? -1 : 1;
+      else if (!lista && e.key === 'ArrowDown') passo = 1;
+      else if (!lista && e.key === 'ArrowUp') passo = -1;
+      if (!passo) return;
+      e.preventDefault();
+      const mesmaColuna = () => [...tbody.querySelectorAll(`${seletor}[data-campo="${el.dataset.campo}"]`)];
+      let campos = mesmaColuna();
+      let k = campos.indexOf(el) + passo;
+      if (k >= campos.length && e.key === 'Enter' && aoPassarDoFim && aoPassarDoFim()) campos = mesmaColuna();
+      const alvo = campos[k];
+      if (!alvo) return;
+      alvo.focus();
+      if (alvo.select) alvo.select();
+    }
+
+    // Guarda e devolve o foco da célula quando a tabela é redesenhada
+    function focoNaPlanilha(tbody) {
+      const el = typeof document !== 'undefined' ? document.activeElement : null;
+      if (!el || !el.dataset || !el.dataset.campo || !tbody.contains || !tbody.contains(el)) return null;
+      return { linha: el.dataset.linha, id: el.dataset.id, campo: el.dataset.campo, inicio: el.selectionStart, fim: el.selectionEnd };
+    }
+    function restaurarFoco(tbody, foco) {
+      if (!foco) return;
+      const chave = foco.id !== undefined ? `[data-id="${foco.id}"]` : `[data-linha="${foco.linha}"]`;
+      const el = tbody.querySelector(`${chave}[data-campo="${foco.campo}"]`);
+      if (!el) return;
+      el.focus({ preventScroll: true });
+      try { if (foco.inicio !== null && foco.inicio !== undefined) el.setSelectionRange(foco.inicio, foco.fim); } catch (_) { /* select */ }
+    }
+
+    // Depois de validar: leva a tela até o primeiro campo com erro
+    function focarPrimeiroErro(tbody) {
+      const el = tbody.querySelector('.border-red-500');
+      if (!el) return;
+      el.scrollIntoView({ block: 'center', inline: 'center', behavior: 'smooth' });
+      el.focus({ preventScroll: true });
+    }
+
+    // Botão "Colunas": uma caixinha por coluna, "Só as essenciais" e "Mostrar todas".
+    // aoMudar(ocultas) grava e redesenha a tabela.
+    function montarSeletorColunas(idDetalhes, colunas, ocultas, essenciais, aoMudar) {
+      const caixa = document.getElementById(idDetalhes);
+      const esconder = new Set(ocultas);
+      const opcionais = colunas.filter(c => !COLUNAS_FIXAS_PLANILHA.includes(c.campo));
+      const n = opcionais.filter(c => esconder.has(c.campo)).length;
+      caixa.querySelector('[data-colunas-contagem]').textContent = n ? `(${n} escondida${n > 1 ? 's' : ''})` : '';
+      caixa.querySelector('[data-colunas-lista]').innerHTML = opcionais.map(c => `
+                <label class="flex items-center gap-2 px-1 py-0.5 rounded hover:bg-gray-50 cursor-pointer"><input type="checkbox" data-coluna="${c.campo}" class="rounded border-gray-300"${esconder.has(c.campo) ? '' : ' checked'}> ${escapeHtml(nomeColuna(c))}</label>`).join('');
+      if (caixa.dataset.ligado) return;
+      caixa.dataset.ligado = '1';
+      caixa.addEventListener('change', (e) => {
+        const cb = e.target.closest('[data-coluna]');
+        if (!cb) return;
+        const atuais = [...caixa.querySelectorAll('[data-coluna]')].filter(x => !x.checked).map(x => x.dataset.coluna);
+        aoMudar(atuais);
+      });
+      caixa.addEventListener('click', (e) => {
+        const b = e.target.closest('[data-colunas-preset]');
+        if (!b) return;
+        aoMudar(b.dataset.colunasPreset === 'todas' ? [] : opcionais.map(c => c.campo).filter(c => !essenciais.includes(c)));
+      });
+      // Fecha ao clicar fora
+      document.addEventListener('click', (e) => { if (caixa.open && !caixa.contains(e.target)) caixa.open = false; });
+    }
+
+    // Rascunho do cadastro em lote: as linhas ficam guardadas neste navegador até salvar
+    // ou limpar, para não perder o trabalho se a página fechar ou recarregar.
+    const CHAVE_RASCUNHO_LOTE = `rascunhoLote:${location.host}`;
+    let timerRascunhoLote = null;
+    function guardarRascunhoLote() {
+      clearTimeout(timerRascunhoLote);
+      timerRascunhoLote = setTimeout(() => {
+        try {
+          if (!linhasLote.some(l => !linhaLoteEstaVazia(l))) localStorage.removeItem(CHAVE_RASCUNHO_LOTE);
+          else localStorage.setItem(CHAVE_RASCUNHO_LOTE, JSON.stringify({ em: Date.now(), linhas: linhasLote }));
+        } catch (_) { /* navegador sem espaço: segue sem rascunho */ }
+      }, 300);
+    }
+    function lerRascunhoLote() {
+      try {
+        const r = JSON.parse(localStorage.getItem(CHAVE_RASCUNHO_LOTE) || 'null');
+        if (!r || !Array.isArray(r.linhas)) return null;
+        const linhas = r.linhas.filter(l => l && typeof l === 'object').slice(0, MAX_LOTE * 2).map(l => ({ ...linhaLoteVazia(), ...l }));
+        return linhas.some(l => !linhaLoteEstaVazia(l)) ? { em: Number(r.em) || 0, linhas } : null;
+      } catch (_) { return null; }
     }
 
     function linhaLoteVazia() {
@@ -2370,43 +2638,75 @@
       const conflitos = new Map(conflitosLote(linhasLote, todosProdutos).map(c => [c.linha, c]));
       const avisos = avisosDuplicidade(linhasLote, todosProdutos).map((a, i) => linhasLote[i].conferencia?.texto
         || (conflitos.has(i) ? `${conflitos.get(i).motivo}${conflitos.get(i).alvo.tipo === 'linha' ? ` da linha ${conflitos.get(i).alvo.linha + 1}` : ' de um produto cadastrado'}: confira ao salvar` : a));
+      const colunas = colunasNaTela(COLUNAS_LOTE, colunasOcultasLote, camposComErro(errosLote));
+      const preenchidas = linhasLote.map((l, i) => i).filter(i => !linhaLoteEstaVazia(linhasLote[i]));
+      const todasMarcadas = preenchidas.length > 0 && preenchidas.every(i => marcadasLote.has(i));
+      document.getElementById('loteCabecalho').innerHTML = `<th class="fixa-1 px-2 py-3 text-left text-xs font-semibold text-gray-500 uppercase"><label class="inline-flex items-center gap-1.5 cursor-pointer" title="Marcar todas as linhas preenchidas"><input type="checkbox" data-marcar-todas class="rounded border-gray-300"${todasMarcadas ? ' checked' : ''}>#</label></th>`
+        + colunas.map((c, k) => `<th class="${k === 0 ? 'fixa-2 ' : ''}px-2 py-3 text-left text-xs font-semibold text-gray-500 uppercase whitespace-nowrap">${escapeHtml(tituloColunaLote(c))}</th>`).join('')
+        + '<th class="px-2 py-3"></th>';
+      const foco = focoNaPlanilha(tabelaLote);
       tabelaLote.innerHTML = linhasLote.map((l, i) => {
         const erros = errosLote[i] || {};
-        const celulas = COLUNAS_LOTE.map(col => {
+        const celulas = colunas.map((col, k) => {
           const erro = erros[col.campo];
           const borda = erro ? 'border-red-500 bg-red-50' : 'border-gray-300';
-          const attrs = `data-linha="${i}" data-campo="${col.campo}" class="lote-campo ${col.largura} px-2 py-1.5 border ${borda} rounded focus:outline-none focus:ring-2 focus:ring-orange-500" title="${escapeHtml(erro || '')}"`;
-          const campo = col.opcoes
-            ? `<select ${attrs}>${col.opcoes.map(([v, t]) => `<option value="${v}"${l[col.campo] === v ? ' selected' : ''}>${t}</option>`).join('')}</select>`
-            : `<input type="${col.campo === 'link_fornecedor' ? 'url' : 'text'}" ${attrs} value="${escapeHtml(l[col.campo])}"${col.campo.startsWith('preco') || CAMPOS_MEDIDA.includes(col.campo) ? ' inputmode="decimal"' : ''}${col.campo === 'link_fornecedor' ? ' placeholder="https://..."' : ''}>`;
-          return `<td class="px-2 py-2 align-top">${campo}</td>`;
+          const attrs = `data-linha="${i}" data-campo="${col.campo}" aria-label="${escapeHtml(`${nomeColuna(col)}, linha ${i + 1}`)}" class="lote-campo ${col.largura} px-2 py-1.5 border ${borda} rounded focus:outline-none focus:ring-2 focus:ring-orange-500" title="${escapeHtml(erro || '')}"`;
+          return `<td class="${k === 0 ? 'fixa-2 ' : ''}px-2 py-2 align-top">${htmlCampoPlanilha(col, String(l[col.campo] ?? ''), attrs, col.opcoes)}</td>`;
         }).join('');
         const mensagens = Object.values(erros);
+        const marcada = marcadasLote.has(i);
         return `
-        <tr>
-          <td class="px-3 py-2 align-top text-gray-400 font-medium">${i + 1}</td>
+        <tr class="${marcada ? 'linha-marcada' : ''}">
+          <td class="fixa-1 px-2 py-2 align-top"><label class="flex items-center gap-1.5 pt-1.5 text-gray-400 font-medium cursor-pointer"><input type="checkbox" data-marcar-linha="${i}" class="rounded border-gray-300"${marcada ? ' checked' : ''} aria-label="Marcar a linha ${i + 1}">${i + 1}</label></td>
           ${celulas}
           <td class="px-2 py-2 align-top whitespace-nowrap">
             <button type="button" data-acao="duplicar" data-linha="${i}" class="px-2 py-1.5 text-gray-600 hover:bg-gray-100 rounded" title="Duplicar linha (sem o SKU)">⧉</button>
             <button type="button" data-acao="remover" data-linha="${i}" class="px-2 py-1.5 text-red-500 hover:bg-red-50 rounded" title="Remover linha">✕</button>
           </td>
         </tr>${mensagens.length ? `
-        <tr class="lote-erro"><td></td><td colspan="${COLUNAS_LOTE.length + 1}" class="px-2 pb-2 text-xs text-red-600">${mensagens.map(escapeHtml).join(' • ')}</td></tr>` : ''}${avisos[i] ? `
-        <tr class="lote-aviso"><td></td><td colspan="${COLUNAS_LOTE.length + 1}" class="px-2 pb-2 text-xs ${l.conferencia ? 'text-green-700' : String(l.cores ?? '').trim() ? 'text-gray-700' : 'text-amber-700'}">${l.conferencia ? '✓' : String(l.cores ?? '').trim() ? '🎨' : '⚠'} ${escapeHtml(avisos[i])}${l.conferencia ? ` <button type="button" data-acao="reconferir" data-linha="${i}" class="ml-1 underline hover:text-green-900">Conferir de novo</button>` : ''}</td></tr>` : ''}`;
+        <tr class="lote-erro"><td class="fixa-1"></td><td colspan="${colunas.length + 1}" class="px-2 pb-2 text-xs text-red-600">${mensagens.map(escapeHtml).join(' • ')}</td></tr>` : ''}${avisos[i] ? `
+        <tr class="lote-aviso"><td class="fixa-1"></td><td colspan="${colunas.length + 1}" class="px-2 pb-2 text-xs ${l.conferencia ? 'text-green-700' : String(l.cores ?? '').trim() ? 'text-gray-700' : 'text-amber-700'}">${l.conferencia ? '✓' : String(l.cores ?? '').trim() ? '🎨' : '⚠'} ${escapeHtml(avisos[i])}${l.conferencia ? ` <button type="button" data-acao="reconferir" data-linha="${i}" class="ml-1 underline hover:text-green-900">Conferir de novo</button>` : ''}</td></tr>` : ''}`;
       }).join('');
-      const preenchidas = linhasLote.filter(l => !linhaLoteEstaVazia(l)).length;
+      restaurarFoco(tabelaLote, foco);
       const duplicados = avisos.filter((a, i) => a && !linhasLote[i].conferencia && !String(linhasLote[i].cores ?? '').trim()).length;
-      document.getElementById('loteResumo').textContent = `${preenchidas} produto(s) preenchido(s) de ${linhasLote.length} linha(s)${duplicados ? `, ${duplicados} duplicado(s) para conferir ao salvar` : ''}. Máximo de ${MAX_LOTE} por vez.`;
+      const nErros = errosLote.filter(e => e && Object.keys(e).length).length;
+      document.getElementById('loteResumo').textContent = `${preenchidas.length} produto(s) preenchido(s) de ${linhasLote.length} linha(s)${nErros ? `, ${nErros} com erro (em vermelho)` : ''}${duplicados ? `, ${duplicados} duplicado(s) para conferir ao salvar` : ''}. Máximo de ${MAX_LOTE} por vez.`;
+      atualizarMarcadasLote();
+      guardarRascunhoLote();
+    }
+
+    // Barra "N marcada(s)" e o botão "Só nas marcadas"
+    function atualizarMarcadasLote() {
+      const n = marcadasLote.size;
+      const barra = document.getElementById('loteMarcadasBarra');
+      if (!barra || !barra.classList) return;
+      barra.classList.toggle('hidden', !n);
+      barra.querySelector('[data-marcadas-n]').textContent = String(n);
+      const btn = document.getElementById('btnLoteMassaMarcadas');
+      btn.disabled = !n;
+      btn.textContent = `Só nas marcadas (${n})`;
     }
 
     function iniciarLote() {
-      if (!document.getElementById('loteCabecalho').innerHTML) {
-        document.getElementById('loteCabecalho').innerHTML = '<th class="px-3 py-3 text-left text-xs font-semibold text-gray-500 uppercase">#</th>'
-          + COLUNAS_LOTE.map(c => `<th class="px-2 py-3 text-left text-xs font-semibold text-gray-500 uppercase whitespace-nowrap">${tituloColunaLote(c)}</th>`).join('')
-          + '<th class="px-2 py-3"></th>';
-        document.getElementById('loteOrdemColunas').textContent = COLUNAS_LOTE.map(c => tituloColunaLote(c).replace(' *', '')).join(', ');
+      document.getElementById('loteOrdemColunas').textContent = COLUNAS_LOTE.map(nomeColuna).join(', ');
+      if (!linhasLote.length) {
+        const rascunho = lerRascunhoLote();
+        linhasLote = rascunho ? rascunho.linhas : [linhaLoteVazia(), linhaLoteVazia(), linhaLoteVazia()];
+        const aviso = document.getElementById('loteRascunhoAviso');
+        aviso.classList.toggle('hidden', !rascunho);
+        if (rascunho) {
+          const n = rascunho.linhas.filter(l => !linhaLoteEstaVazia(l)).length;
+          const quando = rascunho.em ? new Date(rascunho.em).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : '';
+          document.getElementById('loteRascunhoTexto').textContent = `Seu lote que não foi salvo voltou: ${n} produto(s)${quando ? `, de ${quando}` : ''}. Ele fica guardado neste navegador até você salvar ou limpar.`;
+        }
       }
-      if (!linhasLote.length) linhasLote = [linhaLoteVazia(), linhaLoteVazia(), linhaLoteVazia()];
+      montarSeletorColunas('loteColunas', COLUNAS_LOTE, colunasOcultasLote, ESSENCIAIS_LOTE, (ocultas) => {
+        colunasOcultasLote = ocultas;
+        salvarColunasOcultas('colunasOcultasLote', ocultas);
+        montarSeletorColunas('loteColunas', COLUNAS_LOTE, colunasOcultasLote, ESSENCIAIS_LOTE);
+        renderizarLote();
+      });
+      montarMassaLote();
       renderizarLote();
       if (!todosProdutos.length) carregarProdutos();
     }
@@ -2416,6 +2716,7 @@
       while (linhasLote.length && linhaLoteEstaVazia(linhasLote[linhasLote.length - 1])) linhasLote.pop();
       linhasLote.push(...novas);
       errosLote = [];
+      marcadasLote = new Set();
       renderizarLote();
     }
 
@@ -2430,6 +2731,29 @@
         el.classList.remove('border-red-500', 'bg-red-50');
         el.classList.add('border-gray-300');
       }
+      guardarRascunhoLote();
+    });
+    // Enter/setas andam pela coluna; Enter na última linha cria uma linha nova
+    tabelaLote.addEventListener('keydown', (e) => navegarPlanilha(e, tabelaLote, '.lote-campo', () => {
+      if (linhasLote.length >= MAX_LOTE) return false;
+      linhasLote.push(linhaLoteVazia());
+      renderizarLote();
+      return true;
+    }));
+    // Colar várias células de uma planilha a partir da célula escolhida (cria as linhas que faltarem)
+    tabelaLote.addEventListener('paste', (e) => {
+      const el = e.target.closest('.lote-campo');
+      const matriz = el && celulasDaColagem((e.clipboardData || window.clipboardData).getData('text'));
+      if (!matriz) return;
+      e.preventDefault();
+      const i = Number(el.dataset.linha);
+      while (linhasLote.length < Math.min(i + matriz.length, MAX_LOTE)) linhasLote.push(linhaLoteVazia());
+      const colunas = colunasNaTela(COLUNAS_LOTE, colunasOcultasLote, camposComErro(errosLote));
+      const n = colarNaPlanilha(linhasLote.slice(i), colunas, el.dataset.campo, matriz);
+      esquecerConferencias();
+      errosLote = [];
+      renderizarLote();
+      mostrarToast(`${n} célula(s) colada(s) em ${Math.min(matriz.length, linhasLote.length - i)} linha(s)`);
     });
     // Campos que decidem se a linha é um produto que já existe. Mexeu num deles à
     // mão: as conferências feitas valem de novo (uma linha pode apontar para outra).
@@ -2439,6 +2763,13 @@
     }
     // Ao sair de um campo de SKU/fornecedor, refaz os avisos de duplicidade
     tabelaLote.addEventListener('change', (e) => {
+      const cb = e.target.closest('[data-marcar-linha]');
+      if (cb) {
+        const i = Number(cb.dataset.marcarLinha);
+        if (cb.checked) marcadasLote.add(i); else marcadasLote.delete(i);
+        cb.closest('tr').classList.toggle('linha-marcada', cb.checked);
+        return atualizarMarcadasLote();
+      }
       const el = e.target.closest('.lote-campo');
       if (el && CAMPOS_CONFERENCIA.includes(el.dataset.campo)) renderizarLote();
     });
@@ -2456,6 +2787,36 @@
       else linhasLote.splice(i, 1);
       if (!linhasLote.length) linhasLote.push(linhaLoteVazia());
       errosLote = [];
+      marcadasLote = new Set();
+      renderizarLote();
+    });
+    // Caixinha do cabeçalho: marca/desmarca todas as linhas preenchidas
+    document.getElementById('loteCabecalho').addEventListener('change', (e) => {
+      if (!e.target.closest('[data-marcar-todas]')) return;
+      marcadasLote = e.target.checked ? new Set(linhasLote.map((l, i) => i).filter(i => !linhaLoteEstaVazia(linhasLote[i]))) : new Set();
+      renderizarLote();
+    });
+    document.getElementById('loteMarcadasBarra').addEventListener('click', (e) => {
+      const b = e.target.closest('[data-acao-marcadas]');
+      if (!b) return;
+      if (b.dataset.acaoMarcadas === 'remover') {
+        const n = marcadasLote.size;
+        if (n > 1 && !confirm(`Remover ${n} linha(s) marcada(s) do lote?`)) return;
+        linhasLote = linhasLote.filter((l, i) => !marcadasLote.has(i));
+        if (!linhasLote.length) linhasLote.push(linhaLoteVazia());
+        esquecerConferencias();
+        errosLote = [];
+        mostrarToast(`${n} linha(s) removida(s)`);
+      }
+      marcadasLote = new Set();
+      renderizarLote();
+    });
+    document.getElementById('btnLoteDescartarRascunho').addEventListener('click', () => {
+      if (!confirm('Apagar o lote que voltou e começar um novo?')) return;
+      linhasLote = [linhaLoteVazia(), linhaLoteVazia(), linhaLoteVazia()];
+      errosLote = [];
+      marcadasLote = new Set();
+      document.getElementById('loteRascunhoAviso').classList.add('hidden');
       renderizarLote();
     });
     document.getElementById('btnLoteAdicionar').addEventListener('click', () => {
@@ -2466,6 +2827,8 @@
       if (linhasLote.some(l => !linhaLoteEstaVazia(l)) && !confirm('Apagar todas as linhas do lote?')) return;
       linhasLote = [linhaLoteVazia(), linhaLoteVazia(), linhaLoteVazia()];
       errosLote = [];
+      marcadasLote = new Set();
+      document.getElementById('loteRascunhoAviso').classList.add('hidden');
       renderizarLote();
     });
     document.getElementById('btnLoteColar').addEventListener('click', () => {
@@ -2710,11 +3073,33 @@
       return { produtos: saida, origens, incluir };
     }
 
-    document.getElementById('btnLoteFornecedorTodos').addEventListener('click', () => {
-      const f = document.getElementById('loteFornecedorTodos').value.trim();
-      linhasLote.forEach(l => { if (!linhaLoteEstaVazia(l)) l.fornecedor = f; });
+    // Preencher uma coluna de uma vez: nas linhas preenchidas ou só nas marcadas.
+    // Ficam de fora as colunas que são de cada produto (nome, SKU, link, cores).
+    const CAMPOS_SEM_MASSA_LOTE = ['nome', 'codigo_sku', 'link_fornecedor', 'nome_fornecedor', 'cores'];
+    function montarMassaLote() {
+      const sel = document.getElementById('loteMassaCampo');
+      if (!sel.options.length) {
+        sel.innerHTML = COLUNAS_LOTE.filter(c => !CAMPOS_SEM_MASSA_LOTE.includes(c.campo)).map(c => `<option value="${c.campo}">${escapeHtml(nomeColuna(c))}</option>`).join('');
+        sel.value = 'fornecedor';
+      }
+      const col = COLUNAS_LOTE.find(c => c.campo === sel.value);
+      const attrs = 'id="loteMassaValor" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-orange-500" placeholder="Valor (vazio apaga)"';
+      document.getElementById('loteMassaValorCaixa').innerHTML = htmlCampoPlanilha(col, '', attrs, col.opcoes);
+      if (col.campo === 'fornecedor') document.getElementById('loteMassaValor').setAttribute('list', 'listaFornecedores');
+    }
+    function aplicarMassaLote(indices) {
+      const campo = document.getElementById('loteMassaCampo').value;
+      const valor = document.getElementById('loteMassaValor').value.trim();
+      if (!indices.length) return mostrarToast('Nenhuma linha preenchida', 'error');
+      const mudou = aplicarEmMassaEdicao(indices.map(i => linhasLote[i]), campo, valor);
+      if (CAMPOS_CONFERENCIA.includes(campo)) esquecerConferencias();
+      indices.forEach(i => { if (errosLote[i]) delete errosLote[i][campo]; });
       renderizarLote();
-    });
+      mostrarToast(`${mudou} linha(s) alterada(s)`);
+    }
+    document.getElementById('loteMassaCampo').addEventListener('change', montarMassaLote);
+    document.getElementById('btnLoteMassa').addEventListener('click', () => aplicarMassaLote(linhasLote.map((l, i) => i).filter(i => !linhaLoteEstaVazia(linhasLote[i]))));
+    document.getElementById('btnLoteMassaMarcadas').addEventListener('click', () => aplicarMassaLote([...marcadasLote].filter(i => linhasLote[i]).sort((a, b) => a - b)));
 
     document.getElementById('btnLoteSalvar').addEventListener('click', async () => {
       const btn = document.getElementById('btnLoteSalvar');
@@ -2726,6 +3111,7 @@
       errosLote = validarLote(linhasLote);
       if (errosLote.some(e => Object.keys(e).length)) {
         renderizarLote();
+        focarPrimeiroErro(tabelaLote);
         return mostrarToast('Corrija as linhas marcadas em vermelho', 'error');
       }
       // Produto que já existe ou linha repetida: conferir antes de gravar
@@ -2826,6 +3212,8 @@
           data.produtos.length || repostos.length || coresIncluidas ? 'success' : 'error');
         linhasLote = [linhaLoteVazia(), linhaLoteVazia(), linhaLoteVazia()];
         errosLote = [];
+        marcadasLote = new Set();
+        document.getElementById('loteRascunhoAviso').classList.add('hidden');
         await carregarProdutos();
         renderizarLote();
         renderizarCriadosLote(data.produtos);
@@ -2885,7 +3273,7 @@
       });
     }
     function terminarConferencia(ok) {
-      fecharModalSimples('modalConferencia');
+      fecharModalSimples('modalConferenciaLote');
       conflitoAtual = null;
       const fim = fimConferencia;
       fimConferencia = null;
@@ -2944,7 +3332,7 @@
       const branco = 'border-gray-300 text-gray-700 hover:bg-gray-50 bg-white';
       btnMesmo.className = `px-4 py-2 border rounded-lg font-medium transition-colors ${mesmo ? laranja : branco}`;
       btnNovo.className = `px-4 py-2 border rounded-lg font-medium transition-colors ${mesmo ? branco : laranja}`;
-      abrirModalSimples('modalConferencia');
+      abrirModalSimples('modalConferenciaLote');
       (mesmo ? btnMesmo : btnNovo).focus();
     }
     function decidirConferencia(decisao) {
@@ -2955,7 +3343,7 @@
     document.getElementById('btnConferenciaMesmo').addEventListener('click', () => decidirConferencia('mesmo'));
     document.getElementById('btnConferenciaNovo').addEventListener('click', () => decidirConferencia('novo'));
     document.getElementById('btnConferenciaFechar').addEventListener('click', () => terminarConferencia(false));
-    document.getElementById('modalConferencia').addEventListener('click', (e) => { if (e.target.id === 'modalConferencia') terminarConferencia(false); });
+    document.getElementById('modalConferenciaLote').addEventListener('click', (e) => { if (e.target.id === 'modalConferenciaLote') terminarConferencia(false); });
 
     // ---------- Editar em estoque ----------
     // Mesma tabela do cadastro em lote, preenchida com os produtos já cadastrados.
@@ -2981,6 +3369,8 @@
     let linhasEdicao = [];
     let originaisEdicao = new Map();
     let errosEdicao = {};
+    // Produtos marcados na caixinha da 1ª coluna (pelo id)
+    let marcadasEdicao = new Set();
     const tabelaEdicao = document.getElementById('tabelaEdicao');
 
     function precoParaTexto(v) {
@@ -3003,6 +3393,13 @@
       // Só para mostrar (não é coluna editável): a capa do produto
       l.foto = (Array.isArray(p.fotos) && p.fotos.find(Boolean)) || p.imagem_url || '';
       return l;
+    }
+
+    // O que mudou na linha: [{ campo, antes, depois }] (texto como está na tabela)
+    function diferencasEdicao(l, original) {
+      if (!original) return [];
+      return COLUNAS_EDICAO.filter(c => String(l[c.campo] ?? '').trim() !== String(original[c.campo] ?? '').trim())
+        .map(c => ({ campo: c.campo, antes: String(original[c.campo] ?? '').trim(), depois: String(l[c.campo] ?? '').trim() }));
     }
 
     function linhaEdicaoAlterada(l, original) {
@@ -3122,41 +3519,61 @@
       return col.promocao ? opcoesPromocaoEdicao(atual) : col.opcoes;
     }
 
-    // Título do grupo: o texto da opção (Disponibilidade, Gênero, Promoção) ou o valor
-    function rotuloGrupoEdicao(campo, valor) {
-      const col = colunaEdicao(campo);
-      if (!valor) return `Sem ${tituloColunaLote(col).replace(' *', '').toLowerCase()}`;
+    // Texto de um valor da coluna: o da opção (Disponibilidade, Gênero, Promoção) ou o próprio valor
+    function textoValorEdicao(col, valor) {
       const opcoes = col && opcoesColunaEdicao(col, valor);
       const opcao = opcoes && opcoes.find(([v]) => v === valor);
       return opcao ? opcao[1] : valor;
     }
 
-    function htmlCampoEdicao(col, valor, attrs) {
-      const opcoes = opcoesColunaEdicao(col, valor);
-      if (opcoes) return `<select ${attrs}>${opcoes.map(([v, t]) => `<option value="${escapeHtml(v)}"${valor === v ? ' selected' : ''}>${escapeHtml(t)}</option>`).join('')}</select>`;
-      const modo = col.campo.startsWith('preco') || CAMPOS_MEDIDA.includes(col.campo) ? ' inputmode="decimal"' : col.campo === 'estoque' ? ' inputmode="numeric"' : '';
-      return `<input type="${col.campo === 'link_fornecedor' ? 'url' : 'text'}" ${attrs} value="${escapeHtml(valor)}"${modo}>`;
+    // Título do grupo: o texto da opção ou o valor
+    function rotuloGrupoEdicao(campo, valor) {
+      const col = colunaEdicao(campo);
+      if (!valor) return `Sem ${nomeColuna(col).toLowerCase()}`;
+      return textoValorEdicao(col, valor);
     }
 
-    function htmlLinhaEdicao(l) {
+    function htmlCampoEdicao(col, valor, attrs) {
+      return htmlCampoPlanilha(col, valor, attrs, opcoesColunaEdicao(col, valor));
+    }
+
+    // Dica da célula alterada: o valor de antes
+    function dicaAntesEdicao(col, antes) {
+      return `Antes: ${textoValorEdicao(col, antes) || '(vazio)'}`;
+    }
+
+    function htmlLinhaEdicao(l, colunas) {
       const erros = errosEdicao[l.id] || {};
-      const alterada = linhaEdicaoAlterada(l, originaisEdicao.get(l.id));
-      const celulas = COLUNAS_EDICAO.map(col => {
+      const original = originaisEdicao.get(l.id);
+      const alterada = linhaEdicaoAlterada(l, original);
+      const celulas = colunas.map((col, k) => {
         const erro = erros[col.campo];
-        const borda = erro ? 'border-red-500 bg-red-50' : 'border-gray-300';
-        const attrs = `data-id="${l.id}" data-campo="${col.campo}" class="edicao-campo ${col.largura} px-2 py-1.5 border ${borda} rounded focus:outline-none focus:ring-2 focus:ring-orange-500" title="${escapeHtml(erro || '')}"`;
-        return `<td class="px-2 py-2 align-top">${htmlCampoEdicao(col, String(l[col.campo] ?? ''), attrs)}</td>`;
+        const valor = String(l[col.campo] ?? '');
+        const mudou = original && valor.trim() !== String(original[col.campo] ?? '').trim();
+        const borda = erro ? 'border-red-500 bg-red-50' : `border-gray-300${mudou ? ' celula-alterada' : ''}`;
+        const dica = erro || (mudou ? dicaAntesEdicao(col, String(original[col.campo] ?? '').trim()) : '');
+        const attrs = `data-id="${l.id}" data-campo="${col.campo}" aria-label="${escapeHtml(`${nomeColuna(col)}, ${l.nome}`)}" class="edicao-campo ${col.largura} px-2 py-1.5 border ${borda} rounded focus:outline-none focus:ring-2 focus:ring-orange-500" title="${escapeHtml(dica)}"`;
+        return `<td class="${k === 0 ? 'fixa-2 ' : ''}px-2 py-2 align-top">${htmlCampoEdicao(col, valor, attrs)}</td>`;
       }).join('');
       const mensagens = Object.values(erros);
+      const marcada = marcadasEdicao.has(l.id);
       const foto = l.foto
         ? `<img src="${escapeHtml(l.foto)}" alt="" loading="lazy" class="w-10 h-10 shrink-0 object-cover rounded border border-gray-200" onerror="imgFallback(this)">`
         : '<span class="w-10 h-10 shrink-0 rounded bg-gray-100 flex items-center justify-center text-[10px] text-gray-400">sem foto</span>';
       return `
-        <tr data-linha-edicao="${l.id}" class="${alterada ? 'bg-amber-50' : ''}">
-          <td class="px-3 py-2 align-top whitespace-nowrap"><button type="button" onclick="editarProduto(${l.id})" class="flex flex-col items-center gap-1 w-12 text-xs text-orange-600 hover:underline" title="Abrir o produto (fotos, cores, histórico)">${foto}Abrir</button></td>
+        <tr data-linha-edicao="${l.id}" class="${[alterada && 'linha-alterada', marcada && 'linha-marcada'].filter(Boolean).join(' ')}">
+          <td class="fixa-1 px-2 py-2 align-top whitespace-nowrap">
+            <div class="flex items-start gap-1.5">
+              <input type="checkbox" data-marcar-edicao="${l.id}" class="mt-1 rounded border-gray-300"${marcada ? ' checked' : ''} aria-label="Marcar ${escapeHtml(l.nome)}">
+              <div class="flex flex-col items-center gap-1">
+                <button type="button" onclick="editarProduto(${l.id})" class="flex flex-col items-center gap-1 w-11 text-xs text-orange-600 hover:underline" title="Abrir o produto (fotos, cores, histórico)">${foto}Abrir</button>
+                <button type="button" data-desfazer-edicao="${l.id}" class="${alterada ? '' : 'hidden '}whitespace-nowrap text-xs text-gray-600 hover:text-gray-900 underline" title="Voltar esta linha para como estava">↺ Desfazer</button>
+              </div>
+            </div>
+          </td>
           ${celulas}
         </tr>${mensagens.length ? `
-        <tr class="edicao-erro"><td></td><td colspan="${COLUNAS_EDICAO.length}" class="px-2 pb-2 text-xs text-red-600">${mensagens.map(escapeHtml).join(' • ')}</td></tr>` : ''}`;
+        <tr class="edicao-erro"><td class="fixa-1"></td><td colspan="${colunas.length}" class="px-2 pb-2 text-xs text-red-600">${mensagens.map(escapeHtml).join(' • ')}</td></tr>` : ''}`;
     }
 
     function salvarPreferenciaEdicao() {
@@ -3164,27 +3581,29 @@
     }
 
     function renderizarCabecalhoEdicao() {
-      document.getElementById('edicaoCabecalho').innerHTML = '<th class="px-3 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Foto</th>'
-        + COLUNAS_EDICAO.map(c => {
+      const visiveis = linhasDaTelaEdicao();
+      const todasMarcadas = visiveis.length > 0 && visiveis.every(l => marcadasEdicao.has(l.id));
+      document.getElementById('edicaoCabecalho').innerHTML = `<th class="fixa-1 px-2 py-3 text-left text-xs font-semibold text-gray-500 uppercase"><label class="inline-flex items-center gap-1.5 cursor-pointer" title="Marcar todos os produtos da lista"><input type="checkbox" data-marcar-todas class="rounded border-gray-300"${todasMarcadas ? ' checked' : ''}>Foto</label></th>`
+        + colunasEdicaoNaTela().map((c, k) => {
           const ativa = ordemEdicao.campo === c.campo;
-          return `<th class="px-2 py-3 text-left text-xs font-semibold uppercase whitespace-nowrap ${ativa ? 'text-orange-700' : 'text-gray-500'}">`
+          return `<th class="${k === 0 ? 'fixa-2 ' : ''}px-2 py-3 text-left text-xs font-semibold uppercase whitespace-nowrap ${ativa ? 'text-orange-700' : 'text-gray-500'}">`
             + `<button type="button" data-ordenar-edicao="${c.campo}" class="uppercase hover:text-orange-600" title="Ordenar por esta coluna">${tituloColunaLote(c)}${ativa ? (ordemEdicao.dir === 1 ? ' ▲' : ' ▼') : ''}</button></th>`;
         }).join('');
       const ordenar = document.getElementById('edicaoOrdenar');
-      ordenar.innerHTML = '<option value="">Ordem da lista</option>' + COLUNAS_EDICAO.map(c => `<option value="${c.campo}">${tituloColunaLote(c).replace(' *', '')}</option>`).join('');
+      ordenar.innerHTML = '<option value="">Ordem da lista</option>' + COLUNAS_EDICAO.map(c => `<option value="${c.campo}">${nomeColuna(c)}</option>`).join('');
       ordenar.value = ordemEdicao.campo;
       const dir = document.getElementById('edicaoDirecao');
       const numero = CAMPOS_NUMERO_EDICAO.includes(ordemEdicao.campo);
       dir.textContent = ordemEdicao.dir === 1 ? (numero ? 'Menor → maior' : 'A → Z') : (numero ? 'Maior → menor' : 'Z → A');
       dir.disabled = !ordemEdicao.campo;
       const agrupar = document.getElementById('edicaoAgrupar');
-      agrupar.innerHTML = '<option value="">Sem grupos</option>' + GRUPOS_EDICAO.map(campo => `<option value="${campo}">${tituloColunaLote(colunaEdicao(campo)).replace(' *', '')}</option>`).join('');
+      agrupar.innerHTML = '<option value="">Sem grupos</option>' + GRUPOS_EDICAO.map(campo => `<option value="${campo}">${nomeColuna(colunaEdicao(campo))}</option>`).join('');
       agrupar.value = grupoEdicao;
       document.getElementById('edicaoGruposAcoes').classList.toggle('hidden', !grupoEdicao);
       const massa = document.getElementById('edicaoMassaCampo');
       if (!massa.options.length) {
         massa.innerHTML = '<option value="">Escolha a coluna</option>' + COLUNAS_EDICAO.filter(c => !['nome', 'codigo_sku'].includes(c.campo))
-          .map(c => `<option value="${c.campo}">${tituloColunaLote(c).replace(' *', '')}</option>`).join('');
+          .map(c => `<option value="${c.campo}">${nomeColuna(c)}</option>`).join('');
         montarValorMassa();
       }
     }
@@ -3199,6 +3618,28 @@
       if (col && col.campo === 'fornecedor') document.getElementById('edicaoMassaValor').setAttribute('list', 'listaFornecedores');
     }
 
+    function colunasEdicaoNaTela() {
+      return colunasNaTela(COLUNAS_EDICAO, colunasOcultasEdicao, camposComErro(Object.values(errosEdicao)));
+    }
+
+    // Linhas na ordem em que aparecem (com grupos: grupo por grupo, sem os grupos fechados)
+    function linhasNaOrdemDaTelaEdicao() {
+      const linhas = linhasDaTelaEdicao();
+      if (!grupoEdicao) return linhas;
+      return agruparLinhasEdicao(linhas, grupoEdicao).filter(g => !gruposFechadosEdicao.has(g.chave)).flatMap(g => g.linhas);
+    }
+
+    // Barra "N marcado(s)" e o botão "Aos marcados"
+    function atualizarMarcadasEdicao() {
+      const n = marcadasEdicao.size;
+      const barra = document.getElementById('edicaoMarcadasBarra');
+      barra.classList.toggle('hidden', !n);
+      barra.querySelector('[data-marcadas-n]').textContent = String(n);
+      const btn = document.getElementById('btnEdicaoMassaMarcados');
+      btn.disabled = !n || !document.getElementById('edicaoMassaCampo').value;
+      btn.textContent = `Aos marcados (${n})`;
+    }
+
     function linhasDaTelaEdicao() {
       const visiveis = linhasVisiveisEdicao(linhasEdicao, originaisEdicao, document.getElementById('edicaoBusca').value, document.getElementById('edicaoSoAlterados').checked);
       return ordenarLinhasEdicao(visiveis, ordemEdicao.campo, ordemEdicao.dir);
@@ -3207,13 +3648,16 @@
     function renderizarEdicao() {
       renderizarCabecalhoEdicao();
       const linhas = linhasDaTelaEdicao();
-      const total = COLUNAS_EDICAO.length + 1;
+      const colunas = colunasEdicaoNaTela();
+      const total = colunas.length + 1;
+      const foco = focoNaPlanilha(tabelaEdicao);
+      const htmlLinha = l => htmlLinhaEdicao(l, colunas);
       const massaCampo = document.getElementById('edicaoMassaCampo').value;
       document.getElementById('btnEdicaoMassa').textContent = `Aplicar à lista (${linhas.length})`;
       if (!linhas.length) {
         tabelaEdicao.innerHTML = `<tr><td colspan="${total}" class="px-4 py-8 text-center text-gray-500">${linhasEdicao.length ? 'Nenhum produto com essa busca' : 'Nenhum produto cadastrado'}</td></tr>`;
       } else if (!grupoEdicao) {
-        tabelaEdicao.innerHTML = linhas.map(htmlLinhaEdicao).join('');
+        tabelaEdicao.innerHTML = linhas.map(htmlLinha).join('');
       } else {
         tabelaEdicao.innerHTML = agruparLinhasEdicao(linhas, grupoEdicao, v => rotuloGrupoEdicao(grupoEdicao, v)).map(g => {
           const fechado = gruposFechadosEdicao.has(g.chave);
@@ -3221,7 +3665,7 @@
           const nEnc = g.linhas.filter(l => l.disponibilidade === 'SOB_ENCOMENDA').length;
           const alteradas = g.linhas.filter(l => linhaEdicaoAlterada(l, originaisEdicao.get(l.id))).length;
           return `
-        <tr class="edicao-grupo bg-gray-100 border-t-2 border-gray-300">
+        <tr class="edicao-grupo">
           <td colspan="${total}" class="px-3 py-2">
             <div class="sticky left-3 inline-flex flex-wrap items-center gap-3">
               <button type="button" data-grupo-edicao="${escapeHtml(g.chave)}" class="font-semibold text-gray-900 hover:text-orange-700" aria-expanded="${!fechado}">${fechado ? '▸' : '▾'} ${escapeHtml(g.titulo)}</button>
@@ -3229,10 +3673,12 @@
               ${massaCampo ? `<button type="button" data-massa-grupo="${escapeHtml(g.chave)}" class="px-2 py-1 text-xs border border-gray-400 rounded-md bg-white hover:bg-gray-50">Aplicar neste grupo</button>` : ''}
             </div>
           </td>
-        </tr>${fechado ? '' : g.linhas.map(htmlLinhaEdicao).join('')}`;
+        </tr>${fechado ? '' : g.linhas.map(htmlLinha).join('')}`;
         }).join('');
       }
+      restaurarFoco(tabelaEdicao, foco);
       resumoEdicao();
+      atualizarMarcadasEdicao();
     }
 
     function aplicarMassaEdicao(linhas) {
@@ -3242,8 +3688,8 @@
       const col = colunaEdicao(campo);
       const valor = el.value.trim();
       if (!linhas.length) return mostrarToast('Nenhuma linha na lista', 'error');
-      if (!valor && ['nome', 'preco_custo', 'preco_venda', 'estoque'].includes(campo)) return mostrarToast(`${tituloColunaLote(col).replace(' *', '')} não pode ficar vazio`, 'error');
-      if (linhas.length > 1 && !confirm(`Colocar "${valor || '(vazio)'}" em ${tituloColunaLote(col).replace(' *', '')} de ${linhas.length} produto(s)? Nada é salvo até você clicar em Salvar alterações.`)) return;
+      if (!valor && ['nome', 'preco_custo', 'preco_venda', 'estoque'].includes(campo)) return mostrarToast(`${nomeColuna(col)} não pode ficar vazio`, 'error');
+      if (linhas.length > 1 && !confirm(`Colocar "${valor || '(vazio)'}" em ${nomeColuna(col)} de ${linhas.length} produto(s)? Nada é salvo até você clicar em Salvar alterações.`)) return;
       const mudou = aplicarEmMassaEdicao(linhas, campo, valor);
       linhas.forEach(l => { if (errosEdicao[l.id]) delete errosEdicao[l.id][campo]; });
       renderizarEdicao();
@@ -3255,10 +3701,17 @@
       linhasEdicao = todosProdutos.filter(p => !p.arquivado).map(linhaDoProduto);
       originaisEdicao = new Map(linhasEdicao.map(l => [l.id, { ...l }]));
       errosEdicao = {};
+      marcadasEdicao = new Set();
       renderizarEdicao();
     }
 
     async function iniciarEdicao() {
+      montarSeletorColunas('edicaoColunas', COLUNAS_EDICAO, colunasOcultasEdicao, ESSENCIAIS_EDICAO, (ocultas) => {
+        colunasOcultasEdicao = ocultas;
+        salvarColunasOcultas('colunasOcultasEdicao', ocultas);
+        montarSeletorColunas('edicaoColunas', COLUNAS_EDICAO, colunasOcultasEdicao, ESSENCIAIS_EDICAO);
+        renderizarEdicao();
+      });
       if (!todosProdutos.length) await carregarProdutos();
       if (!anunciosAdmin.length) await carregarAnuncios();
       // Mantém o que já foi alterado e não salvo; senão pega os dados mais novos
@@ -3299,9 +3752,75 @@
         el.classList.remove('border-red-500', 'bg-red-50');
         el.classList.add('border-gray-300');
       }
-      el.closest('tr').classList.toggle('bg-amber-50', linhaEdicaoAlterada(l, originaisEdicao.get(l.id)));
+      marcarCelulasAlteradasEdicao(el.closest('tr'), l);
       resumoEdicao();
     });
+    // Destaca as células que mudaram (com o valor de antes na dica) e mostra o Desfazer da linha
+    function marcarCelulasAlteradasEdicao(tr, l) {
+      const original = originaisEdicao.get(l.id);
+      if (!tr || !original) return;
+      tr.querySelectorAll('.edicao-campo').forEach(campo => {
+        const col = colunaEdicao(campo.dataset.campo);
+        const antes = String(original[col.campo] ?? '').trim();
+        const mudou = String(l[col.campo] ?? '').trim() !== antes;
+        campo.classList.toggle('celula-alterada', mudou);
+        if (!campo.classList.contains('border-red-500')) campo.title = mudou ? dicaAntesEdicao(col, antes) : '';
+      });
+      const alterada = linhaEdicaoAlterada(l, original);
+      tr.classList.toggle('linha-alterada', alterada);
+      const desfazer = tr.querySelector('[data-desfazer-edicao]');
+      if (desfazer) desfazer.classList.toggle('hidden', !alterada);
+    }
+    // Volta as linhas para como estão no banco
+    function desfazerLinhasEdicao(ids) {
+      ids.forEach(id => {
+        const l = linhasEdicao.find(x => x.id === id);
+        const original = originaisEdicao.get(id);
+        if (l && original) Object.assign(l, original);
+        delete errosEdicao[id];
+      });
+      renderizarEdicao();
+    }
+    tabelaEdicao.addEventListener('keydown', (e) => navegarPlanilha(e, tabelaEdicao, '.edicao-campo'));
+    // Colar várias células de uma planilha a partir da célula escolhida, pelas linhas da tela
+    tabelaEdicao.addEventListener('paste', (e) => {
+      const el = e.target.closest('.edicao-campo');
+      const matriz = el && celulasDaColagem((e.clipboardData || window.clipboardData).getData('text'));
+      if (!matriz) return;
+      e.preventDefault();
+      const linhas = linhasNaOrdemDaTelaEdicao();
+      const k = linhas.findIndex(l => l.id === Number(el.dataset.id));
+      if (k < 0) return;
+      const alvo = linhas.slice(k, k + matriz.length);
+      const n = colarNaPlanilha(alvo, colunasEdicaoNaTela(), el.dataset.campo, matriz, opcoesColunaEdicao);
+      // Sem promoção não tem preço promocional
+      alvo.forEach(l => { if (!l.anuncio_id) l.preco_promocional = ''; delete errosEdicao[l.id]; });
+      renderizarEdicao();
+      mostrarToast(`${n} célula(s) alterada(s) em ${alvo.length} produto(s). Confira e clique em Salvar alterações.`);
+    });
+    tabelaEdicao.addEventListener('change', (e) => {
+      const cb = e.target.closest('[data-marcar-edicao]');
+      if (!cb) return;
+      const id = Number(cb.dataset.marcarEdicao);
+      if (cb.checked) marcadasEdicao.add(id); else marcadasEdicao.delete(id);
+      cb.closest('tr').classList.toggle('linha-marcada', cb.checked);
+      atualizarMarcadasEdicao();
+    });
+    document.getElementById('edicaoCabecalho').addEventListener('change', (e) => {
+      if (!e.target.closest('[data-marcar-todas]')) return;
+      const visiveis = linhasDaTelaEdicao().map(l => l.id);
+      if (e.target.checked) visiveis.forEach(id => marcadasEdicao.add(id));
+      else visiveis.forEach(id => marcadasEdicao.delete(id));
+      renderizarEdicao();
+    });
+    document.getElementById('edicaoMarcadasBarra').addEventListener('click', (e) => {
+      const b = e.target.closest('[data-acao-marcadas]');
+      if (!b) return;
+      if (b.dataset.acaoMarcadas === 'desfazer') return desfazerLinhasEdicao([...marcadasEdicao]);
+      marcadasEdicao = new Set();
+      renderizarEdicao();
+    });
+    document.getElementById('btnEdicaoMassaMarcados').addEventListener('click', () => aplicarMassaEdicao(linhasEdicao.filter(l => marcadasEdicao.has(l.id))));
     document.getElementById('edicaoBusca').addEventListener('input', renderizarEdicao);
     // Ordenar: pelo seletor ou clicando no título da coluna (clicar de novo inverte)
     document.getElementById('edicaoOrdenar').addEventListener('change', (e) => {
@@ -3334,6 +3853,8 @@
       renderizarEdicao();
     });
     tabelaEdicao.addEventListener('click', (e) => {
+      const desfazer = e.target.closest('[data-desfazer-edicao]');
+      if (desfazer) return desfazerLinhasEdicao([Number(desfazer.dataset.desfazerEdicao)]);
       const grupo = e.target.closest('[data-grupo-edicao]');
       if (grupo) {
         const chave = grupo.dataset.grupoEdicao;
@@ -3353,8 +3874,7 @@
       if (linhasEdicao.some(l => linhaEdicaoAlterada(l, originaisEdicao.get(l.id))) && !confirm('Desfazer todas as alterações que ainda não foram salvas?')) return;
       recarregarEdicao();
     });
-    document.getElementById('btnEdicaoSalvar').addEventListener('click', async () => {
-      const btn = document.getElementById('btnEdicaoSalvar');
+    document.getElementById('btnEdicaoSalvar').addEventListener('click', () => {
       const alteradas = linhasEdicao.filter(l => linhaEdicaoAlterada(l, originaisEdicao.get(l.id)));
       if (!alteradas.length) return mostrarToast('Nenhuma alteração para salvar', 'error');
       if (alteradas.length > MAX_LOTE) return mostrarToast(`Máximo de ${MAX_LOTE} produtos alterados por vez`, 'error');
@@ -3365,8 +3885,45 @@
       });
       if (Object.keys(errosEdicao).length) {
         renderizarEdicao();
+        focarPrimeiroErro(tabelaEdicao);
         return mostrarToast('Corrija as linhas marcadas em vermelho', 'error');
       }
+      abrirRevisaoEdicao(alteradas);
+    });
+
+    // Antes de gravar: a lista do que mudou em cada produto (campo: antes → depois)
+    let alteradasEmRevisao = null;
+    function abrirRevisaoEdicao(alteradas) {
+      alteradasEmRevisao = alteradas;
+      const difs = alteradas.map(l => ({ l, difs: diferencasEdicao(l, originaisEdicao.get(l.id)) }));
+      const total = difs.reduce((s, d) => s + d.difs.length, 0);
+      document.getElementById('resumoRevisaoEdicao').textContent = `${alteradas.length} produto(s), ${total} alteração(ões). Confira e clique em Salvar alterações.`;
+      const valor = (col, v) => escapeHtml(textoValorEdicao(col, v) || '(vazio)');
+      document.getElementById('listaRevisaoEdicao').innerHTML = difs.map(({ l, difs: d }) => `
+        <li class="py-2.5">
+          <p class="text-sm font-medium text-gray-900">${escapeHtml(originaisEdicao.get(l.id).nome)} <span class="font-normal text-gray-500">(${escapeHtml(originaisEdicao.get(l.id).codigo_sku)})</span></p>
+          <ul class="mt-1 space-y-0.5 text-sm">${d.map(x => {
+            const col = colunaEdicao(x.campo);
+            return `<li class="flex flex-wrap gap-x-1.5"><span class="text-gray-500">${escapeHtml(nomeColuna(col))}:</span><span class="text-gray-500 line-through">${valor(col, x.antes)}</span><span class="text-gray-400">→</span><span class="font-semibold text-gray-900">${valor(col, x.depois)}</span></li>`;
+          }).join('')}</ul>
+        </li>`).join('');
+      abrirModalSimples('modalRevisaoEdicao');
+      document.getElementById('btnRevisaoSalvar').focus();
+    }
+    function fecharRevisaoEdicao() {
+      alteradasEmRevisao = null;
+      fecharModalSimples('modalRevisaoEdicao');
+    }
+    document.getElementById('btnRevisaoVoltar').addEventListener('click', fecharRevisaoEdicao);
+    document.getElementById('modalRevisaoEdicao').addEventListener('click', (e) => { if (e.target.id === 'modalRevisaoEdicao') fecharRevisaoEdicao(); });
+    document.getElementById('btnRevisaoSalvar').addEventListener('click', () => {
+      const alteradas = alteradasEmRevisao;
+      fecharRevisaoEdicao();
+      if (alteradas) salvarEdicao(alteradas);
+    });
+
+    async function salvarEdicao(alteradas) {
+      const btn = document.getElementById('btnEdicaoSalvar');
       btn.disabled = true;
       try {
         const res = await fetchAdmin('/api/admin/produtos/lote', {
@@ -3393,6 +3950,26 @@
       } finally {
         btn.disabled = false;
       }
+    }
+
+    // Ctrl+S (ou ⌘+S) salva a tabela aberta; Esc fecha a conferência do que mudou
+    document.addEventListener('keydown', (e) => {
+      const revisao = document.getElementById('modalRevisaoEdicao');
+      if (e.key === 'Escape' && !revisao.classList.contains('hidden')) return fecharRevisaoEdicao();
+      if (!(e.ctrlKey || e.metaKey) || e.key.toLowerCase() !== 's' || document.getElementById('tab-lote').classList.contains('hidden')) return;
+      e.preventDefault();
+      if (!revisao.classList.contains('hidden')) return document.getElementById('btnRevisaoSalvar').click();
+      if (!document.getElementById('modalConferenciaLote').classList.contains('hidden')) return;
+      const edicao = !document.getElementById('loteModoEdicao').classList.contains('hidden');
+      const btn = document.getElementById(edicao ? 'btnEdicaoSalvar' : 'btnLoteSalvar');
+      if (!btn.disabled) btn.click();
+    });
+    // Alterações do Editar em estoque que não foram salvas: avisa antes de fechar a página
+    // (o Cadastrar novos fica guardado como rascunho)
+    window.addEventListener('beforeunload', (e) => {
+      if (!linhasEdicao.some(l => linhaEdicaoAlterada(l, originaisEdicao.get(l.id)))) return;
+      e.preventDefault();
+      e.returnValue = '';
     });
 
     // Carregar produtos
