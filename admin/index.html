@@ -5315,6 +5315,31 @@
       for (let n = 2; ; n++) if (!ocupados.has(semAcento(`${linha[2][0]} ${n}`))) return `${linha[2][0]} ${n}`;
     }
 
+    // Nome de exibição dos óculos (Jefe, 2026-11-13): NIX + nome curto + tipo + formato da lente,
+    // ex.: "NIX Pyroraptor Polarizado Esportivo". Campo vazio some (nada de "•" ou "-" soltos);
+    // "Polarizado UV400" vira "Polarizado"; palavra repetida não repete. Mesma regra do
+    // nome-nix.js do servidor (ajuste único dos já cadastrados). -> '' sem nome curto
+    function nomeNix(c) {
+      const { nome_curto: nomeCurto, tipo, formato } = c || {};
+      const limpar = t => String(t ?? '').replace(/[•·|]/g, ' ').replace(/\s+/g, ' ').trim();
+      const capitalizar = t => limpar(t).split(' ').filter(Boolean)
+        .map(p => (/^[A-ZÀ-Ý]{4,}$/.test(p) || /^[a-zà-ÿ]/.test(p) ? p.charAt(0).toUpperCase() + p.slice(1).toLowerCase() : p))
+        .join(' ');
+      const palavrasTipo = capitalizar(tipo).split(' ').filter(Boolean);
+      const restoTipo = palavrasTipo.filter(p => !/^(uv-?400|uv|prote[cç][aã]o)$/i.test(p));
+      const tipoNome = restoTipo.length ? restoTipo.join(' ') : /uv/i.test(palavrasTipo.join(' ')) ? 'UV400' : '';
+      const curto = limpar(nomeCurto).replace(/^nix\s+/i, '');
+      if (!curto) return '';
+      const partes = [];
+      const vistas = new Set();
+      for (const parte of [curto, tipoNome, capitalizar(formato)]) {
+        const palavras = parte.split(' ').filter(p => p && !vistas.has(p.toLowerCase()));
+        palavras.forEach(p => vistas.add(p.toLowerCase()));
+        if (palavras.length) partes.push(palavras.join(' '));
+      }
+      return `NIX ${partes.join(' ')}`.slice(0, 255);
+    }
+
     function nomeTematico(c, produtos = [], usados = [], curtosUsados = []) {
       const DINOS = [
         [/esport|m[aá]scara|shield/, 'Raptor', 'RAP'],
@@ -5358,8 +5383,15 @@
       const textoFormato = semAcento([partes[0], c.formato, c.estilo].join(' '));
       let dino = (DINOS.find(([re]) => re.test(textoFormato)) || [null, 'Tricera', 'TRI']).slice(1);
       // Modelo já cadastrado como "Nix <Dino> <Modelo> - ...": usa o mesmo dinossauro
+      // (nomes antigos "Nix <Dino> <Modelo>" ou, desde o nome NIX + nome curto, pelo Nome fornec.)
+      const mesmoModelo = p => modelo && semAcento(limparModelo(String(p.nome_fornecedor || '').split(/\s+[-–]\s+/)[0])) === semAcento(modelo);
       for (const p of produtos) {
         const m = /^Nix (\w+) (.+?)\s*-/.exec(String(p.nome || ''));
+        if (!m && mesmoModelo(p) && /^NIX-\w+-\w{3}/.test(String(p.codigo_sku || ''))) {
+          const cod = String(p.codigo_sku).split('-')[2];
+          const conhecido = DINOS.find(d => d[2] === cod);
+          if (conhecido) { dino = conhecido.slice(1); break; }
+        }
         if (m && modelo && semAcento(limparModelo(m[2])) === semAcento(modelo)) {
           const conhecido = DINOS.find(d => d[1] === m[1]);
           dino = conhecido ? conhecido.slice(1) : [m[1], semAcento(m[1]).slice(0, 3).toUpperCase()];
@@ -5375,22 +5407,15 @@
         if (cor && !cores.includes(cor)) cores.push(cor);
       });
       const principais = cores.filter(cor => cor[2]);
-      const modificadores = cores.filter(cor => !cor[2]).map(cor => cor[1]);
-      let nomeCor = '';
-      if (principais.length) {
-        const resto = principais.slice(1).map(cor => cor[1]);
-        nomeCor = [principais[0][0], ...modificadores].join(' ') + (resto.length ? ` / ${resto.join(' ')}` : '');
-      } else if (modificadores.length) {
-        nomeCor = modificadores.join(' ');
-      }
-      const nome = `Nix ${dino[0]}${modelo ? ` ${modelo}` : ''}${nomeCor ? ` - ${nomeCor}` : ''}`;
+      // (a cor entra só no SKU; o nome não leva mais a cor em inglês: quem tem cores ganha
+      // " - <cor>" ao salvar cada cor)
       // Nome curto: o que a pessoa já digitou fica; um modelo já cadastrado (outra cor) usa o
       // mesmo nome curto dele; senão o próximo dinossauro livre da linha do formato
       let nomeCurto = String(c.nome_curto || '').trim();
       if (!nomeCurto && modelo) {
         const irmao = produtos.find(p => {
           const m = /^Nix \w+ (.+?)\s*(-|$)/.exec(String(p.nome || ''));
-          return m && String(p.nome_curto || '').trim() && semAcento(limparModelo(m[1])) === semAcento(modelo);
+          return String(p.nome_curto || '').trim() && ((m && semAcento(limparModelo(m[1])) === semAcento(modelo)) || mesmoModelo(p));
         });
         if (irmao) nomeCurto = String(irmao.nome_curto).trim();
       }
@@ -5411,6 +5436,14 @@
       const existentes = new Set([...produtos.map(p => p.codigo_sku), ...usados].map(s => String(s || '').trim().toUpperCase()));
       let sku = base;
       for (let n = 2; existentes.has(sku); n++) sku = `${base}-${n}`;
+      // Nome: NIX + nome curto (sem ele, o modelo do fornecedor) + tipo + formato da lente.
+      // Sem tipo/formato cadastrados, saem do título do fornecedor (polarizado, aviador...).
+      const FORMATOS_NOME = [[/esportiv|esporte/, 'Esportivo'], [/mascara/, 'Máscara'], [/aviador|piloto/, 'Aviador'],
+        [/hexagon/, 'Hexagonal'], [/octogon/, 'Octogonal'], [/geometric/, 'Geométrico'], [/quadrad/, 'Quadrado'],
+        [/retangul/, 'Retangular'], [/gatinh|cat ?eye/, 'Gatinho'], [/borboleta/, 'Borboleta'], [/redond|arredondad/, 'Redondo'], [/oval/, 'Oval']];
+      const formatoNome = String(c.formato || '').trim() || (FORMATOS_NOME.find(([re]) => re.test(semAcento(partes[0]))) || [null, ''])[1];
+      const tipoNome = String(c.tipo || '').trim() || (/polarizad/.test(semAcento(titulo)) ? 'Polarizado' : '');
+      const nome = nomeNix({ nome_curto: nomeCurto || modelo || dino[0], tipo: tipoNome, formato: formatoNome });
       return { nome, codigo_sku: sku, nome_curto: nomeCurto };
     }
 
@@ -5610,7 +5643,7 @@
     });
 
     document.getElementById('btnGerarNomeSku').addEventListener('click', () => {
-      const campos = Object.fromEntries(['nome_fornecedor', 'formato', 'estilo', 'cor_armacao', 'nome_curto'].map(c => [c, document.getElementById(c).value]));
+      const campos = Object.fromEntries(['nome_fornecedor', 'formato', 'estilo', 'cor_armacao', 'nome_curto', 'tipo'].map(c => [c, document.getElementById(c).value]));
       const outros = todosProdutos.filter(p => !produtoEditando || p.id !== produtoEditando.id);
       const tema = nomeTematico(campos, outros);
       if (!tema) return mostrarToast('Preencha o Nome Fornec. (ex.: Óculos de Sol Aviador Monaco Light - Preto - Injetado)', 'error');
@@ -8296,14 +8329,20 @@
         const pf = String(p.fornecedor || '').trim().toLowerCase();
         return !pf || pf === String(fornecedor || '').trim().toLowerCase();
       }).flatMap(p => [normalizarCodigoForn(p.codigo_fornecedor), normalizarCodigoForn(p.codigo_fornecedor, true)]).filter(Boolean));
+      // Outra cor do mesmo modelo no pedido: o mesmo nome curto (e o mesmo nome antes da cor)
+      const curtoPorModelo = new Map();
       for (const item of itens) {
         if (item.destino !== 'novo') continue;
         const modelo = item.modelo || item.codigo;
+        const chaveModelo = String(modelo || '').trim().toLowerCase();
         const tema = nomeTematico({
           nome_fornecedor: `Óculos de Sol ${modelo} ${item.formato}${item.cor ? ` - ${item.cor}` : ''}`,
-          formato: item.formato, estilo: '', cor_armacao: item.cor,
+          formato: item.formato, estilo: '', cor_armacao: item.cor, tipo: item.tipo || '',
+          nome_curto: curtoPorModelo.get(chaveModelo) || '',
         }, produtos, usados, curtosUsados);
-        if (!item.nomeEditado) item.nome = tema ? tema.nome : '';
+        if (tema && tema.nome_curto && chaveModelo && !curtoPorModelo.has(chaveModelo)) curtoPorModelo.set(chaveModelo, tema.nome_curto);
+        // Cada cor do pedido vira um cadastro: o nome leva " - <cor>" para não confundir as cores
+        if (!item.nomeEditado) item.nome = tema ? `${tema.nome}${String(item.cor || '').trim() ? ` - ${String(item.cor).trim()}` : ''}` : '';
         item.nomeCurto = tema ? tema.nome_curto : '';
         if (item.nomeCurto) curtosUsados.push(item.nomeCurto);
         const igual = porNome.get(item.nome.trim().toLowerCase());

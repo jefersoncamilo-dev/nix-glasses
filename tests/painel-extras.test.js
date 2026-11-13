@@ -19,7 +19,7 @@ function extrairFuncao(nome) {
 }
 
 const funcoes = ['escapeHtml', 'linkSeguro', 'botaoLinkFornecedor', 'variacaoCusto', 'htmlVariacao', 'htmlUltimaCompra',
-  'formatarMedida', 'nomeArquivoSku', 'precoVendaPadrao', 'ehPolarizado', 'proximoSku', 'nomeCurtoDino', 'nomeTematico', 'produtoJaCadastrado', 'camposDaImportacao', 'aplicarImportacao', 'associarFotosPorSku', 'montarResumoMaleta', 'calcularAcerto'];
+  'formatarMedida', 'nomeArquivoSku', 'precoVendaPadrao', 'ehPolarizado', 'proximoSku', 'nomeCurtoDino', 'nomeNix', 'nomeTematico', 'produtoJaCadastrado', 'camposDaImportacao', 'aplicarImportacao', 'associarFotosPorSku', 'montarResumoMaleta', 'calcularAcerto'];
 const ctx = vm.createContext({ Number, String, Math, Map, Set, Object, URL, Intl });
 vm.runInContext(`
   const MAX_FOTOS = 4;
@@ -157,26 +157,41 @@ describe('painel: SKU, reposição e venda sugerida na importação', () => {
     assert.equal(ctx.proximoSku([{ codigo_sku: 'NIX7' }]), 'NIX008');
   });
 
-  it('nome e SKU no padrão Nix Dinossauros, com o dinossauro pelo formato', () => {
+  it('nome NIX + nome curto + tipo + formato da lente; SKU no padrão Nix Dinossauros', () => {
     const t = (nome_fornecedor, produtos, usados, extra) => ({ ...ctx.nomeTematico({ nome_fornecedor, ...extra }, produtos, usados) });
     assert.deepEqual(t('Óculos de Sol Aviador Monaco Light - Preto/Laranja - Injetado'),
-      { nome: 'Nix Ptero Monaco Light - Onyx Black / Orange', codigo_sku: 'NIX-MLI-PTE-BLK-ORG', nome_curto: 'Dimorph' });
+      { nome: 'NIX Dimorph Aviador', codigo_sku: 'NIX-MLI-PTE-BLK-ORG', nome_curto: 'Dimorph' });
     assert.deepEqual(t('Óculos de Sol Hexagonal Premium Bawlgriff - Preto - Metal'),
-      { nome: 'Nix Ankylo Bawlgriff - Onyx Black', codigo_sku: 'NIX-BAW-ANK-BLK', nome_curto: 'Styraco' });
+      { nome: 'NIX Styraco Hexagonal', codigo_sku: 'NIX-BAW-ANK-BLK', nome_curto: 'Styraco' });
     assert.deepEqual(t('Óculos de Sol Quadrado Veneza 2.0 - Rosa Degradê - Dourado - Metal'),
-      { nome: 'Nix Rex Veneza 2.0 - Blush Pink Gradient / Gold', codigo_sku: 'NIX-VEN2-REX-PNK-GLD', nome_curto: 'Styraco' });
-    assert.deepEqual(t('Óculos de Sol Redondo Oval New Gold - Azul/Amarelo/Dourado - Metal'),
-      { nome: 'Nix Bronto New Gold - Ocean Blue / Yellow Gold', codigo_sku: 'NIX-NGO-BRO-BLU-YLGL', nome_curto: 'Amargas' });
-    assert.equal(t('Óculos de Sol Gatinho Arredondado Geovana - Marrom Degradê - Acetato').nome, 'Nix Dilo Geovana - Mocha Brown Gradient');
+      { nome: 'NIX Styraco Quadrado', codigo_sku: 'NIX-VEN2-REX-PNK-GLD', nome_curto: 'Styraco' });
+    assert.equal(t('Óculos de Sol Redondo Oval New Gold - Azul/Amarelo/Dourado - Metal').nome, 'NIX Amargas Redondo');
+    assert.equal(t('Óculos de Sol Gatinho Arredondado Geovana - Marrom Degradê - Acetato').nome, 'NIX Amargas Gatinho');
     assert.equal(t('Óculos de Sol Retangular Samba - Amarelo/Preto - Metal').codigo_sku, 'NIX-SAM-SPI-YLW-BLK');
-    assert.equal(t('Óculos de Sol Esportivo Máscara Nitro - Multicolors Espelhado - Injetado').nome, 'Nix Raptor Nitro - Spectrum Flash Mirror');
-    // Modelo já cadastrado com outro dinossauro: mantém o dele
-    assert.equal(t('Óculos Premium Glass - Laranja', [{ nome: 'Nix Raptor Premium Glass - Amber Flame / Clear', codigo_sku: 'NIX-PRE-RAP-AMB' }]).nome, 'Nix Raptor Glass - Amber Flame');
+    assert.equal(t('Óculos de Sol Esportivo Máscara Nitro - Multicolors Espelhado - Injetado').nome, 'NIX Deinony Esportivo');
+    // Tipo e formato do cadastro (lidos da descrição) valem mais que o título; UV400 sai do polarizado
+    assert.equal(t('Óculos de Sol Raptor • BRSA15164 • • Esporte• Uv400 • Polarizado•', [], [], { formato: 'ESPORTIVO', tipo: 'Polarizado UV400' }).nome,
+      'NIX Deinony Polarizado Esportivo');
+    assert.equal(t('Óculos de Sol Aviador Polarizado Falcon - Preto').nome, 'NIX Dimorph Polarizado Aviador');
+    // Modelo já cadastrado com outro dinossauro: mantém o dele no SKU
+    assert.equal(t('Óculos Premium Glass - Laranja', [{ nome: 'Nix Raptor Premium Glass - Amber Flame / Clear', codigo_sku: 'NIX-PRE-RAP-AMB' }]).codigo_sku, 'NIX-GLA-RAP-ORG');
+    // ...também depois de renomeado (acha pelo Nome fornec.)
+    assert.equal(t('Óculos de Sol Aviador Falcon - Dourado', [{ nome: 'NIX Quetzal Aviador', nome_curto: 'Quetzal', codigo_sku: 'NIX-FAL-RAP-BLK', nome_fornecedor: 'Óculos de Sol Aviador Falcon - Preto' }]).nome,
+      'NIX Quetzal Aviador');
     // SKU repetido (no banco ou no lote) ganha -2, -3
     assert.equal(t('Óculos de Sol Hexagonal Bawlgriff - Preto - Metal', [{ nome: 'x', codigo_sku: 'NIX-BAW-ANK-BLK' }], ['nix-baw-ank-blk-2']).codigo_sku, 'NIX-BAW-ANK-BLK-3');
-    // Sem cor no nome: usa a cor da armação; sem nome do fornecedor: null
-    assert.equal(t('Óculos de Sol Quadrado Iris', [], [], { cor_armacao: 'Preto fosco, haste preta' }).nome, 'Nix Rex Iris - Onyx Black Matte');
+    // A cor não entra no nome (só no SKU); sem nome do fornecedor: null
+    assert.equal(t('Óculos de Sol Quadrado Iris', [], [], { cor_armacao: 'Preto fosco, haste preta' }).nome, 'NIX Styraco Quadrado');
     assert.equal(ctx.nomeTematico({ nome_fornecedor: '' }), null);
+  });
+
+  it('nomeNix: campos vazios somem, sem bullets nem hífens soltos', () => {
+    assert.equal(ctx.nomeNix({ nome_curto: 'Pyroraptor', tipo: 'Polarizado UV400', formato: 'ESPORTIVO' }), 'NIX Pyroraptor Polarizado Esportivo');
+    assert.equal(ctx.nomeNix({ nome_curto: 'Utah', tipo: 'Proteção UV400', formato: 'QUADRADO' }), 'NIX Utah UV400 Quadrado');
+    assert.equal(ctx.nomeNix({ nome_curto: 'Fossil', tipo: '', formato: '' }), 'NIX Fossil');
+    assert.equal(ctx.nomeNix({ nome_curto: 'Nix Kentro', tipo: 'Polarizado Degradê', formato: 'Gatinho' }), 'NIX Kentro Polarizado Degradê Gatinho');
+    assert.equal(ctx.nomeNix({ nome_curto: 'Bary • ', tipo: 'Polarizado Quadrado', formato: 'QUADRADO' }), 'NIX Bary Polarizado Quadrado');
+    assert.equal(ctx.nomeNix({ nome_curto: '', tipo: 'Polarizado', formato: 'Aviador' }), '');
   });
 
   it('nome curto: dinossauro raro da linha do formato, sem repetir', () => {

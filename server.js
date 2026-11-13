@@ -8,6 +8,7 @@ const fs = require('fs');
 const { criarPool, initTables } = require('./db');
 const ajustePrecosOculos = require('./ajuste-precos-oculos');
 const ajusteNomesCurtos = require('./ajuste-nomes-curtos');
+const nomeNix = require('./nome-nix');
 const { lerEmpresas, empresaDoHost, normalizarHost, identidadeBanco, hostInterno } = require('./empresas');
 const { CAMPOS_TEXTO, COLUNAS, lerColunas, lerInstagram, lerNicho, limparTextoLoja, montarLoja, renderizarPagina } = require('./loja');
 const master = require('./master');
@@ -1309,6 +1310,7 @@ async function conectarBanco(slug, databaseUrl) {
     await ajustePrecosOculos.aplicarUmaVez(slug, pool);
     await ajusteNomesCurtos.aplicarUmaVez(slug, pool);
     await ajusteNomesCurtos.corrigirUmaVez(slug, pool);
+    await nomeNix.aplicarUmaVez(slug, pool);
     return pool;
   } catch (err) {
     await pool.end().catch(() => {});

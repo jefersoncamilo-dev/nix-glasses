@@ -301,7 +301,7 @@ function extrairFuncao(nome) {
     else if (html[i] === '}' && --nivel === 0) return html.slice(inicio, i + 1);
   }
 }
-const funcoes = ['lerTotaisDigitados', 'totalPagoPedidoForn', 'somarPedidosForn', 'lerPreco', 'lerDataCompra', 'precoVendaPadrao', 'ehPolarizado', 'proximoSku', 'nomeCurtoDino', 'nomeTematico', 'semAcentoPf', 'normalizarCodigoForn',
+const funcoes = ['lerTotaisDigitados', 'totalPagoPedidoForn', 'somarPedidosForn', 'lerPreco', 'lerDataCompra', 'precoVendaPadrao', 'ehPolarizado', 'proximoSku', 'nomeCurtoDino', 'nomeNix', 'nomeTematico', 'semAcentoPf', 'normalizarCodigoForn',
   'candidatosDoItem', 'itemPedidoForn', 'recalcularItensPedidoForn', 'montarLancamentoPedidoForn'];
 const ctx = vm.createContext({ Number, String, Math, Map, Set, Object, Date });
 const j = (v) => JSON.parse(JSON.stringify(v));
@@ -352,7 +352,7 @@ describe('painel: pedido do fornecedor', () => {
     assert.equal(item.destino, 'novo');
     assert.equal(item.cor, 'Azul Degradê/Dourado');
     ctx.recalcularItensPedidoForn([item], clush, 'Clush');
-    assert.equal(item.nome, 'Nix Ptero Gold - Ocean Blue Gradient / Gold');
+    assert.equal(item.nome, 'NIX Dimorph Aviador - Azul Degradê/Dourado');
     const taxa = ctx.itemPedidoForn({ descricao: 'TAXA DE GRAVAÇÃO - ENVIE O LOGO', quantidade: 1, preco_unitario: 50, oculos: false }, [], clush, [], 'Clush');
     assert.equal(taxa.destino, 'ignorar');
   });
@@ -376,7 +376,7 @@ describe('painel: pedido do fornecedor', () => {
     itens[0].cor = 'Dourado, lente verde';
     itens[1].cor = 'Dourado, lente verde';
     ctx.recalcularItensPedidoForn(itens, produtos, 'Tassia');
-    assert.equal(itens[0].nome, 'Nix Bronto Vogue - Royal Gold / Green');
+    assert.equal(itens[0].nome, 'NIX Amargas Oval - Dourado, lente verde');
     assert.equal(itens[0].sku, 'NIX-VOG-BRO-GLD-GRN');
     assert.equal(itens[0].venda, '149,90');
     const polarizado = ctx.itemPedidoForn(lido({ descricao: 'Óculos de Sol Vogue • XFG976 • Metal • Polarizado', tipo: 'Polarizado' }), [], produtos, [], 'Tassia');
@@ -386,7 +386,7 @@ describe('painel: pedido do fornecedor', () => {
     assert.equal(itens[0].codigoNovo, 'XFG976-GLD-GRN');
     assert.equal(itens[1].sku, itens[0].sku);
     assert.equal(itens[2].codigoNovo, 'NV 560');
-    assert.match(itens[2].nome, /^Nix Tricera Zaya/);
+    assert.match(itens[2].nome, /^NIX Zaya( |$)/);
 
     const r = ctx.montarLancamentoPedidoForn(itens, { fornecedor: 'Tassia', numero: '20001', data: '05/11/2026', totais: { frete: '10,00', total: '100,00' } }, produtos, []);
     assert.equal(r.erros, undefined);

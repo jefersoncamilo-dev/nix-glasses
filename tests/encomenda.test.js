@@ -298,20 +298,36 @@ describe('checkout da maleta com encomendas', () => {
   });
 });
 
-describe('botão de WhatsApp da encomenda', () => {
+describe('botão de WhatsApp do produto (todas as disponibilidades)', () => {
   const src = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
   const inicio = src.indexOf('function linkWhatsappEncomenda(');
   let fim = src.indexOf('\n    }\n', inicio) + 6;
-  const ctx = vm.createContext({});
+  const ctx = vm.createContext({ location: { protocol: 'https:', origin: 'https://nixglasses.temcatalogo.com.br' } });
   vm.runInContext(src.slice(inicio, fim), ctx);
+  const texto = (produto) => decodeURIComponent(ctx.linkWhatsappEncomenda(produto, '5511999990000').split('text=')[1]);
 
-  it('abre a conversa da loja citando o modelo, a cor e a referência', () => {
-    const link = ctx.linkWhatsappEncomenda({ nome: 'Nix Rex Aviador', cor_armacao: 'Preto', codigo_sku: 'REX-PT' }, '5511999990000');
+  it('encomenda: mensagem estruturada com nome, cor, referência, preço e link do produto', () => {
+    const link = ctx.linkWhatsappEncomenda({ id: 7, nome: 'NIX Rex Aviador - Preto', cor_armacao: 'Preto', codigo_sku: 'REX-PT', preco_venda: '169.90', disponibilidade: 'SOB_ENCOMENDA' }, '5511999990000');
     assert.ok(link.startsWith('https://wa.me/5511999990000?text='));
-    assert.equal(decodeURIComponent(link.split('text=')[1]),
-      'Olá! Tenho interesse no *Nix Rex Aviador* - cor Preto (Ref. REX-PT), que está sob encomenda. Pode me passar o prazo e as condições?');
-    // cor que já está no nome não se repete
-    assert.doesNotMatch(decodeURIComponent(ctx.linkWhatsappEncomenda({ nome: 'Nix Rex - Preto', cor_armacao: 'Preto' }, '55')), /cor Preto/);
+    assert.equal(decodeURIComponent(link.split('text=')[1]), [
+      'Olá! Tenho interesse neste produto:', '*NIX Rex Aviador*', 'Cor: Preto', 'Ref.: REX-PT', 'Preço: R$ 169,90',
+      'Disponibilidade: Sob encomenda', 'https://nixglasses.temcatalogo.com.br/?produto=7', '', 'Pode me passar o prazo e as condições?',
+    ].join('\n'));
+  });
+
+  it('pronta entrega e condicional também têm WhatsApp, com a pergunta de cada caso', () => {
+    const pronta = texto({ id: 3, nome: 'NIX Fossil Redondo', codigo_sku: 'F-1', preco_venda: '149.90', disponibilidade: 'PRONTA_ENTREGA', status: 'DISPONIVEL' });
+    assert.match(pronta, /Disponibilidade: Pronta entrega/);
+    assert.match(pronta, /Ainda está disponível\? Quero combinar a compra\.$/);
+    assert.doesNotMatch(pronta, /Cor:/, 'sem cor, sem a linha da cor');
+    const cond = texto({ id: 4, nome: 'NIX Utah', disponibilidade: 'PRONTA_ENTREGA', status: 'CONDICIONAL', preco_venda: '0' });
+    assert.match(cond, /Disponibilidade: Em condicional/);
+    assert.doesNotMatch(cond, /Preço:/);
+    assert.match(cond, /me avisar quando ele estiver disponível/);
+    // promoção: cobra o preço promocional
+    ctx.precoDe = (p) => Number(p.preco_promocional) || Number(p.preco_venda);
+    assert.match(texto({ id: 5, nome: 'X', preco_venda: '169.90', preco_promocional: '139.90' }), /Preço: R\$ 139,90/);
+    delete ctx.precoDe;
   });
 
   it('sem número de WhatsApp da loja, não há botão', () => {

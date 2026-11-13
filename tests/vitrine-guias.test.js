@@ -254,7 +254,7 @@ describe('vitrine: atalhos e pílulas de filtro', () => {
     assert.match(html, /popupProvador: \(\) => fecharPopupProvador\(\)/);
     // o pop-up da tela inicial agora é escolhido no painel (POP Anúncio): o do provador só
     // abre quando a escolha é "Provador Virtual"
-    assert.match(html, /renderizarCatalogo\(\);\s*agendarPopupInicial\(\);/);
+    assert.match(html, /renderizarCatalogo\(\);\s*abrirProdutoDaUrl\(\);\s*agendarPopupInicial\(\);/);
     assert.match(extrairFuncao('agendarPopupInicial'), /popupInicial\.tipo === 'provador'\) return agendarPopupProvador\(\)/);
   });
 });
